@@ -7,23 +7,30 @@ This repo is comprised of basically two parts:
 
 - 	**part 2** is a superset of part 1 and has 4 phases:
 	* Starting
-	* Assessment (most of part 1)
+	* Assessment (part 1 and a bit more)
 	* Learning
 	* Tuning
 
-###Each part is independent of the other
+### Each part is independent of the other
 
 **Part 1**
 
-There are no known dependencies at this point.  There are two relevant 
+There are no known dependencies at this point. There are two relevant 
 directories here:
 
 ```assess-tuning``` and ```packaging```
-To Compile:
--	go to assess-tuning directory and run ```make```
--	run ```sudo ./dtnmenu``` to run with a menu interaction
-- 	run ```sudo ./dtn_tune``` to run without menu interaction
 
+**To Compile:**
+-	go to assess-tuning directory and run ```make```
+-	For a quick test:
+	*	type ```sudo ./dtnmenu``` to run with a menu interaction
+	*	run ```sudo ./dtn_tune``` to run without menu interaction
+
+**To make a zip package:**
+-	go to packaging directory
+-	type ```sh ./createpkg.sh``` to create a zip file called dtntune.zip
+-	dtntune.zip consist of files from the assess-tuning directory
+-	create a temp directory, copy the zip file into it, and type unzip *.zip
 
 **Part 2**
 
