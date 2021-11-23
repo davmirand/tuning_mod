@@ -24,20 +24,19 @@ directories here:
 -	go to assess-tuning directory and run ```make```
 -	For a quick test:
 	*	type ```sudo ./dtnmenu``` to run with a menu interaction
+	*	you will get output on your screen with the menu interaction
 	*	type ```sudo ./dtn_tune``` to run without menu interaction
+	* 	/tmp/tuningLog will contain the output from the last run
 
 **To make a zip package:**
--	**Note:** you must compile as explained above before traying to make a pkg.
--	go to packaging directory
+-	**Note:** you must compile as explained above before trying to make a pkg.
+-	go to ```packaging``` directory
 -	type ```sh ./createpkg.sh``` to create a zip file called dtntune.zip
--	dtntune.zip consist of files from the assess-tuning directory
+-	```dtntune.zip``` consist of files from the ```assess-tuning``` directory
 -	create a temp directory, copy the zip file into it, and type unzip *.zip
 -	after unziping, run the commands as mentioned above "for a quick test"
 
 **Part 2**
-
-
-  
 
 * test_dtn.c refers to a test module used to create user_dtn.c
 * user_dtn.c is the actual module that will eventually run as the Tuning Module
