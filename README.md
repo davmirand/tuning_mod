@@ -11,18 +11,18 @@ This repo is comprised of basically two parts:
 	* Learning
 	* Tuning
 
-Each part is independent of the other
+###Each part is independent of the other
 
 **Part 1**
 
 There are no known dependencies at this point.  There are two relevant 
 directories here:
 
-assess-tuning/
-packaging/
-
-
-
+```assess-tuning``` and ```packaging```
+To Compile:
+-	go to assess-tuning directory and run ```make```
+-	run ```sudo ./dtnmenu``` to run with a menu interaction
+- 	run ```sudo ./dtn_tune``` to run without menu interaction
 
 
 **Part 2**
