@@ -14,6 +14,7 @@ This repo is comprised of basically two parts:
 Each part is independent of the other
 
 **Part 1**
+
 There are no known dependencies at this point.  There are two relevant 
 directories here:
 
