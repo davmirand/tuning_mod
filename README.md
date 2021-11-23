@@ -5,15 +5,20 @@ This repo is comprised of basically two parts:
  	can use to see what recommendations, if any, can be made based on the 
 	current settings of the system.
 
-- 	**part 2* is a superset of part 1 and has 4 phases:
+- 	**part 2** is a superset of part 1 and has 4 phases:
 	* Starting
 	* Assessment (most of part 1)
 	* Learning
 	* Tuning
 
+Each part is independent of the other
 
 **Part 1**
+There are no known dependencies at this point.  There are two relevant 
+directories here:
 
+assess-tuning/
+packaging/
 
 
 
