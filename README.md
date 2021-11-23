@@ -1,7 +1,9 @@
 # Relates to the ongoing XDP/eBPF project at FIU
 This repo s comprised of basically two parts:
 
-- part 1 is an initial portio
+-	part 1 deals with creating an assessment package that a DTN operator
+  	can use to run and it will make recommendations based on he current settings
+  
 
 * test_dtn.c refers to a test module used to create user_dtn.c
 * user_dtn.c is the actual module that will eventually run as the Tuning Module
