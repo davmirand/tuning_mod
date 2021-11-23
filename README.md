@@ -11,7 +11,7 @@ This repo is comprised of basically two parts:
 	* Learning
 	* Tuning
 
-### Each part is independent of the other
+#### Each part is independent of the other
 
 **Part 1**
 
@@ -24,13 +24,15 @@ directories here:
 -	go to assess-tuning directory and run ```make```
 -	For a quick test:
 	*	type ```sudo ./dtnmenu``` to run with a menu interaction
-	*	run ```sudo ./dtn_tune``` to run without menu interaction
+	*	type ```sudo ./dtn_tune``` to run without menu interaction
 
 **To make a zip package:**
+-	**Note:** you must compile as explained above before traying to make a pkg.
 -	go to packaging directory
 -	type ```sh ./createpkg.sh``` to create a zip file called dtntune.zip
 -	dtntune.zip consist of files from the assess-tuning directory
 -	create a temp directory, copy the zip file into it, and type unzip *.zip
+-	after unziping, run the commands as mentioned above "for a quick test"
 
 **Part 2**
 
