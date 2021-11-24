@@ -45,4 +45,4 @@ There are two known dependencies at this point.
 
 **Part 2**
 
-* user_dtn.c is the actual module that will eventually run as the Tuning Module
+* userspace/user_dtn.c is the actual module that will eventually run as the Tuning Module
