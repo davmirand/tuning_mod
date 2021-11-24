@@ -38,10 +38,10 @@ There are two known dependencies at this point.
 -	after unziping, run the commands as mentioned above "for a quick test"
 
 **Note: Please see packaging/readme.txt for additional instructions**
-	-	Basically, there are two files of interest
-		*	```user_config.txt``` and ```gdv.sh```
-		*	```user_config.txt``` contains well known values to control how the application operates
-		*	```gdv.sh``` conatins the settings that we are currently interested in
+-	Basically, there are two files of interest
+	*	```user_config.txt``` and ```gdv.sh```
+	*	```user_config.txt``` contains well known values to control how the application operates
+	*	```gdv.sh``` conatins the settings that we are currently interested in
 
 **Part 2**
 
