@@ -16,8 +16,8 @@ This repo is comprised of basically two parts:
 **Part 1**
 
 There are two known dependencies at this point. 
-	-	This package requires 'lshw' and 'dmidecode' utilities to be installed on the system
-	-	There are two relevant directories here:
+-	This package requires 'lshw' and 'dmidecode' utilities to be installed on the system
+-	There are also two relevant directories here:
 
 ```assess-tuning``` and ```packaging```
 
