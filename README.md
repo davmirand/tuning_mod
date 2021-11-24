@@ -43,7 +43,7 @@ There are also two relevant directories here:
 	*	```user_config.txt```, ```gdv.sh``` and ```/tmp/tuningLog```
 	*	```user_config.txt``` contains well known values to control how the application operates
 	*	```gdv.sh``` conatins the settings that we are currently interested in
-	*	```tmp/tuningLog``` will contain the output from the last run
+	*	```/tmp/tuningLog``` will contain the output from the last run
 
 **Part 2**
 
