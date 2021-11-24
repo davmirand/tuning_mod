@@ -17,7 +17,8 @@ This repo is comprised of basically two parts:
 
 There are two known dependencies at this point. 
 -	This package requires 'lshw' and 'dmidecode' utilities to be installed on the system
--	There are also two relevant directories here:
+
+There are also two relevant directories here:
 
 ```assess-tuning``` and ```packaging```
 
@@ -38,10 +39,11 @@ There are two known dependencies at this point.
 -	after unziping, run the commands as mentioned above "for a quick test"
 
 **Note: Please see packaging/readme.txt for additional instructions**
--	Basically, there are two files of interest
-	*	```user_config.txt``` and ```gdv.sh```
+-	Basically, there are three files of interest
+	*	```user_config.txt```, ```gdv.sh``` and ```/tmp/tuningLog```
 	*	```user_config.txt``` contains well known values to control how the application operates
 	*	```gdv.sh``` conatins the settings that we are currently interested in
+	*	```tmp/tuningLog``` will contain the output from the last run
 
 **Part 2**
 
