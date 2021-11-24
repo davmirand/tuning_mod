@@ -15,8 +15,9 @@ This repo is comprised of basically two parts:
 
 **Part 1**
 
-There are no known dependencies at this point. There are two relevant 
-directories here:
+There are two known dependencies at this point. 
+	-	This package requires 'lshw' and 'dmidecode' utilities to be installed on the system
+	-	There are two relevant directories here:
 
 ```assess-tuning``` and ```packaging```
 
@@ -35,6 +36,12 @@ directories here:
 -	```dtntune.zip``` consist of files from the ```assess-tuning``` directory
 -	create a temp directory, copy the zip file into it, and type unzip *.zip
 -	after unziping, run the commands as mentioned above "for a quick test"
+
+**Note: Please see packaging/readme.txt for additional instructions**
+	-	Basically, there are two files of interest
+		*	```user_config.txt``` and ```gdv.sh```
+		*	```user_config.txt``` contains well known values to control how the application operates
+		*	```gdv.sh``` conatins the settings that we are currently interested in
 
 **Part 2**
 
