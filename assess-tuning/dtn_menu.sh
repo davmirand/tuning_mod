@@ -60,7 +60,6 @@ apply_recommended_settings()
 		printf '\n###%s\n\n' "Applying Tuning Recommendations..."
 
 		nlines=`sed -n '1p' /tmp/applyDefFile`	
-		echo $nlines
 		count=2
 
 		while [ ${count} -lt ${nlines} ]
