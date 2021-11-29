@@ -42,6 +42,30 @@ prune_logs()
 	return 0
 }
 
+apply_recommended_settings()
+{
+	clear_screen
+	if [ -f  /tmp/applyDefFile ]
+	then
+		printf '\n\t%s\n' \
+			"You are attempting to apply the Last Tuning Recommendations" 
+		printf '\n\t%s (y/n): ' \
+			"Do you wish to continue? "
+		read answer
+		if [ "$answer" != 'y' -a "$answer" != 'Y' ]
+		then
+			enter_to_continue
+			return 0
+		fi
+		printf '\n###%s\n\n' "Applying Tuning Recommendations..."
+	else
+		printf '\n###%s\n\n' "Sorry. You do not have any Tuning Recommendations to apply..."
+
+	fi
+    enter_to_continue
+	return 0
+}
+
 run_dtntune()
 {
 logcount=
@@ -71,12 +95,13 @@ logcount=
 	while  [ $repeat_main = 1 ]
 	do
 		clear_screen
-		printf '\n\n\t%s\n\n\t%s\n\t%s\n\t%s\n\t%s\n\t%s' \
+		printf '\n\n\t%s\n\n\t%s\n\t%s\n\t%s\n\t%s\n\t%s\n\t%s' \
 			"DTN Tuning Utility" \
 			"1) Run DTN Tune" \
-			"2) Prune Old Logs" \
-			"3) Escape to Linux Shell" \
-			"4) Exit" \
+			"2) Apply Last Recommended Tuning Values" \
+			"3) Prune Old Logs" \
+			"4) Escape to Linux Shell" \
+			"5) Exit" \
 			"$select_choice"
 
 		read answer
@@ -85,15 +110,18 @@ logcount=
 				run_dtntune
 				;;
 			2)
-				prune_logs
+				apply_recommended_settings
 				;;
 			3)
+				prune_logs
+				;;
+			4)
 				clear_screen
 				$SHELL
 				clear_screen
 				enter_to_continue
 				;;
-			q|4)
+			q|5)
 				clear_screen
 				exit 0
 				;;
