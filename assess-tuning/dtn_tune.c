@@ -678,16 +678,6 @@ int main(int argc, char **argv)
 		if (aApplyDefTunCount)
 		{
 			fApplyDefTunPtr = fopen("/tmp/applyDefFile","w"); //open and close to wipe out file - other ways to do this, but this should work...
-			if (fApplyDefTunPtr)
-				fclose(fApplyDefTunPtr);	
-			else
-				{
-					int save_errno = errno;
-					fprintf(tunLogPtr, "%s %s: Could not open */tmp/applyDefFile* for writing, errno = %d***\n", ctime_buf, phase2str(current_phase), save_errno);
-					goto leave;
-				}
-
-			fApplyDefTunPtr = fopen("/tmp/applyDefFile","a");
 			if (!fApplyDefTunPtr)
 			{
 				int save_errno = errno;
@@ -695,8 +685,10 @@ int main(int argc, char **argv)
 				goto leave;
 			}
 
+			fprintf(fApplyDefTunPtr, "%d\n",aApplyDefTunCount+2);
+
 			for (x = 0; x < aApplyDefTunCount; x++)
-				fprintf(fApplyDefTunPtr, "%s\n",aApplyDefTun2DArray[aApplyDefTunCount]);
+				fprintf(fApplyDefTunPtr, "%s\n",aApplyDefTun2DArray[x]);
 				
 			fclose(fApplyDefTunPtr);	
 		}

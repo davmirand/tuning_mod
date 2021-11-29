@@ -58,6 +58,20 @@ apply_recommended_settings()
 			return 0
 		fi
 		printf '\n###%s\n\n' "Applying Tuning Recommendations..."
+
+		nlines=`sed -n '1p' /tmp/applyDefFile`	
+		echo $nlines
+		count=2
+
+		while [ ${count} -lt ${nlines} ]
+		do
+			linenum=`sed -n "${count}p" /tmp/applyDefFile`
+			echo $linenum > /tmp/tun_app_command
+			sh /tmp/tun_app_command
+			count=`expr $count + 1`
+		done	
+		rm -f /tmp/tun_app_command
+		rm -f /tmp/applyDefFile
 	else
 		printf '\n###%s\n\n' "Sorry. You do not have any Tuning Recommendations to apply..."
 
