@@ -408,9 +408,11 @@ void fDoSystemTuning(void)
 							
 									if (gApplyDefSysTuning == 'y')
 									{
+										int i;
 										//Apply Inital DefSys Tuning
 										sprintf(aApplyDefTun,"sysctl -w %s=%d",setting,aTuningNumsToUse[count].minimum);
-										system(aApplyDefTun);
+										i = system(aApplyDefTun);
+										fprintf(tunLogPtr,"return from system call ***%s is %d*****\n", aApplyDefTun,i);
 									}
 									else
 										{
@@ -482,8 +484,10 @@ void fDoSystemTuning(void)
 										if (gApplyDefSysTuning == 'y')
 										{
 											//Apply Inital DefSys Tuning
+											int i;
 											sprintf(aApplyDefTun,"sysctl -w %s=\"%s %s %s\"",setting, strValmin, strValdef, strValmax);
-											system(aApplyDefTun);
+											i = system(aApplyDefTun);
+											fprintf(tunLogPtr,"return from system call ***%s is %d*****\n", aApplyDefTun,i);	
 										}
 										else
                                         {
@@ -583,8 +587,10 @@ void fDoSystemTuning(void)
 							if (gApplyDefSysTuning == 'y')
 							{
 								//Apply Inital DefSys Tuning
+								int i;
 								sprintf(aApplyDefTun,"sysctl -w %s=%s",setting,aStringval[aTuningNumsToUse[count].minimum]);
-								system(aApplyDefTun);
+								i = system(aApplyDefTun);
+								fprintf(tunLogPtr,"return from system call ***%s is %d*****\n", aApplyDefTun,i);
 							}
 							else
                                {
