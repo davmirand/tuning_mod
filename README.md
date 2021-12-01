@@ -62,10 +62,17 @@ There are a few relevant directories here:
 -	Contains source for a LKM (Loadable Kernel Module) that can be used for testing the Tuning Module
 
 **To Compile:**
--	go to assess-tuning directory and run ```make```
--	For a quick test:
-	*	type ```sudo ./dtnmenu``` to run with a menu interaction
-	*	you will get output on your screen with the menu interaction
-	*	type ```sudo ./dtn_tune``` to run without menu interaction
-	* 	/tmp/tuningLog will contain the output from the last run
-* userspace/user_dtn.c is the actual source that will eventually run as the Tuning Module
+
+In order to compile and work with the Tuning Module, do the following:
+-	Initialize the git submodule ```libbpf```
+	The libbpf source is provided thru the git submodule. ```libbpf``` is a library that
+	allows the bpf programs to run.
+	* To use the module it must be initialized by running the following commands in the Tuning Module
+	root directory:
+		```git submodule init```
+		```git submodule update```
+
+-	Run ```make``` in ```modules/tuningMod/``` and insert the module into the kernel
+-	Run ```make``` in ```testing/``` and load the bpf kernel module
+-	Run ```make``` in ```userspace/``` start the tuning module eg. ```sudo ./user_dtn -d enp6s0```
+	* 	```/tmp/tuningLog``` will contain all the relevant output 
