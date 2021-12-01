@@ -71,6 +71,7 @@ In order to compile and work with the Tuning Module, do the following:
 	root directory:
 
 		```git submodule init```
+
 		```git submodule update```
 
 -	Run ```make``` in ```modules/tuningMod/``` and insert the module into the kernel
