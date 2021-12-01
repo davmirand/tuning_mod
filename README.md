@@ -52,9 +52,12 @@ There are two known dependencies, apart from compilation requirements at this po
 
 There are a few relevant directories here:
 
-**```userspace```**
-
- and ```packaging```
+```userspace```
+-	Contains the source that will eventually run as the Tuning Module
+```testing```
+-	Contains source for a loader and bpf kernel module that can be used for testing the Tuning Module
+```modules```
+-	Contains source for a LKM (Loadable Kernel Module) that can be used for testing the Tuning Module
 
 **To Compile:**
 -	go to assess-tuning directory and run ```make```
