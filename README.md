@@ -47,4 +47,20 @@ There are also two relevant directories here:
 
 **Part 2**
 
-* userspace/user_dtn.c is the actual module that will eventually run as the Tuning Module
+There are two known dependencies, apart from compilation requirements at this point. 
+-	This package requires 'lshw' and 'dmidecode' utilities to be installed on the system
+
+There are a few relevant directories here:
+
+**```userspace```**
+
+ and ```packaging```
+
+**To Compile:**
+-	go to assess-tuning directory and run ```make```
+-	For a quick test:
+	*	type ```sudo ./dtnmenu``` to run with a menu interaction
+	*	you will get output on your screen with the menu interaction
+	*	type ```sudo ./dtn_tune``` to run without menu interaction
+	* 	/tmp/tuningLog will contain the output from the last run
+* userspace/user_dtn.c is the actual source that will eventually run as the Tuning Module
