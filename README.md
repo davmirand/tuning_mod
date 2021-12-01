@@ -70,10 +70,11 @@ In order to compile and work with the Tuning Module, do the following:
 	* To use the module it must be initialized by running the following commands in the Tuning Module
 	root directory:
 
-	```git submodule init
-	   git submodule update```
+.. code:: bash
+	git submodule init
+	git submodule update
 
 -	Run ```make``` in ```modules/tuningMod/``` and insert the module into the kernel
 -	Run ```make``` in ```testing/``` and load the bpf kernel module
--	Run ```make``` in ```userspace/``` start the tuning module eg. ```sudo ./user_dtn -d enp6s0```
+-	Run ```make``` in ```userspace/``` and start the Tuning Module eg. ```sudo ./user_dtn -d enp6s0```
 	* 	```/tmp/tuningLog``` will contain all the relevant output 
