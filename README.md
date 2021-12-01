@@ -56,7 +56,7 @@ There are a few relevant directories here:
 -	Contains the source that will eventually run as the Tuning Module
 
 ```testing```
--	Contains source for a loader and bpf kernel module that can be used for testing the Tuning Module
+-	Contains source for a loader and bpf kernel file that can be used for testing the Tuning Module
 
 ```modules```
 -	Contains source for a LKM (Loadable Kernel Module) that can be used for testing the Tuning Module
@@ -74,6 +74,6 @@ In order to compile and work with the Tuning Module, do the following:
 		*	```git submodule update```
 
 -	Run ```make``` in ```modules/tuningMod/``` and insert the module into the kernel
--	Run ```make``` in ```testing/``` and load the bpf kernel module
+-	Run ```make``` in ```testing/``` and use loader to load the bpf file into the kernel
 -	Run ```make``` in ```userspace/``` and start the Tuning Module eg. ```sudo ./user_dtn -d enp6s0```
 	* 	```/tmp/tuningLog``` will contain all the relevant output 
