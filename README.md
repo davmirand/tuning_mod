@@ -65,8 +65,7 @@ There are a few relevant directories here:
 
 In order to compile and work with the Tuning Module, do the following:
 -	Initialize the git submodule ```libbpf```
-	
-	The libbpf source is provided thru the git submodule. ```libbpf``` is a library that
+	*The libbpf source is provided thru the git submodule. ```libbpf``` is a library that
 	allows the bpf programs to run.
 	* To use the module it must be initialized by running the following commands in the Tuning Module
 	root directory:
