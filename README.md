@@ -69,6 +69,7 @@ In order to compile and work with the Tuning Module, do the following:
 	allows the bpf programs to run.
 	* To use the module it must be initialized by running the following commands in the Tuning Module
 	root directory:
+
 		```git submodule init```
 		```git submodule update```
 
