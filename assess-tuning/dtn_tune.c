@@ -281,8 +281,9 @@ return;
 #define fq		 	1
 #define htcp	 	2
 #define	reno		3
-#define getvalue	4
-char *aStringval[] ={"bbr", "fq", "htcp", "reno", "getvalue"};
+#define	cubic		4
+#define getvalue	5
+char *aStringval[] ={"bbr", "fq", "htcp", "reno", "cubic", "getvalue"};
 
 typedef struct {
     char * setting;
@@ -312,7 +313,7 @@ host_tuning_vals_t aTuningNumsToUse[TUNING_NUMS] = {
     {"net.core.wmem_max",   						67108864,          -1,      	0},
     {"net.ipv4.tcp_mtu_probing",			   			   1,          -1,      	0},
 	{"net.ipv4.tcp_available_congestion_control",	getvalue,   	   -1, 			0},
-    {"net.ipv4.tcp_congestion_control",	    			reno, 		   -1,			0}, //uses #defines to help
+    {"net.ipv4.tcp_congestion_control",	    		    htcp,		   -1,			0}, //uses #defines to help
     {"net.core.default_qdisc",		          			  fq, 		   -1,			0}, //uses #defines
     {"net.ipv4.tcp_rmem",       						4096,      	87380,   33554432},
     {"net.ipv4.tcp_wmem",       						4096,       65536,   33554432},
@@ -589,7 +590,7 @@ void fDoSystemTuning(void)
 #if 1
 							if (strcmp(setting, "net.ipv4.tcp_available_congestion_control") == 0)
                             {
-                                if (strstr(value,"reno"))
+                                if (strstr(value,"htcp"))
                                     congestion_control_recommended_avail = 1;
 
                                 break;
@@ -608,7 +609,7 @@ void fDoSystemTuning(void)
     								ssize_t nread2;
 									FILE * modprobeFilePtr = 0;
 
-									sprintf(modprobe_str,"%s","modprobe tcp_reno > /tmp/modprobe_result 2>&1");
+									sprintf(modprobe_str,"%s","modprobe tcp_htcp > /tmp/modprobe_result 2>&1");
 									system(modprobe_str);
 
 									modprobeFilePtr = fopen("/tmp/modprobe_result", "r");	
@@ -622,12 +623,13 @@ void fDoSystemTuning(void)
 									}
 
 									nread2 = getline(&line2, &len2, modprobeFilePtr);
-									printf("*******NNNNNNNNnread2 = %ld len = %ld p = %p, strlen of line %ld\n",nread2,len, line2, strlen(line2));
+//									printf("*******NNNNNNNNnread2 = %ld len = %ld p = %p, strlen of line %ld\n",nread2,len, line2, strlen(line2));
 									fclose(modprobeFilePtr);
-								
+									system("rm -f /tmp/modprobe_result");	
+
 									if (nread2 != -1)
                                 	{
-                                    	fprintf(tunLogPtr,"%26s %20s\n",aStringval[aTuningNumsToUse[count].minimum], "*reno na");
+                                    	fprintf(tunLogPtr,"%26s %20s\n",aStringval[aTuningNumsToUse[count].minimum], "*htcp na");
                                     	break; //skip
                                 	}
 								
