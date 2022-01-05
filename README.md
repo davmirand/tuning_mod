@@ -48,11 +48,13 @@ There are also two relevant directories here:
 **This package has been tested with the following versions of Linux**
 -	CentOS 7 
 	*	Kernels 3.10 and 5.4
--	CentOS 8 ```Kernel 8.4```
+-	CentOS 8 
 	*	Kernel 8.4
+-	Ubuntu 18.4 
+
 -	Ubuntu 21.04 & Ubuntu 20.04 LTS
 	*	Kernel 5.11
--	Debian
+-	Debian 9, 10, and 11
 
 **Part 2**
 
