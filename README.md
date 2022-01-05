@@ -45,6 +45,11 @@ There are also two relevant directories here:
 	*	```gdv.sh``` conatins the settings that we are currently interested in
 	*	```/tmp/tuningLog``` will contain the output from the last run
 
+**This package has been tested with the following versions of Linux**
+-	CentOS 7 and 8
+-	Ubuntu 
+-	Debian
+
 **Part 2**
 
 There are two known dependencies, apart from compilation requirements at this point. 
