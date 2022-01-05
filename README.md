@@ -51,7 +51,6 @@ There are also two relevant directories here:
 -	CentOS 8 
 	*	Kernel 8.4
 -	Ubuntu 18.4 
-
 -	Ubuntu 21.04 & Ubuntu 20.04 LTS
 	*	Kernel 5.11
 -	Debian 9, 10, and 11
