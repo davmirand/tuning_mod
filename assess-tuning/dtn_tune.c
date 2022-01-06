@@ -285,7 +285,7 @@ return;
 }
 
 #define bbr 		0
-#define fq		 	1
+#define fq		1
 #define htcp	 	2
 #define	reno		3
 #define	cubic		4
