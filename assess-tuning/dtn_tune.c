@@ -33,7 +33,6 @@ static int gInterval = 2; //default
 static char gTuningMode = 0;
 static char gApplyDefSysTuning = 'n';
 static char gMakeTuningPermanent = 'n';
-static char *pPermDefFileName = "/tmp/permDefFile";
 enum workflow_phases {
 	STARTING,
 	ASSESSMENT,
@@ -319,6 +318,7 @@ typedef struct {
 #define NUM_SYSTEM_SETTINGS	100
 #define MAX_SIZE_SYSTEM_SETTING_STRING	768
 int aApplyDefTunCount = 0;
+int vModifySysctlFile = 0;
 char aApplyDefTun2DArray[NUM_SYSTEM_SETTINGS][MAX_SIZE_SYSTEM_SETTING_STRING];
 
 #define TUNING_NUMS	9
@@ -437,6 +437,12 @@ void fDoSystemTuning(void)
 										system(aApplyDefTun);
 										if (gMakeTuningPermanent == 'y')
 										{
+											if (vModifySysctlFile == 0)
+											{
+												sprintf(aApplyDefTun,"echo \"#Start of tuningMod modifications\" >> /etc/sysctl.conf");
+												system(aApplyDefTun);
+												vModifySysctlFile = 1;
+											}
 											sprintf(aApplyDefTun,"sysctl -w %s=%d >> /etc/sysctl.conf",setting,aTuningNumsToUse[count].minimum);
 											system(aApplyDefTun);
 										}
@@ -516,6 +522,12 @@ void fDoSystemTuning(void)
 											system(aApplyDefTun);
 											if (gMakeTuningPermanent == 'y')
 											{
+												if (vModifySysctlFile == 0)
+												{
+													sprintf(aApplyDefTun,"echo \"#Start of tuningMod modifications\" >> /etc/sysctl.conf");
+													system(aApplyDefTun);
+													vModifySysctlFile = 1;
+												}
 												sprintf(aApplyDefTun,"sysctl -w %s=\"%s %s %s\" >> /etc/sysctl.conf",setting, strValmin, strValdef, strValmax);
 												system(aApplyDefTun);
 											}
@@ -669,6 +681,12 @@ void fDoSystemTuning(void)
 								system(aApplyDefTun);
 								if (gMakeTuningPermanent == 'y')
 								{
+									if (vModifySysctlFile == 0)
+									{
+										sprintf(aApplyDefTun,"echo \"#Start of tuningMod modifications\" >> /etc/sysctl.conf");
+										system(aApplyDefTun);
+										vModifySysctlFile = 1;
+									}
 									sprintf(aApplyDefTun,"sysctl -w %s=%s >> /etc/sysctl.conf",setting,aStringval[aTuningNumsToUse[count].minimum]);
 									system(aApplyDefTun);
 								}
@@ -720,6 +738,14 @@ void fDoSystemTuning(void)
 	fprintf(tunLogPtr,"%s %s: ***----------------------------***\n\n", ctime_buf, phase2str(current_phase));
 
 	free(line);
+
+	if (vModifySysctlFile)
+	{
+		sprintf(aApplyDefTun,"echo \"#End of tuningMod modifications\" >> /etc/sysctl.conf");
+		system(aApplyDefTun);
+		vModifySysctlFile = 0;
+	}
+
 	return;
 }
 
@@ -773,6 +799,8 @@ int main(int argc, char **argv)
 				
 			fclose(fApplyDefTunPtr);	
 		}
+		else
+			system("rm -f /tmp/applyDefFile");	//There is a way this can be left around by mistake
 	}
 
 leave:
