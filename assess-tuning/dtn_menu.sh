@@ -123,17 +123,29 @@ logcount=
 	else
 		echo 0 > /tmp/tuningLog.count
 	fi
-	./dtn_tune
+	./dtn_tune $1
+
 	if [ $? = 0 ]
-   	then
+	then	
 		more -d /tmp/tuningLog	
 		printf '\n###%s' "This output has been saved in /tmp/tuningLog"
+	else
+		more -d /tmp/tuningLog	
+		printf '\n###%s' "This output has been saved in /tmp/tuningLog"
+		echo >&2
+    	echo >&2 $UsageString
 	fi
 	enter_to_continue
 	return 0
 }
 
+UsageString="\
+Usage:\\t[sudo ./dtnmenu]\\t\\t- Configure Tunables \\n\
+\\t[sudo ./dtnmenu <device>]\\t- Configure Tunables and Device"
+
 # main execution thread
+
+	
 	repeat_main=1
 	while  [ $repeat_main = 1 ]
 	do
@@ -150,7 +162,7 @@ logcount=
 		read answer
 		case "$answer" in
 			1)
-				run_dtntune
+				run_dtntune "$1"
 				;;
 			2)
 				apply_recommended_settings
