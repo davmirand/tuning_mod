@@ -9,14 +9,11 @@
 #include <getopt.h>
 #include <time.h>
 
-
 #ifndef  uint32_t
 typedef unsigned int uint32_t;
 #endif
 
 #define WORKFLOW_NAMES_MAX	4
-#define TEST 1
-static char *testNetDevice = "eno1";
 
 static void gettime(time_t *clk, char *ctime_buf) 
 {
@@ -27,18 +24,24 @@ static void gettime(time_t *clk, char *ctime_buf)
 
 FILE * tunLogPtr = 0;
 void fDoGetUserCfgValues(void);
+int fCheckInterfaceExists();
+void fDoGetDeviceCap(void);
 void fDoBiosTuning(void);
 void fDoNicTuning(void);
 void fDoSystemtuning(void);
 void fDo_lshw(void);
-static char *pUserCfgFile = "user_config.txt";
+
 static int gInterval = 2; //default
+static int netDeviceSpeed = 0;
+
+static char *pUserCfgFile = "user_config.txt";
 static char gTuningMode = 0;
 static char gApplyBiosTuning = 'n';
 static char gApplyNicTuning = 'n';
 static char gApplyDefSysTuning = 'n';
 static char gMakeTuningPermanent = 'n';
 static char netDevice[128];
+static char vHaveNetDevice = 0;
 
 enum workflow_phases {
 	STARTING,
@@ -342,9 +345,9 @@ int aApplyDefTunCount = 0;
 int vModifySysctlFile = 0;
 char aApplyDefTun2DArray[NUM_SYSTEM_SETTINGS][MAX_SIZE_SYSTEM_SETTING_STRING];
 
-#define TUNING_NUMS	9
-/* Must change TUNING_NUMS if adding more to the array below */
-host_tuning_vals_t aTuningNumsToUse[TUNING_NUMS] = {
+#define TUNING_NUMS_U50G	9
+/* Must change TUNING_NUMS_U50G if adding more to the array below */
+host_tuning_vals_t aTuningNumsToUseUnder50Gb[TUNING_NUMS_U50G] = {
 	{"net.core.rmem_max",				67108864,          -1,      	0},
 	{"net.core.wmem_max",				67108864,          -1,      	0},
 	{"net.ipv4.tcp_mtu_probing",			       1,          -1,      	0},
@@ -355,6 +358,22 @@ host_tuning_vals_t aTuningNumsToUse[TUNING_NUMS] = {
 	{"net.ipv4.tcp_wmem",				    4096,       65536,   33554432},
 	{"MTU",						       0, 	   84, 		0} //Will leave here but not using for now
 };
+
+#define TUNING_NUMS_O50G	11
+/* Must change TUNING_NUMS_O50G if adding more to the array below */
+host_tuning_vals_t aTuningNumsToUseOver50Gb[TUNING_NUMS_O50G] = {
+	{"net.core.rmem_max",				2147483647,          -1,      		0},
+	{"net.core.wmem_max",				2147483647,          -1,      		0},
+	{"net.ipv4.tcp_mtu_probing",				 1,          -1,      		0},
+	{"net.ipv4.tcp_available_congestion_control",	  getvalue,	     -1,		0},
+	{"net.ipv4.tcp_congestion_control",		      htcp,	     -1,		0}, //uses #defines to help
+	{"net.core.default_qdisc",				fq,	     -1,		0}, //uses #defines
+	{"net.ipv4.tcp_rmem",				      4096,	  87380,       2147483647},
+	{"net.ipv4.tcp_wmem",				      4096,       65536,       2147483647},
+	{"net.core.netdev_max_backlog",			    250000,	     -1,		0},
+	{"net.ipv4.tcp_no_metrics_save",			 1,	     -1,		0},
+	{"MTU",							 0,	     84, 		0} //leave here not use for now
+};
 void fDoSystemTuning(void)
 {
 
@@ -364,11 +383,13 @@ void fDoSystemTuning(void)
 	char *q, *r, *p = 0;
 	char setting[256];
 	char value[256];
+	host_tuning_vals_t  aTuningNumsToUse[TUNING_NUMS_O50G]; 
+	int TUNING_NUMS;
 	int congestion_control_recommended_avail = 0;
 #if 0
 	char devMTUdata[256];
 #endif
-	int count, intvalue, found = 0;
+	int x, count, intvalue, found = 0;
 	FILE * tunDefSysCfgPtr = 0;	
 	time_t clk;
 	char ctime_buf[27];
@@ -380,9 +401,26 @@ void fDoSystemTuning(void)
 
 	fprintf(tunLogPtr,"\n\n%s %s: ***Start of Default System Tuning***\n", ctime_buf, phase2str(current_phase));
 	fprintf(tunLogPtr,"%s %s: ***------------------------------***\n", ctime_buf, phase2str(current_phase));
-	fprintf(tunLogPtr, "%s %s: Running gdv.sh - Shell script to Get current config settings***\n", ctime_buf, phase2str(current_phase));
-
-	system("sh ./gdv.sh");
+	if (netDeviceSpeed < 50000) //50 Gb/s
+	{
+		TUNING_NUMS = TUNING_NUMS_U50G;
+		for (x = 0; x < TUNING_NUMS; x++)
+		{
+			memcpy(&aTuningNumsToUse[x], &aTuningNumsToUseUnder50Gb[x], sizeof(host_tuning_vals_t));
+		}
+		fprintf(tunLogPtr, "%s %s: Running gdv.sh - Shell script to Get current config settings***\n", ctime_buf, phase2str(current_phase));
+		system("sh ./gdv.sh");
+	}
+	else
+		{
+			TUNING_NUMS = TUNING_NUMS_O50G;
+			for (x = 0; x < TUNING_NUMS; x++)
+			{
+				memcpy(&aTuningNumsToUse[x], &aTuningNumsToUseOver50Gb[x], sizeof(host_tuning_vals_t));
+			}
+			fprintf(tunLogPtr, "%s %s: Running gdv_100.sh - Shell script to Get current config settings***\n", ctime_buf, phase2str(current_phase));
+			system("sh ./gdv_100.sh");
+		}
 #if 0
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr, "%s Getting current MTU value on system***\n", ctime_buf);
@@ -887,7 +925,77 @@ void fDoBiosTuning(void)
 	return;
 }
 
-static int rec_txqueuelen = 20000; //receommended value for now
+int fCheckInterfaceExist() 
+{
+	int vRet;
+	char aNicPath[512];
+
+	sprintf(aNicPath,"/sys/class/net/%s",netDevice);
+	vRet = access(aNicPath, F_OK);
+
+	return vRet;
+}
+
+void fDoGetDeviceCap(void)
+{
+	char ctime_buf[27];
+	time_t clk;
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t nread;
+	char aNicSetting[256];
+	FILE *nicCfgFPtr = 0;
+
+	gettime(&clk, ctime_buf);
+	sprintf(aNicSetting,"cat /sys/class/net/%s/speed > /tmp/NIC.cfgfile",netDevice);
+	system(aNicSetting);
+
+	nicCfgFPtr = fopen("/tmp/NIC.cfgfile","r");
+	if (!nicCfgFPtr)
+	{
+		int save_errno = errno;
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: Could not open file /tmp/NIC.cfgfile to retrieve speed value, errno = %d...\n", ctime_buf, phase2str(current_phase), save_errno);
+	}
+	else
+		{
+			while((nread = getline(&line, &len, nicCfgFPtr)) != -1)
+			{ 
+				char sValue[256];
+				int cfg_val = 0;
+				//printf("Retrieved line of length %zu:\n", nread);
+				//printf("&%s&",line);
+				strcpy(sValue,line);
+				if (sValue[strlen(sValue)-1] == '\n')
+					sValue[strlen(sValue)-1] = 0;
+
+				cfg_val = atoi(sValue);
+				if (cfg_val == 0) //wasn't set properly
+				{
+					int save_errno = errno;
+					gettime(&clk, ctime_buf);
+					fprintf(tunLogPtr,"%s %s: Value for speed is invalid, value is %s, errno = %d...\n", ctime_buf, phase2str(current_phase), sValue, save_errno);
+				}
+				else
+					{
+						netDeviceSpeed = cfg_val;
+					}
+
+				//should only be one item
+				break;
+			}
+
+			fclose(nicCfgFPtr);
+			system("rm -f /tmp/NIC.cfgfile"); //remove file after use
+		}
+
+	if (line)
+		free(line);
+
+	return;
+}
+
+static int rec_txqueuelen = 20000; //recommended value for now
 void fDoNicTuning(void)
 {
 	char ctime_buf[27];
@@ -910,6 +1018,7 @@ void fDoNicTuning(void)
 
 	fprintf(tunLogPtr,"\n%s %s: -------------------------------------------------------------------\n", ctime_buf, phase2str(current_phase));
 	fprintf(tunLogPtr,  "%s %s: ****************Start of Evaluate NIC configuration****************\n\n", ctime_buf, phase2str(current_phase));
+	fprintf(tunLogPtr,"%s %s: Speed of device \"%s\" is %dGb/s\n\n", ctime_buf, phase2str(current_phase), netDevice, netDeviceSpeed/1000);
 
 	fprintf(tunLogPtr, "%s %*s %25s %20s\n", header2[0], HEADER_SETTINGS_PAD, header2[1], header2[2], header2[3]);
 	fflush(tunLogPtr);
@@ -968,10 +1077,7 @@ void fDoNicTuning(void)
 				break;
 			}
 
-			if (TEST)
-				sprintf(aNicSetting,"ethtool --show-ring %s  > /tmp/NIC.cfgfile",testNetDevice);
-			else
-				sprintf(aNicSetting,"ethtool --show-ring %s  > /tmp/NIC.cfgfile",netDevice);
+			sprintf(aNicSetting,"ethtool --show-ring %s  > /tmp/NIC.cfgfile",netDevice);
 
 			system(aNicSetting);
 			nicCfgFPtr = freopen("/tmp/NIC.cfgfile","r", nicCfgFPtr);
@@ -1096,10 +1202,7 @@ void fDoNicTuning(void)
 								continue;
 			}
 
-			if (TEST)
-				sprintf(aNicSetting,"ethtool --show-features %s | grep large-receive-offload > /tmp/NIC.cfgfile",testNetDevice);
-			else
-				sprintf(aNicSetting,"ethtool --show-features %s | grep large-receive-offload > /tmp/NIC.cfgfile",netDevice);
+			sprintf(aNicSetting,"ethtool --show-features %s | grep large-receive-offload > /tmp/NIC.cfgfile",netDevice);
 
 			system(aNicSetting);
 			nicCfgFPtr = freopen("/tmp/NIC.cfgfile","r", nicCfgFPtr);
@@ -1177,7 +1280,23 @@ int main(int argc, char **argv)
 	fprintf(tunLogPtr, "%s %s: tuning Log opened***\n", ctime_buf, phase2str(current_phase));
 
 	if (argc == 2)
+	{
+		int vRet;
 		strcpy(netDevice,argv[1]);
+		vRet = fCheckInterfaceExist();
+		if (!vRet)
+		{
+			vHaveNetDevice = 1;
+			fprintf(tunLogPtr, "%s %s: Found Device %s***\n", ctime_buf, phase2str(current_phase), argv[1]);
+		}
+		else
+		{
+			gettime(&clk, ctime_buf);
+			fprintf(tunLogPtr, "%s %s: Device not found, Invalid device name *%s*, Exiting...***\n", ctime_buf, phase2str(current_phase), argv[1]);
+			exit(-1);
+		}
+
+	}
 	else
 		{
 			gettime(&clk, ctime_buf);
@@ -1188,6 +1307,9 @@ int main(int argc, char **argv)
 	current_phase = ASSESSMENT;
 
 	fDoGetUserCfgValues();
+
+	if (vHaveNetDevice)
+		fDoGetDeviceCap();
 
 	fDoSystemTuning();
 
