@@ -345,9 +345,9 @@ int aApplyDefTunCount = 0;
 int vModifySysctlFile = 0;
 char aApplyDefTun2DArray[NUM_SYSTEM_SETTINGS][MAX_SIZE_SYSTEM_SETTING_STRING];
 
-#define TUNING_NUMS_U50G	9
-/* Must change TUNING_NUMS_U50G if adding more to the array below */
-host_tuning_vals_t aTuningNumsToUseUnder50Gb[TUNING_NUMS_U50G] = {
+#define TUNING_NUMS_10GandUnder	9
+/* Must change TUNING_NUMS_10GandUnder if adding more to the array below */
+host_tuning_vals_t aTuningNumsToUse10GandUnder[TUNING_NUMS_10GandUnder] = {
 	{"net.core.rmem_max",				67108864,          -1,      	0},
 	{"net.core.wmem_max",				67108864,          -1,      	0},
 	{"net.ipv4.tcp_mtu_probing",			       1,          -1,      	0},
@@ -359,9 +359,23 @@ host_tuning_vals_t aTuningNumsToUseUnder50Gb[TUNING_NUMS_U50G] = {
 	{"MTU",						       0, 	   84, 		0} //Will leave here but not using for now
 };
 
-#define TUNING_NUMS_O50G	11
-/* Must change TUNING_NUMS_O50G if adding more to the array below */
-host_tuning_vals_t aTuningNumsToUseOver50Gb[TUNING_NUMS_O50G] = {
+#define TUNING_NUMS_Over10GtoUnder100G	9
+/* Must change TUNING_NUMS_Over10GtoUnder100G if adding more to the array below */
+host_tuning_vals_t aTuningNumsToUse_Over10GtoUnder100G[TUNING_NUMS_Over10GtoUnder100G] = {
+	{"net.core.rmem_max",				134217728,         -1,      	0},
+	{"net.core.wmem_max",				134217728,         -1,      	0},
+	{"net.ipv4.tcp_mtu_probing",			       1,          -1,      	0},
+	{"net.ipv4.tcp_available_congestion_control",	getvalue,   	   -1,		0},
+	{"net.ipv4.tcp_congestion_control",	    	    htcp,	   -1,		0}, //uses #defines to help
+	{"net.core.default_qdisc",			      fq, 	   -1,		0}, //uses #defines
+	{"net.ipv4.tcp_rmem",				    4096,      	87380,   67108864},
+	{"net.ipv4.tcp_wmem",				    4096,       65536,   67108864},
+	{"MTU",						       0, 	   84, 		0} //Will leave here but not using for now
+};
+
+#define TUNING_NUMS_100G	11
+/* Must change TUNING_NUMS_100G if adding more to the array below */
+host_tuning_vals_t aTuningNumsToUse100Gb[TUNING_NUMS_100G] = {
 	{"net.core.rmem_max",				2147483647,          -1,      		0},
 	{"net.core.wmem_max",				2147483647,          -1,      		0},
 	{"net.ipv4.tcp_mtu_probing",				 1,          -1,      		0},
@@ -383,7 +397,7 @@ void fDoSystemTuning(void)
 	char *q, *r, *p = 0;
 	char setting[256];
 	char value[256];
-	host_tuning_vals_t  aTuningNumsToUse[TUNING_NUMS_O50G]; 
+	host_tuning_vals_t  aTuningNumsToUse[TUNING_NUMS_100G]; 
 	int TUNING_NUMS;
 	int congestion_control_recommended_avail = 0;
 #if 0
@@ -401,32 +415,38 @@ void fDoSystemTuning(void)
 
 	fprintf(tunLogPtr,"\n\n%s %s: ***Start of Default System Tuning***\n", ctime_buf, phase2str(current_phase));
 	fprintf(tunLogPtr,"%s %s: ***------------------------------***\n", ctime_buf, phase2str(current_phase));
-	if (netDeviceSpeed < 50000) //50 Gb/s
+	if (netDeviceSpeed <= 10000) //less than or equal to 10 Gb/s
 	{
-		TUNING_NUMS = TUNING_NUMS_U50G;
+		TUNING_NUMS = TUNING_NUMS_10GandUnder;
 		for (x = 0; x < TUNING_NUMS; x++)
 		{
-			memcpy(&aTuningNumsToUse[x], &aTuningNumsToUseUnder50Gb[x], sizeof(host_tuning_vals_t));
+			memcpy(&aTuningNumsToUse[x], &aTuningNumsToUse10GandUnder[x], sizeof(host_tuning_vals_t));
 		}
 		fprintf(tunLogPtr, "%s %s: Running gdv.sh - Shell script to Get current config settings***\n", ctime_buf, phase2str(current_phase));
 		system("sh ./gdv.sh");
 	}
 	else
+		if (netDeviceSpeed < 100000) //less than 100 Gb/s and greater than 10 Gb/s
 		{
-			TUNING_NUMS = TUNING_NUMS_O50G;
+			TUNING_NUMS = TUNING_NUMS_Over10GtoUnder100G;
 			for (x = 0; x < TUNING_NUMS; x++)
 			{
-				memcpy(&aTuningNumsToUse[x], &aTuningNumsToUseOver50Gb[x], sizeof(host_tuning_vals_t));
+				memcpy(&aTuningNumsToUse[x], &aTuningNumsToUse_Over10GtoUnder100G[x], sizeof(host_tuning_vals_t));
 			}
-			fprintf(tunLogPtr, "%s %s: Running gdv_100.sh - Shell script to Get current config settings***\n", ctime_buf, phase2str(current_phase));
-			system("sh ./gdv_100.sh");
+			fprintf(tunLogPtr, "%s %s: Running gdv.sh - Shell script to Get current config settings***\n", ctime_buf, phase2str(current_phase));
+			system("sh ./gdv.sh");
 		}
-#if 0
-	gettime(&clk, ctime_buf);
-	fprintf(tunLogPtr, "%s Getting current MTU value on system***\n", ctime_buf);
-	sprintf(devMTUdata, "echo MTU = `cat /sys/class/net/%s/mtu` >> %s", netDevice, pFileCurrentConfigSettings);
-	system(devMTUdata); 
-#endif
+		else
+			{
+				TUNING_NUMS = TUNING_NUMS_100G;
+				for (x = 0; x < TUNING_NUMS; x++)
+				{
+					memcpy(&aTuningNumsToUse[x], &aTuningNumsToUse100Gb[x], sizeof(host_tuning_vals_t));
+				}
+				fprintf(tunLogPtr, "%s %s: Running gdv_100.sh - Shell script to Get current config settings***\n", ctime_buf, phase2str(current_phase));
+				system("sh ./gdv_100.sh");
+			}
+	
 	tunDefSysCfgPtr = fopen(pFileCurrentConfigSettings,"r");
 	if (!tunDefSysCfgPtr)
 	{
@@ -776,15 +796,6 @@ void fDoSystemTuning(void)
 		}
 	}
 
-#if 0
-	/* find additional things that could be tuned */
-	fDo_lshw();
-
-	gettime(&clk, ctime_buf);
-	fprintf(tunLogPtr,"\n%s %s: ***For additional info about your hardware settings and capabilities, please run \n", ctime_buf, phase2str(current_phase));
-	fprintf(tunLogPtr,"%s %s: ***'sudo dmidecode' and/or 'sudo lshw'. \n\n", ctime_buf, phase2str(current_phase));
-#endif
-
 	fprintf(tunLogPtr, "\n%s %s: ***Closing Tuning Module default system configuration file***\n", ctime_buf, phase2str(current_phase));
 	fclose(tunDefSysCfgPtr);
 
@@ -996,6 +1007,7 @@ void fDoGetDeviceCap(void)
 }
 
 static int rec_txqueuelen = 20000; //recommended value for now
+static int rec_mtu = 9000; //recommended value for now
 void fDoNicTuning(void)
 {
 	char ctime_buf[27];
@@ -1247,6 +1259,114 @@ void fDoNicTuning(void)
 					fprintf(tunLogPtr,"%26s %20s\n", recommended_val, "na");
 
 				//should be only one line in the file
+				break;
+			}
+			
+			sprintf(aNicSetting,"cat /sys/class/net/%s/mtu  > /tmp/NIC.cfgfile",netDevice);
+			system(aNicSetting);
+			nicCfgFPtr = freopen("/tmp/NIC.cfgfile","r", nicCfgFPtr);
+
+			while((nread = getline(&line, &len, nicCfgFPtr)) != -1)
+			{ //mtu
+				char sValue[256];
+				int cfg_val = 0;
+				strcpy(sValue,line);
+				if (sValue[strlen(sValue)-1] == '\n')
+					sValue[strlen(sValue)-1] = 0;
+
+				cfg_val = atoi(sValue);
+				if (cfg_val == 0) //wasn't set properly
+				{
+					int save_errno = errno;
+					gettime(&clk, ctime_buf);
+					fprintf(tunLogPtr,"%s %s: Value for mtu is invalid, value is %s, errno = %d...\n", ctime_buf, phase2str(current_phase), sValue, save_errno);
+				}
+				else
+					{
+						int vPad = SETTINGS_PAD_MAX-(strlen("mtu"));
+						fprintf(tunLogPtr,"%s", "mtu"); //redundancy for visual
+						fprintf(tunLogPtr,"%*s", vPad, sValue);
+
+						if (rec_mtu > cfg_val)
+						{
+							fprintf(tunLogPtr,"%26d %20c\n", rec_mtu, gApplyNicTuning);
+							if (gApplyNicTuning == 'y')
+							{
+								//Apply Inital DefSys Tuning
+								sprintf(aNicSetting,"sudo ip link set dev %s mtu %d", netDevice, rec_mtu);
+								printf("%s\n",aNicSetting);
+								//system(aNicSetting);
+							}
+						}
+						else
+							fprintf(tunLogPtr,"%26d %20s\n", cfg_val, "na");
+					}
+
+				//should only be one item
+				break;
+			}
+			
+			sprintf(aNicSetting,"tc qdisc show dev %s root > /tmp/NIC.cfgfile",netDevice);
+			system(aNicSetting);
+			nicCfgFPtr = freopen("/tmp/NIC.cfgfile","r", nicCfgFPtr);
+
+			while((nread = getline(&line, &len, nicCfgFPtr)) != -1)
+			{ //tc qdisc
+				char sValue[512];
+				char aQdiscVal[512];
+				char *y = 0;
+				int cfg_val = 0;
+				strcpy(sValue,line);
+				if (sValue[strlen(sValue)-1] == '\n')
+					sValue[strlen(sValue)-1] = 0;
+					
+				fprintf(tunLogPtr,"%s %s: line is *%s* ...\n", ctime_buf, phase2str(current_phase), sValue);
+				y = strstr(sValue,"qdisc");
+				if (y)
+				{
+					int count = 0;
+					y = y + strlen("qdisc");
+					while isblank((int)*y) y++;
+					memset(aQdiscVal,0,sizeof(aQdiscVal));
+					while isalnum((int)*y) 
+					{
+						aQdiscVal[count] = *y;
+						y++;	
+					}
+					
+					fprintf(tunLogPtr,"%s %s: Qdiscval is *%s* ...\n", ctime_buf, phase2str(current_phase), aQdiscVal);
+				}
+				break;
+
+				cfg_val = atoi(sValue);
+				if (cfg_val == 0) //wasn't set properly
+				{
+					int save_errno = errno;
+					gettime(&clk, ctime_buf);
+					fprintf(tunLogPtr,"%s %s: Value for mtu is invalid, value is %s, errno = %d...\n", ctime_buf, phase2str(current_phase), sValue, save_errno);
+				}
+				else
+					{
+						int vPad = SETTINGS_PAD_MAX-(strlen("mtu"));
+						fprintf(tunLogPtr,"%s", "mtu"); //redundancy for visual
+						fprintf(tunLogPtr,"%*s", vPad, sValue);
+
+						if (rec_mtu > cfg_val)
+						{
+							fprintf(tunLogPtr,"%26d %20c\n", rec_mtu, gApplyNicTuning);
+							if (gApplyNicTuning == 'y')
+							{
+								//Apply Inital DefSys Tuning
+								sprintf(aNicSetting,"sudo ip link set dev %s mtu %d", netDevice, rec_mtu);
+								printf("%s\n",aNicSetting);
+								//system(aNicSetting);
+							}
+						}
+						else
+							fprintf(tunLogPtr,"%26d %20s\n", cfg_val, "na");
+					}
+
+				//should only be one item
 				break;
 			}
 
