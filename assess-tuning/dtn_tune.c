@@ -1010,7 +1010,7 @@ void fDoGetDeviceCap(void)
 static int rec_txqueuelen = 20000; //recommended value for now
 static int rec_mtu = 9000; //recommended value for now
 static char * rec_tcqdisc = "fq"; //recommended value for now
-void fDoTxQueueLen(FILE * nicCfgFPtr)
+void fDoTxQueueLen()
 {
 
 	char ctime_buf[27];
@@ -1019,53 +1019,73 @@ void fDoTxQueueLen(FILE * nicCfgFPtr)
 	size_t len = 0;
 	ssize_t nread;
 	char aNicSetting[512];
+	FILE *nicCfgFPtr = 0;
 
-	while((nread = getline(&line, &len, nicCfgFPtr)) != -1)
-	{ //1st keyword txqueuelen
-		char sValue[256];
-		int cfg_val = 0;
-		//printf("Retrieved line of length %zu:\n", nread);
-		//printf("&%s&",line);
-		strcpy(sValue,line);
-		if (sValue[strlen(sValue)-1] == '\n')
-			sValue[strlen(sValue)-1] = 0;
+	sprintf(aNicSetting,"cat /sys/class/net/%s/tx_queue_len > /tmp/NIC.cfgfile",netDevice);
+	system(aNicSetting);
 
-		cfg_val = atoi(sValue);
-		if (cfg_val == 0) //wasn't set properly
+	nicCfgFPtr = fopen("/tmp/NIC.cfgfile","r");
+	if (!nicCfgFPtr)
+	{
+		int save_errno = errno;
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: Could not open file /tmp/NIC.cfgfile to retrieve speed value, errno = %d...\n", ctime_buf, phase2str(current_phase), save_errno);
+	}
+	else
 		{
-			int save_errno = errno;
-			gettime(&clk, ctime_buf);
-			fprintf(tunLogPtr,"%s %s: Value for txqueuelen is invalid, value is %s, errno = %d...\n", ctime_buf, phase2str(current_phase), sValue, save_errno);
-		}
-		else
-			{
-				int vPad = SETTINGS_PAD_MAX-(strlen("txqueuelen"));
-				fprintf(tunLogPtr,"%s", "txqueuelen"); //redundancy for visual
-				fprintf(tunLogPtr,"%*s", vPad, sValue);
+			while((nread = getline(&line, &len, nicCfgFPtr)) != -1)
+			{ //1st keyword txqueuelen
+				char sValue[256];
+				int cfg_val = 0;
+				//printf("Retrieved line of length %zu:\n", nread);
+				//printf("&%s&",line);
+				strcpy(sValue,line);
+				if (sValue[strlen(sValue)-1] == '\n')
+					sValue[strlen(sValue)-1] = 0;
 
-				if (rec_txqueuelen > cfg_val)
+				cfg_val = atoi(sValue);
+				if (cfg_val == 0) //wasn't set properly
 				{
-					fprintf(tunLogPtr,"%26d %20c\n", rec_txqueuelen, gApplyNicTuning);
-					if (gApplyNicTuning == 'y')
-					{
-						//Apply Inital DefSys Tuning
-						sprintf(aNicSetting,"ifconfig %s txqueuelen %d", netDevice, rec_txqueuelen);
-						printf("%s\n",aNicSetting);
-						//system(aNicSetting);
-					}
+					int save_errno = errno;
+					gettime(&clk, ctime_buf);
+					fprintf(tunLogPtr,"%s %s: Value for txqueuelen is invalid, value is %s, errno = %d...\n", ctime_buf, phase2str(current_phase), sValue, save_errno);
 				}
 				else
-					fprintf(tunLogPtr,"%26d %20s\n", rec_txqueuelen, "na");
-			}
+					{
+						int vPad = SETTINGS_PAD_MAX-(strlen("txqueuelen"));
+						fprintf(tunLogPtr,"%s", "txqueuelen"); //redundancy for visual
+						fprintf(tunLogPtr,"%*s", vPad, sValue);
 
-		//should only be one item
-		break;
-	}
+						if (rec_txqueuelen > cfg_val)
+						{
+							fprintf(tunLogPtr,"%26d %20c\n", rec_txqueuelen, gApplyNicTuning);
+							if (gApplyNicTuning == 'y')
+							{
+								//Apply Inital DefSys Tuning
+								sprintf(aNicSetting,"ifconfig %s txqueuelen %d", netDevice, rec_txqueuelen);
+								printf("%s\n",aNicSetting);
+								//system(aNicSetting);
+							}
+						}
+						else
+							fprintf(tunLogPtr,"%26d %20s\n", rec_txqueuelen, "na");
+					}
+
+				//should only be one item
+				break;
+			}
+			
+			fclose(nicCfgFPtr);
+			system("rm -f /tmp/NIC.cfgfile"); //remove file after use
+		}
+
+	if (line)
+		free(line);
 
 	return;
 }
 
-void fDoRingBufferSize(FILE * nicCfgFPtr)
+void fDoRingBufferSize()
 {
 	char ctime_buf[27];
 	time_t clk;
@@ -1086,64 +1106,72 @@ void fDoRingBufferSize(FILE * nicCfgFPtr)
 
 	sprintf(aNicSetting,"ethtool --show-ring %s  > /tmp/NIC.cfgfile",netDevice);
 	system(aNicSetting);
-	nicCfgFPtr = freopen("/tmp/NIC.cfgfile","r", nicCfgFPtr);
 
-	while((nread = getline(&line, &len, nicCfgFPtr)) != -1)
-	{ //2nd and 3rd keywords RX and tx ring buffer size
-		int count = 0, ncount = 0;
-
-		if (strstr(line,"RX:") && rxcount == 0)
+	nicCfgFPtr = fopen("/tmp/NIC.cfgfile","r");
+	if (!nicCfgFPtr)
+	{
+		int save_errno = errno;
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: Could not open file /tmp/NIC.cfgfile to retrieve speed value, errno = %d...\n", ctime_buf, phase2str(current_phase), save_errno);
+	}
+	else
 		{
-			rxcount++;
+			while((nread = getline(&line, &len, nicCfgFPtr)) != -1)
+			{ //2nd and 3rd keywords RX and tx ring buffer size
+				int count = 0, ncount = 0;
 
-			while (!isdigit(line[count])) count++;
-
-			while (isdigit(line[count]))
-			{
-				sRXMAXValue[ncount] = line[count];
-				ncount++;
-				count++;
-			}
-
-			sRXMAXValue[ncount] = 0;
-		}
-		else
-			if (strstr(line,"RX:"))
-			{
-				rxcount++;
-
-				while (!isdigit(line[count])) count++;
-
-				while (isdigit(line[count]))
+				if (strstr(line,"RX:") && rxcount == 0)
 				{
-					sRXCURRValue[ncount] = line[count];
-					ncount++;
-					count++;
-				}
-
-				sRXCURRValue[ncount] = 0;
-			}
-			else
-				if (strstr(line,"TX:") && txcount == 0)
-				{
-					txcount++;
+					rxcount++;
 
 					while (!isdigit(line[count])) count++;
 
 					while (isdigit(line[count]))
 					{
-						sTXMAXValue[ncount] = line[count];
+						sRXMAXValue[ncount] = line[count];
 						ncount++;
 						count++;
 					}
 
-					sTXMAXValue[ncount] = 0;
+					sRXMAXValue[ncount] = 0;
 				}
 				else
-					if (strstr(line,"TX:"))
+					if (strstr(line,"RX:"))
 					{
-						//should be the last thing I need
-							int cfg_max_val = 0;
+						rxcount++;
+
+						while (!isdigit(line[count])) count++;
+
+						while (isdigit(line[count]))
+						{
+							sRXCURRValue[ncount] = line[count];
+							ncount++;
+							count++;
+						}
+
+						sRXCURRValue[ncount] = 0;
+					}
+					else
+						if (strstr(line,"TX:") && txcount == 0)
+						{
+							txcount++;
+
+							while (!isdigit(line[count])) count++;
+
+							while (isdigit(line[count]))
+							{
+								sTXMAXValue[ncount] = line[count];
+								ncount++;
+								count++;
+							}
+
+							sTXMAXValue[ncount] = 0;
+						}
+						else
+							if (strstr(line,"TX:"))
+							{
+								//should be the last thing I need
+								int cfg_max_val = 0;
 								int cfg_cur_val = 0;
 
 								txcount++;
@@ -1207,9 +1235,15 @@ void fDoRingBufferSize(FILE * nicCfgFPtr)
 							else
 								continue;
 			}
+			
+			fclose(nicCfgFPtr);
+			system("rm -f /tmp/NIC.cfgfile"); //remove file after use
+		}
+	
+	if (line)
+		free(line);
 
 	return;
-
 }
 
 void fDoFlowControl(FILE * nicCfgFPtr)
@@ -1247,20 +1281,8 @@ void fDoNicTuning(void)
 	fprintf(tunLogPtr, "%s %*s %25s %20s\n", header2[0], HEADER_SETTINGS_PAD, header2[1], header2[2], header2[3]);
 	fflush(tunLogPtr);
 
-	sprintf(aNicSetting,"cat /sys/class/net/%s/tx_queue_len > /tmp/NIC.cfgfile",netDevice);
-	system(aNicSetting);
-
-	nicCfgFPtr = fopen("/tmp/NIC.cfgfile","r");
-	if (!nicCfgFPtr)
-	{
-		int save_errno = errno;
-		gettime(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: Could not open file /tmp/NIC.cfgfile to retrieve txqueuelen value, errno = %d...\n", ctime_buf, phase2str(current_phase), save_errno);
-	}
-	else
-		{
-			fDoTxQueueLen(nicCfgFPtr);
-			fDoRingBufferSize(nicCfgFPtr);
+	fDoTxQueueLen();
+	fDoRingBufferSize();
 
 			sprintf(aNicSetting,"ethtool --show-features %s | grep large-receive-offload > /tmp/NIC.cfgfile",netDevice);
 			system(aNicSetting);
