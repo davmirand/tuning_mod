@@ -1092,9 +1092,6 @@ void fDoRingBufferSize()
 	char *line = NULL;
 	size_t len = 0;
 	ssize_t nread;
-	struct stat sb;
-	int found = 0;
-	char aQdiscVal[512];
 	char aNicSetting[512];
 	char sRXMAXValue[256];
 	char sRXCURRValue[256];
@@ -1103,6 +1100,7 @@ void fDoRingBufferSize()
 	int rxcount = 0;
 	int txcount = 0;
 	int vPad;
+	FILE *nicCfgFPtr = 0;
 
 	sprintf(aNicSetting,"ethtool --show-ring %s  > /tmp/NIC.cfgfile",netDevice);
 	system(aNicSetting);
@@ -1246,48 +1244,29 @@ void fDoRingBufferSize()
 	return;
 }
 
-void fDoFlowControl(FILE * nicCfgFPtr)
-{
-	return;
-}
-
-void fDoNicTuning(void)
+void fDoLRO() 
 {
 	char ctime_buf[27];
 	time_t clk;
 	char *line = NULL;
 	size_t len = 0;
 	ssize_t nread;
-	struct stat sb;
-	int found = 0;
-	char aQdiscVal[512];
 	char aNicSetting[512];
-	char sRXMAXValue[256];
-	char sRXCURRValue[256];
-	char sTXMAXValue[256];
-	char sTXCURRValue[256];
-	int rxcount = 0;
-	int txcount = 0;
 	int vPad;
 	FILE *nicCfgFPtr = 0;
-	char *header2[] = {"Setting", "Current Value", "Recommended Value", "Applied"};
-
-	gettime(&clk, ctime_buf);
-
-	fprintf(tunLogPtr,"\n%s %s: -------------------------------------------------------------------\n", ctime_buf, phase2str(current_phase));
-	fprintf(tunLogPtr,  "%s %s: ****************Start of Evaluate NIC configuration****************\n\n", ctime_buf, phase2str(current_phase));
-	fprintf(tunLogPtr,"%s %s: Speed of device \"%s\" is %dGb/s\n\n", ctime_buf, phase2str(current_phase), netDevice, netDeviceSpeed/1000);
-
-	fprintf(tunLogPtr, "%s %*s %25s %20s\n", header2[0], HEADER_SETTINGS_PAD, header2[1], header2[2], header2[3]);
-	fflush(tunLogPtr);
-
-	fDoTxQueueLen();
-	fDoRingBufferSize();
-
-			sprintf(aNicSetting,"ethtool --show-features %s | grep large-receive-offload > /tmp/NIC.cfgfile",netDevice);
-			system(aNicSetting);
-			nicCfgFPtr = freopen("/tmp/NIC.cfgfile","r", nicCfgFPtr);
-
+			
+	sprintf(aNicSetting,"ethtool --show-features %s | grep large-receive-offload > /tmp/NIC.cfgfile",netDevice);
+	system(aNicSetting);
+	
+	nicCfgFPtr = fopen("/tmp/NIC.cfgfile","r");
+	if (!nicCfgFPtr)
+	{
+		int save_errno = errno;
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: Could not open file /tmp/NIC.cfgfile to retrieve speed value, errno = %d...\n", ctime_buf, phase2str(current_phase), save_errno);
+	}
+	else
+		{
 			while((nread = getline(&line, &len, nicCfgFPtr)) != -1)
 			{ //large receive offload
 				int count = 0, ncount = 0;
@@ -1330,11 +1309,39 @@ void fDoNicTuning(void)
 				//should be only one line in the file
 				break;
 			}
-			
-			sprintf(aNicSetting,"cat /sys/class/net/%s/mtu  > /tmp/NIC.cfgfile",netDevice);
-			system(aNicSetting);
-			nicCfgFPtr = freopen("/tmp/NIC.cfgfile","r", nicCfgFPtr);
+	
+			fclose(nicCfgFPtr);
+			system("rm -f /tmp/NIC.cfgfile"); //remove file after use
+		}
+	
+	if (line)
+		free(line);
 
+	return;
+}
+
+void fDoMTU()
+{
+	char ctime_buf[27];
+	time_t clk;
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t nread;
+	char aNicSetting[512];
+	FILE *nicCfgFPtr = 0;
+
+	sprintf(aNicSetting,"cat /sys/class/net/%s/mtu  > /tmp/NIC.cfgfile",netDevice);
+	system(aNicSetting);
+
+	nicCfgFPtr = fopen("/tmp/NIC.cfgfile","r");
+	if (!nicCfgFPtr)
+	{
+		int save_errno = errno;
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: Could not open file /tmp/NIC.cfgfile to retrieve speed value, errno = %d...\n", ctime_buf, phase2str(current_phase), save_errno);
+	}
+	else
+		{
 			while((nread = getline(&line, &len, nicCfgFPtr)) != -1)
 			{ //mtu
 				char sValue[256];
@@ -1374,20 +1381,48 @@ void fDoNicTuning(void)
 				//should only be one item
 				break;
 			}
-		
-			fclose(nicCfgFPtr);	
-			system("rm -f /tmp/NIC.cfgfile");
-			sprintf(aNicSetting,"tc qdisc show dev %s root 2>/dev/null > /tmp/NIC.cfgfile",netDevice);
-			system(aNicSetting);
-           		stat("/tmp/NIC.cfgfile", &sb);
-			if (sb.st_size == 0) //some OS don't like to have the "root" as an option
-			{
-				sprintf(aNicSetting,"tc qdisc show dev %s  > /tmp/NIC.cfgfile",netDevice);
-				system(aNicSetting);
-			}
-			
-			nicCfgFPtr = fopen("/tmp/NIC.cfgfile","r");
+	
+			fclose(nicCfgFPtr);
+			system("rm -f /tmp/NIC.cfgfile"); //remove file after use
+		}
+	
+	if (line)
+		free(line);
 
+	return;
+}
+
+void fDoTcQdiscFq()
+{
+	char ctime_buf[27];
+	time_t clk;
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t nread;
+	struct stat sb;
+	int found = 0;
+	char aQdiscVal[512];
+	char aNicSetting[512];
+	FILE *nicCfgFPtr = 0;
+			
+	sprintf(aNicSetting,"tc qdisc show dev %s root 2>/dev/null > /tmp/NIC.cfgfile",netDevice);
+	system(aNicSetting);
+       	stat("/tmp/NIC.cfgfile", &sb);
+	if (sb.st_size == 0) //some OS don't like to have the "root" as an option
+	{
+		sprintf(aNicSetting,"tc qdisc show dev %s  > /tmp/NIC.cfgfile",netDevice);
+		system(aNicSetting);
+	}
+			
+	nicCfgFPtr = fopen("/tmp/NIC.cfgfile","r");
+	if (!nicCfgFPtr)
+	{
+		int save_errno = errno;
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: Could not open file /tmp/NIC.cfgfile to retrieve speed value, errno = %d...\n", ctime_buf, phase2str(current_phase), save_errno);
+	}
+	else
+		{
 			while((nread = getline(&line, &len, nicCfgFPtr)) != -1)
 			{ //tc qdisc
 				char sValue[512];
@@ -1440,12 +1475,38 @@ void fDoNicTuning(void)
 			fclose(nicCfgFPtr);
 			system("rm -f /tmp/NIC.cfgfile"); //remove file after use
 		}
+	return;
+}
+
+void fDoFlowControl(FILE * nicCfgFPtr)
+{
+	return;
+}
+
+void fDoNicTuning(void)
+{
+	char ctime_buf[27];
+	time_t clk;
+	char *header2[] = {"Setting", "Current Value", "Recommended Value", "Applied"};
+
+	gettime(&clk, ctime_buf);
+
+	fprintf(tunLogPtr,"\n%s %s: -------------------------------------------------------------------\n", ctime_buf, phase2str(current_phase));
+	fprintf(tunLogPtr,  "%s %s: ****************Start of Evaluate NIC configuration****************\n\n", ctime_buf, phase2str(current_phase));
+	fprintf(tunLogPtr,"%s %s: Speed of device \"%s\" is %dGb/s\n\n", ctime_buf, phase2str(current_phase), netDevice, netDeviceSpeed/1000);
+
+	fprintf(tunLogPtr, "%s %*s %25s %20s\n", header2[0], HEADER_SETTINGS_PAD, header2[1], header2[2], header2[3]);
+	fflush(tunLogPtr);
+
+	fDoTxQueueLen();
+	fDoRingBufferSize();
+	fDoLRO();//large receive offload
+	fDoMTU();
+	fDoTcQdiscFq();
 
 	fprintf(tunLogPtr,"\n%s %s: *****************End of Evaluate NIC configuration*****************\n", ctime_buf, phase2str(current_phase));
 	fprintf(tunLogPtr,  "%s %s: -------------------------------------------------------------------\n\n", ctime_buf, phase2str(current_phase));
 
-	if (line)
-		free(line);
 
 	return;
 }
