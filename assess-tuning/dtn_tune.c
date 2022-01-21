@@ -342,9 +342,11 @@ typedef struct {
  */
 #define NUM_SYSTEM_SETTINGS	100
 #define MAX_SIZE_SYSTEM_SETTING_STRING	768
-int aApplyDefTunCount = 0;
+int aApplyKernelDefTunCount = 0;
+int aApplyNicDefTunCount = 0;
 int vModifySysctlFile = 0;
-char aApplyDefTun2DArray[NUM_SYSTEM_SETTINGS][MAX_SIZE_SYSTEM_SETTING_STRING];
+char aApplyKernelDefTun2DArray[NUM_SYSTEM_SETTINGS][MAX_SIZE_SYSTEM_SETTING_STRING];
+char aApplyNicDefTun2DArray[NUM_SYSTEM_SETTINGS][MAX_SIZE_SYSTEM_SETTING_STRING];
 
 #define TUNING_NUMS_10GandUnder	9
 /* Must change TUNING_NUMS_10GandUnder if adding more to the array below */
@@ -532,8 +534,8 @@ void fDoSystemTuning(void)
 										{
 											//Save in Case Operator want to apply from menu
 											sprintf(aApplyDefTun,"sysctl -w %s=%d",setting,aTuningNumsToUse[count].minimum);
-											memcpy(aApplyDefTun2DArray[aApplyDefTunCount], aApplyDefTun, strlen(aApplyDefTun));
-											aApplyDefTunCount++;
+											memcpy(aApplyKernelDefTun2DArray[aApplyKernelDefTunCount], aApplyDefTun, strlen(aApplyDefTun));
+											aApplyKernelDefTunCount++;
 										}
 								}
 						}
@@ -616,8 +618,8 @@ void fDoSystemTuning(void)
 											{
 												//Save in Case Operator want to apply from menu
 												sprintf(aApplyDefTun,"sysctl -w %s=\"%s %s %s\"",setting, strValmin, strValdef, strValmax);
-												memcpy(aApplyDefTun2DArray[aApplyDefTunCount], aApplyDefTun, strlen(aApplyDefTun));
-												aApplyDefTunCount++;
+												memcpy(aApplyKernelDefTun2DArray[aApplyKernelDefTunCount], aApplyDefTun, strlen(aApplyDefTun));
+												aApplyKernelDefTunCount++;
 											}
 									}
 									else
@@ -772,11 +774,11 @@ void fDoSystemTuning(void)
 								}
 							}
 							else
-				                               {
+								{
 									//Save in Case Operator want to apply from menu
 									sprintf(aApplyDefTun,"sysctl -w %s=%s",setting,aStringval[aTuningNumsToUse[count].minimum]);
-									memcpy(aApplyDefTun2DArray[aApplyDefTunCount], aApplyDefTun, strlen(aApplyDefTun));
-									aApplyDefTunCount++;
+									memcpy(aApplyKernelDefTun2DArray[aApplyKernelDefTunCount], aApplyDefTun, strlen(aApplyDefTun));
+									aApplyKernelDefTunCount++;
 								}
 						}
 						else
@@ -1066,6 +1068,13 @@ void fDoTxQueueLen()
 								printf("%s\n",aNicSetting);
 								//system(aNicSetting);
 							}
+							else
+								{
+									//Save in Case Operator want to apply from menu
+									sprintf(aNicSetting,"ifconfig %s txqueuelen %d", netDevice, rec_txqueuelen);
+									memcpy(aApplyNicDefTun2DArray[aApplyNicDefTunCount], aNicSetting, strlen(aNicSetting));
+									aApplyNicDefTunCount++;
+								}
 						}
 						else
 							fprintf(tunLogPtr,"%26d %20s\n", rec_txqueuelen, "na");
@@ -1202,6 +1211,13 @@ void fDoRingBufferSize()
 										printf("%s\n",aNicSetting);
 										//system(aNicSetting);
 									}
+									else
+										{
+											//Save in Case Operator want to apply from menu
+											sprintf(aNicSetting,"ethtool -G %s rx %d", netDevice, cfg_max_val);
+											memcpy(aApplyNicDefTun2DArray[aApplyNicDefTunCount], aNicSetting, strlen(aNicSetting));
+											aApplyNicDefTunCount++;
+										}
 								}
 								else
 									fprintf(tunLogPtr,"%26d %20s\n", cfg_max_val, "na");
@@ -1223,6 +1239,13 @@ void fDoRingBufferSize()
 										printf("%s\n",aNicSetting);
 										//system(aNicSetting);
 									}
+									else
+										{
+											//Save in Case Operator want to apply from menu
+											sprintf(aNicSetting,"ethtool -G %s tx %d", netDevice, cfg_max_val);
+											memcpy(aApplyNicDefTun2DArray[aApplyNicDefTunCount], aNicSetting, strlen(aNicSetting));
+											aApplyNicDefTunCount++;
+										}
 								}
 								else
 									fprintf(tunLogPtr,"%26d %20s\n", cfg_max_val, "na");
@@ -1302,6 +1325,13 @@ void fDoLRO()
 						printf("%s\n",aNicSetting);
 						//system(aNicSetting);
 					}
+					else
+						{
+							//Save in Case Operator want to apply from menu
+							sprintf(aNicSetting,"ethtool -K %s lro %s", netDevice, recommended_val);
+							memcpy(aApplyNicDefTun2DArray[aApplyNicDefTunCount], aNicSetting, strlen(aNicSetting));
+							aApplyNicDefTunCount++;
+						}
 				}
 				else
 					fprintf(tunLogPtr,"%26s %20s\n", recommended_val, "na");
@@ -1373,6 +1403,13 @@ void fDoMTU()
 								printf("%s\n",aNicSetting);
 								//system(aNicSetting);
 							}
+							else
+								{
+									//Save in Case Operator want to apply from menu
+									sprintf(aNicSetting,"sudo ip link set dev %s mtu %d", netDevice, rec_mtu);
+									memcpy(aApplyNicDefTun2DArray[aApplyNicDefTunCount], aNicSetting, strlen(aNicSetting));
+									aApplyNicDefTunCount++;
+								}
 						}
 						else
 							fprintf(tunLogPtr,"%26d %20s\n", cfg_val, "na");
@@ -1402,7 +1439,7 @@ void fDoTcQdiscFq()
 	struct stat sb;
 	int found = 0;
 	char aQdiscVal[512];
-	char aNicSetting[512];
+	char aNicSetting[1024];
 	FILE *nicCfgFPtr = 0;
 			
 	sprintf(aNicSetting,"tc qdisc show dev %s root 2>/dev/null > /tmp/NIC.cfgfile",netDevice);
@@ -1463,10 +1500,17 @@ void fDoTcQdiscFq()
 					if (gApplyNicTuning == 'y')
 					{
 						//Apply Inital DefSys Tuning
-						sprintf(aNicSetting,"tc qdisc del dev %s root fq; tc qdisc add dev %s root fq", netDevice, netDevice);
+						sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq", netDevice, aQdiscVal, netDevice);
 						printf("%s\n",aNicSetting);
 						//system(aNicSetting);
 					}
+					else
+						{
+							//Save in Case Operator want to apply from menu
+							sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq", netDevice, aQdiscVal, netDevice);
+							memcpy(aApplyNicDefTun2DArray[aApplyNicDefTunCount], aNicSetting, strlen(aNicSetting));
+							aApplyNicDefTunCount++;
+						}
 				}
 				else
 					fprintf(tunLogPtr,"%26s %20s\n", aQdiscVal, "na");
@@ -1575,26 +1619,51 @@ int main(int argc, char **argv)
 	{
 		// in case the user wants to apply recommended settings interactively
 		int x =0;
-		FILE * fApplyDefTunPtr = 0;	
-		if (aApplyDefTunCount)
+		FILE * fApplyKernelDefTunPtr = 0;	
+		if (aApplyKernelDefTunCount)
 		{
-			fApplyDefTunPtr = fopen("/tmp/applyDefFile","w"); //open and close to wipe out file - other ways to do this, but this should work...
-			if (!fApplyDefTunPtr)
+			fApplyKernelDefTunPtr = fopen("/tmp/applyKernelDefFile","w"); //open and close to wipe out file - other ways to do this, but this should work...
+			if (!fApplyKernelDefTunPtr)
 			{
 				int save_errno = errno;
-				fprintf(tunLogPtr, "%s %s: Could not open */tmp/applyDefFile* for writing, errno = %d***\n", ctime_buf, phase2str(current_phase), save_errno);
+				fprintf(tunLogPtr, "%s %s: Could not open */tmp/applyKernelDefFile* for writing, errno = %d***\n", ctime_buf, phase2str(current_phase), save_errno);
 				goto leave;
 			}
 
-			fprintf(fApplyDefTunPtr, "%d\n",aApplyDefTunCount+2);
+			fprintf(fApplyKernelDefTunPtr, "%d\n",aApplyKernelDefTunCount+2);
 
-			for (x = 0; x < aApplyDefTunCount; x++)
-				fprintf(fApplyDefTunPtr, "%s\n",aApplyDefTun2DArray[x]);
+			for (x = 0; x < aApplyKernelDefTunCount; x++)
+				fprintf(fApplyKernelDefTunPtr, "%s\n",aApplyKernelDefTun2DArray[x]);
 				
-			fclose(fApplyDefTunPtr);	
+			fclose(fApplyKernelDefTunPtr);	
 		}
 		else
-			system("rm -f /tmp/applyDefFile");	//There is a way this can be left around by mistake
+			system("rm -f /tmp/applyKernelDefFile");	//There is a way this can be left around by mistake
+	}
+
+	{
+		// in case the user wants to apply recommended settings interactively
+		int x =0;
+		FILE * fApplyNicDefTunPtr = 0;	
+		if (aApplyNicDefTunCount)
+		{
+			fApplyNicDefTunPtr = fopen("/tmp/applyNicDefFile","w"); //open and close to wipe out file - other ways to do this, but this should work...
+			if (!fApplyNicDefTunPtr)
+			{
+				int save_errno = errno;
+				fprintf(tunLogPtr, "%s %s: Could not open */tmp/applyNicDefFile* for writing, errno = %d***\n", ctime_buf, phase2str(current_phase), save_errno);
+				goto leave;
+			}
+
+			fprintf(fApplyNicDefTunPtr, "%d\n",aApplyNicDefTunCount+2);
+
+			for (x = 0; x < aApplyNicDefTunCount; x++)
+				fprintf(fApplyNicDefTunPtr, "%s\n",aApplyNicDefTun2DArray[x]);
+				
+			fclose(fApplyNicDefTunPtr);	
+		}
+		else
+			system("rm -f /tmp/applyNicDefFile");	//There is a way this can be left around by mistake
 	}
 
 leave:
