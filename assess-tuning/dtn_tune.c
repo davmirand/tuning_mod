@@ -344,9 +344,11 @@ typedef struct {
 #define MAX_SIZE_SYSTEM_SETTING_STRING	768
 int aApplyKernelDefTunCount = 0;
 int aApplyNicDefTunCount = 0;
+int aApplyBiosDefTunCount = 0;
 int vModifySysctlFile = 0;
 char aApplyKernelDefTun2DArray[NUM_SYSTEM_SETTINGS][MAX_SIZE_SYSTEM_SETTING_STRING];
 char aApplyNicDefTun2DArray[NUM_SYSTEM_SETTINGS][MAX_SIZE_SYSTEM_SETTING_STRING];
+char aApplyBiosDefTun2DArray[NUM_SYSTEM_SETTINGS][MAX_SIZE_SYSTEM_SETTING_STRING];
 
 #define TUNING_NUMS_10GandUnder	9
 /* Must change TUNING_NUMS_10GandUnder if adding more to the array below */
@@ -832,9 +834,9 @@ void fDoBiosTuning(void)
 	size_t len = 0;
 	ssize_t nread;
 	char aBiosSetting[256];
-	char sCPUMAXValue[256];
-	char sCPUCURRValue[256];
+	char aBiosValue[256];
 	int vPad;
+	char * req_govenor = "performance";
 	FILE *biosCfgFPtr = 0;
 	char *header2[] = {"Setting", "Current Value", "Recommended Value", "Applied"};
 
@@ -846,7 +848,8 @@ void fDoBiosTuning(void)
 	fprintf(tunLogPtr, "%s %*s %25s %20s\n", header2[0], HEADER_SETTINGS_PAD, header2[1], header2[2], header2[3]);
 	fflush(tunLogPtr);
 
-	sprintf(aBiosSetting,"lscpu | grep -E '^CPU MHz|^CPU max MHz' > /tmp/BIOS.cfgfile");
+//	sprintf(aBiosSetting,"lscpu | grep -E '^CPU MHz|^CPU max MHz' > /tmp/BIOS.cfgfile");
+	sprintf(aBiosSetting,"cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /tmp/BIOS.cfgfile");
 	system(aBiosSetting);
 
 	biosCfgFPtr = fopen("/tmp/BIOS.cfgfile","r");
@@ -858,66 +861,38 @@ void fDoBiosTuning(void)
 	}
 	else
 		{
-			double cfg_max_val = 0.0;
-			double cfg_cur_val = 0.0;
-
 			while((nread = getline(&line, &len, biosCfgFPtr)) != -1)
-			{ //getting CPU speed
-				int count = 0, ncount = 0;
-
-				if (strstr(line,"CPU MHz:"))
-				{
-					char *q = line + strlen("CPU MHz:");
-
-					while (!isdigit(q[count])) count++;
-
-					while (isdigit(q[count]) || q[count] == '.')
-					{
-						sCPUCURRValue[ncount] = q[count];
-						ncount++;
-						count++;
-					}
-
-					sCPUCURRValue[ncount] = 0;
-				}
-				else
-					if (strstr(line,"CPU max MHz:"))
-					{
-						char *q = line + strlen("CPU max MHz:");
-
-						while (!isdigit(q[count])) count++;
-
-						while (isdigit(q[count]) || q[count] == '.')
-						{
-							sCPUMAXValue[ncount] = q[count];
-							ncount++;
-							count++;
-						}
-
-						sCPUMAXValue[ncount] = 0;
-					}
+			{ 	//getting CPU speed
+				char *q = strchr(line,'\n');
+				strcpy(aBiosValue,line);
+				if (q)
+					aBiosValue[strlen(line)-1] = 0;
 			}
 
-			cfg_max_val = atof(sCPUMAXValue);
-			cfg_cur_val = atof(sCPUCURRValue);
+			vPad = SETTINGS_PAD_MAX-(strlen("CPU Governor"));
+			fprintf(tunLogPtr,"%s", "CPU Governor"); //redundancy for visual
+			fprintf(tunLogPtr,"%*s", vPad, aBiosValue);
 
-			vPad = SETTINGS_PAD_MAX-(strlen("CPU MHz"));
-			fprintf(tunLogPtr,"%s", "CPU MHz"); //redundancy for visual
-			fprintf(tunLogPtr,"%*s", vPad, sCPUCURRValue);
-
-			if (cfg_max_val > cfg_cur_val)
+			if (strcmp(aBiosValue, req_govenor) != 0)
 			{
-				fprintf(tunLogPtr,"%26s %20c\n", sCPUMAXValue, gApplyBiosTuning); //could use %26.4f, cfg_max_val instead
+				fprintf(tunLogPtr,"%26s %20c\n", req_govenor, gApplyBiosTuning); //could use %26.4f, 
 				if (gApplyBiosTuning == 'y')
 				{
 					//Apply Bios Tuning
-					sprintf(aBiosSetting,"cpupower frequency-set --governor performance");
+					sprintf(aBiosSetting,"sh -c \'echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor\'");
 					printf("%s\n",aBiosSetting);
 					//system(aBiosSetting);
 				}
+				else
+					{
+						//Save in Case Operator want to apply from menu
+						sprintf(aBiosSetting,"sh -c \'echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor\'");
+						memcpy(aApplyBiosDefTun2DArray[aApplyBiosDefTunCount], aBiosSetting, strlen(aBiosSetting));
+						aApplyBiosDefTunCount++;
+					}
 			}
 			else
-				fprintf(tunLogPtr,"%26s %20s\n", sCPUMAXValue, "na");
+				fprintf(tunLogPtr,"%26s %20s\n", req_govenor, "na");
 
 			fclose(biosCfgFPtr);
 			system("rm -f /tmp/BIOS.cfgfile"); //cleanup
@@ -1276,11 +1251,33 @@ void fDoLRO()
 	ssize_t nread;
 	char aNicSetting[512];
 	int vPad;
+	struct stat sb;
 	FILE *nicCfgFPtr = 0;
-			
+	int fixed = 0;
+	char * recommended_val = "on";
+
 	sprintf(aNicSetting,"ethtool --show-features %s | grep large-receive-offload > /tmp/NIC.cfgfile",netDevice);
 	system(aNicSetting);
+    
+	stat("/tmp/NIC.cfgfile", &sb);
+	if (sb.st_size == 0) 
+	{
+		//doesn't support receive offload
+		goto dn_support;
+	}
+	else
+		{
+			sprintf(aNicSetting,"ethtool --show-features %s | grep large-receive-offload | grep fixed > /tmp/NIC.cfgfile",netDevice);
+			system(aNicSetting);
 	
+			stat("/tmp/NIC.cfgfile", &sb);
+			if (sb.st_size == 0); //not fixed
+			else
+				{
+					fixed = 1;
+    				}
+		}
+    
 	nicCfgFPtr = fopen("/tmp/NIC.cfgfile","r");
 	if (!nicCfgFPtr)
 	{
@@ -1295,7 +1292,6 @@ void fDoLRO()
 				int count = 0, ncount = 0;
 				char *q;
 				char sLROValue[256];
-				char * recommended_val = "on";
 
 				q = line + strlen("large-receive-offload");
 				strcpy(sLROValue,q);
@@ -1315,7 +1311,7 @@ void fDoLRO()
 				fprintf(tunLogPtr,"%s", "large-receive-offload"); //redundancy for visual
 				fprintf(tunLogPtr,"%*s", vPad, sLROValue);
 
-				if (strcmp(recommended_val, sLROValue) != 0)
+				if ((strcmp(recommended_val, sLROValue) != 0) && !fixed)
 				{
 					fprintf(tunLogPtr,"%26s %20c\n", recommended_val, gApplyNicTuning);
 					if (gApplyNicTuning == 'y')
@@ -1334,7 +1330,10 @@ void fDoLRO()
 						}
 				}
 				else
-					fprintf(tunLogPtr,"%26s %20s\n", recommended_val, "na");
+					if (fixed)
+						fprintf(tunLogPtr,"%26s %20s\n", recommended_val, "na - fixed");
+					else
+						fprintf(tunLogPtr,"%26s %20s\n", recommended_val, "na");
 
 				//should be only one line in the file
 				break;
@@ -1346,6 +1345,17 @@ void fDoLRO()
 	
 	if (line)
 		free(line);
+	
+	return;
+
+dn_support:
+	vPad = SETTINGS_PAD_MAX-(strlen("large-receive-offload"));
+	fprintf(tunLogPtr,"%s", "large-receive-offload"); //redundancy for visual
+	fprintf(tunLogPtr,"%*s", vPad, "not supported");
+	fprintf(tunLogPtr,"%26s %20s\n", recommended_val, "na");
+			
+	fclose(nicCfgFPtr);
+	system("rm -f /tmp/NIC.cfgfile"); //remove file after use
 
 	return;
 }
@@ -1444,7 +1454,7 @@ void fDoTcQdiscFq()
 			
 	sprintf(aNicSetting,"tc qdisc show dev %s root 2>/dev/null > /tmp/NIC.cfgfile",netDevice);
 	system(aNicSetting);
-       	stat("/tmp/NIC.cfgfile", &sb);
+	stat("/tmp/NIC.cfgfile", &sb);
 	if (sb.st_size == 0) //some OS don't like to have the "root" as an option
 	{
 		sprintf(aNicSetting,"tc qdisc show dev %s  > /tmp/NIC.cfgfile",netDevice);
@@ -1664,6 +1674,31 @@ int main(int argc, char **argv)
 		}
 		else
 			system("rm -f /tmp/applyNicDefFile");	//There is a way this can be left around by mistake
+	}
+
+	{
+		// in case the user wants to apply recommended settings interactively
+		int x =0;
+		FILE * fApplyBiosDefTunPtr = 0;	
+		if (aApplyBiosDefTunCount)
+		{
+			fApplyBiosDefTunPtr = fopen("/tmp/applyBiosDefFile","w"); //open and close to wipe out file - other ways to do this, but this should work...
+			if (!fApplyBiosDefTunPtr)
+			{
+				int save_errno = errno;
+				fprintf(tunLogPtr, "%s %s: Could not open */tmp/applyBiosDefFile* for writing, errno = %d***\n", ctime_buf, phase2str(current_phase), save_errno);
+				goto leave;
+			}
+
+			fprintf(fApplyBiosDefTunPtr, "%d\n",aApplyBiosDefTunCount+2);
+
+			for (x = 0; x < aApplyBiosDefTunCount; x++)
+				fprintf(fApplyBiosDefTunPtr, "%s\n",aApplyBiosDefTun2DArray[x]);
+				
+			fclose(fApplyBiosDefTunPtr);	
+		}
+		else
+			system("rm -f /tmp/applyBiosDefFile");	//There is a way this can be left around by mistake
 	}
 
 leave:

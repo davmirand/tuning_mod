@@ -1,2 +1,3 @@
 apply_default_system_tuning	n
 make_default_system_tuning_perm n
+apply_nic_tuning	n
