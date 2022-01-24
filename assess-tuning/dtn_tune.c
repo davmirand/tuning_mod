@@ -77,13 +77,13 @@ typedef struct {
 } sUserValues_t[NUMUSERVALUES];
 
 sUserValues_t userValues = {{"evaluation_timer", "2", "-1"},
-			    {"learning_mode_only","y","-1"},
-			    {"API_listen_port","5523","-1"},
-			    {"apply_default_system_tuning","n","-1"},
-				{"apply_bios_tuning","n","-1"},
-				{"apply_nic_tuning","n","-1"},
-			    {"make_default_system_tuning_perm","n","-1"}
-			   };
+			{"learning_mode_only","y","-1"},
+			{"API_listen_port","5523","-1"},
+			{"apply_default_system_tuning","n","-1"},
+			{"apply_bios_tuning","n","-1"},
+			{"apply_nic_tuning","n","-1"},
+			{"make_default_system_tuning_perm","n","-1"}
+			};
 
 void fDoGetUserCfgValues(void)
 {
@@ -1532,8 +1532,126 @@ void fDoTcQdiscFq()
 	return;
 }
 
-void fDoFlowControl(FILE * nicCfgFPtr)
+void fDoFlowControl()
 {
+	char ctime_buf[27];
+	time_t clk;
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t nread;
+	char aNicSetting[512];
+	int vPad;
+	FILE *nicCfgFPtr = 0;
+	char * rec_rx_val = "on";
+	char * rec_tx_val = "on";
+	char sRXCURRValue[256];
+	char sTXCURRValue[256];
+
+	sprintf(aNicSetting,"ethtool -a %s  > /tmp/NIC.cfgfile",netDevice);
+	system(aNicSetting);
+
+	nicCfgFPtr = fopen("/tmp/NIC.cfgfile","r");
+	if (!nicCfgFPtr)
+	{
+		int save_errno = errno;
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: Could not open file /tmp/NIC.cfgfile to retrieve speed value, errno = %d...\n", ctime_buf, phase2str(current_phase), save_errno);
+	}
+	else
+		{
+			while((nread = getline(&line, &len, nicCfgFPtr)) != -1)
+			{ //RX and TX flow control 
+				int count = 0, ncount = 0;
+				char *y;
+
+				if ((y = strstr(line,"RX:")))
+				{
+					y = y + strlen("RX:");
+					while (!isalpha(y[count])) count++;
+
+					while (isalpha(y[count]))
+					{
+						sRXCURRValue[ncount] = y[count];
+						ncount++;
+						count++;
+					}
+
+					sRXCURRValue[ncount] = 0;
+				}
+				else
+					if ((y = strstr(line,"TX:")))
+					{
+						y = y + strlen("TX:");
+						while (!isalpha(y[count])) count++;
+
+						while (isalpha(y[count]))
+						{
+							sTXCURRValue[ncount] = y[count];
+							ncount++;
+							count++;
+						}
+
+						sTXCURRValue[ncount] = 0;
+					}
+				}
+
+				vPad = SETTINGS_PAD_MAX-(strlen("flow_control_RX"));
+				fprintf(tunLogPtr,"%s", "flow_control_RX"); //redundancy for visual
+				fprintf(tunLogPtr,"%*s", vPad, sRXCURRValue);
+
+				if (strcmp(rec_rx_val,sRXCURRValue) != 0)
+				{
+					fprintf(tunLogPtr,"%26s %20c\n", rec_rx_val, gApplyNicTuning);
+					if (gApplyNicTuning == 'y')
+					{
+							//Apply Initial DefSys Tuning
+							sprintf(aNicSetting,"ethtool -A %s rx %s", netDevice, rec_rx_val);
+							printf("%s\n",aNicSetting);
+							//system(aNicSetting);
+					}
+					else
+						{
+							//Save in Case Operator want to apply from menu
+							sprintf(aNicSetting,"ethtool -A %s rx %s", netDevice, rec_rx_val);
+							memcpy(aApplyNicDefTun2DArray[aApplyNicDefTunCount], aNicSetting, strlen(aNicSetting));
+							aApplyNicDefTunCount++;
+						}
+				}
+				else
+					fprintf(tunLogPtr,"%26s %20s\n", rec_rx_val, "na");
+
+				vPad = SETTINGS_PAD_MAX-(strlen("flow_control_TX"));
+				fprintf(tunLogPtr,"%s", "flow_control_TX"); //redundancy for visual
+				fprintf(tunLogPtr,"%*s", vPad, sTXCURRValue);
+
+				if (strcmp(rec_tx_val, sTXCURRValue) != 0)
+				{
+					fprintf(tunLogPtr,"%26s %20c\n", rec_tx_val, gApplyNicTuning);
+					if (gApplyNicTuning == 'y')
+					{
+						//Apply Initial DefSys Tuning
+						sprintf(aNicSetting,"ethtool -A %s tx %s", netDevice, rec_tx_val);
+						printf("%s\n",aNicSetting);
+						//system(aNicSetting);
+					}
+					else
+						{
+							//Save in Case Operator want to apply from menu
+							sprintf(aNicSetting,"ethtool -A %s tx %s", netDevice, rec_tx_val);
+							memcpy(aApplyNicDefTun2DArray[aApplyNicDefTunCount], aNicSetting, strlen(aNicSetting));
+							aApplyNicDefTunCount++;
+						}
+				}
+				else
+					fprintf(tunLogPtr,"%26s %20s\n", rec_tx_val, "na");
+
+			fclose(nicCfgFPtr);
+			system("rm -f /tmp/NIC.cfgfile"); //remove file after use
+		}
+	
+	if (line)
+		free(line);
+
 	return;
 }
 
@@ -1557,6 +1675,7 @@ void fDoNicTuning(void)
 	fDoLRO();//large receive offload
 	fDoMTU();
 	fDoTcQdiscFq();
+	fDoFlowControl();
 
 	fprintf(tunLogPtr,"\n%s %s: *****************End of Evaluate NIC configuration*****************\n", ctime_buf, phase2str(current_phase));
 	fprintf(tunLogPtr,  "%s %s: -------------------------------------------------------------------\n\n", ctime_buf, phase2str(current_phase));
