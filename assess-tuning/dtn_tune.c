@@ -1849,9 +1849,7 @@ dnflow_support:
 	fprintf(tunLogPtr,"%s", "flow_control_rx_tx"); //redundancy for visual
 	fprintf(tunLogPtr,"%*s", vPad, "not supported");
 	fprintf(tunLogPtr,"%26s %20s\n", "not supported", "na");
-
-    fclose(nicCfgFPtr);
-    system("rm -f /tmp/NIC.cfgfile"); //remove file after use
+	system("rm -f /tmp/NIC.cfgfile"); //remove file after use
 
 	return;
 }

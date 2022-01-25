@@ -215,9 +215,6 @@ apply_all_recommended_settings()
 		apply_recommended_nic_settings
 
 		echo "#Finished Applying All Tuning Recommendations..."	
-
-		rm -f /tmp/tun_app_command
-		rm -f /tmp/applyAllDefFile
 	else
 		printf '\n###%s\n\n' "Sorry. You do not have any All Tuning Recommendations to apply..."
 
