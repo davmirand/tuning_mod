@@ -125,35 +125,21 @@ apply_recommended_bios_settings()
 			return 0
 		fi
 		
-		sysctlmodified=0
 
 		nlines=`sed -n '1p' /tmp/applyBiosDefFile`	
 		count=2
 
-		if [ ${sysctlmodified} -eq 1 ]
-		then
-			echo "#Applying BIOS Tuning Recommendations..." 
-		fi
+		echo "#Applying BIOS Tuning Recommendations..." 
 
 		while [ ${count} -lt ${nlines} ]
 		do
 			linenum=`sed -n "${count}p" /tmp/applyBiosDefFile`
 			echo $linenum > /tmp/tun_app_command
-			sh /tmp/tun_app_command
-		
-			if [ ${sysctlmodified} -eq 1 ]
-			then
-			echo "$linenum >> /etc/sysctl.conf" > /tmp/tun_app_command
-			sh /tmp/tun_app_command
-			fi
-
+			sh /tmp/tun_app_command 1>/dev/null
 			count=`expr $count + 1`
 		done	
 		
-		if [ ${sysctlmodified} -eq 1 ]
-		then
-			echo "#End of tuningMod modifications" >> /etc/sysctl.conf	
-		fi
+		echo "#End of tuningMod modifications" >> /etc/sysctl.conf	
 
 		rm -f /tmp/tun_app_command
 		rm -f /tmp/applyBiosDefFile
@@ -209,7 +195,7 @@ apply_recommended_nic_settings()
 apply_all_recommended_settings()
 {
 	clear_screen
-	if [ -f  /tmp/applyAllDefFile ]
+	if [ -f  /tmp/applyKernelDefFile -o -f /tmp/applyBiosDefFile -o -f  /tmp/applyNicDefFile ]
 	then
 		printf '\n\t%s\n' \
 			"You are attempting to apply All Tuning Recommendations" 
@@ -222,35 +208,13 @@ apply_all_recommended_settings()
 			return 0
 		fi
 
-		sysctlmodified=0
-		
-		nlines=`sed -n '1p' /tmp/applyAllDefFile`	
-		count=2
+		echo "#Applying All Tuning Recommendations..." 
 
-		if [ ${sysctlmodified} -eq 1 ]
-		then
-			echo "#Applying All Tuning Recommendations..." >> /etc/sysctl.conf	
-		fi
+		apply_recommended_kernel_settings
+		apply_recommended_bios_settings
+		apply_recommended_nic_settings
 
-		while [ ${count} -lt ${nlines} ]
-		do
-			linenum=`sed -n "${count}p" /tmp/applyAllDefFile`
-			echo $linenum > /tmp/tun_app_command
-			sh /tmp/tun_app_command
-		
-			if [ ${sysctlmodified} -eq 1 ]
-			then
-			echo "$linenum >> /etc/sysctl.conf" > /tmp/tun_app_command
-			sh /tmp/tun_app_command
-			fi
-
-			count=`expr $count + 1`
-		done	
-		
-		if [ ${sysctlmodified} -eq 1 ]
-		then
-			echo "#End of tuningMod modifications" >> /etc/sysctl.conf	
-		fi
+		echo "#Finished Applying All Tuning Recommendations..."	
 
 		rm -f /tmp/tun_app_command
 		rm -f /tmp/applyAllDefFile

@@ -34,6 +34,7 @@ void fDo_lshw(void);
 
 static int gInterval = 2; //default
 static int netDeviceSpeed = 0;
+static int numaNode = 0;
 
 static char *pUserCfgFile = "user_config.txt";
 static char gTuningMode = 0;
@@ -826,7 +827,7 @@ void fDoSystemTuning(void)
 	return;
 }
 
-void fDoBiosTuning(void)
+void fDoCpuPerformance()
 {
 	char ctime_buf[27];
 	time_t clk;
@@ -838,17 +839,7 @@ void fDoBiosTuning(void)
 	int vPad;
 	char * req_govenor = "performance";
 	FILE *biosCfgFPtr = 0;
-	char *header2[] = {"Setting", "Current Value", "Recommended Value", "Applied"};
 
-	gettime(&clk, ctime_buf);
-
-	fprintf(tunLogPtr,"\n%s %s: -------------------------------------------------------------------\n", ctime_buf, phase2str(current_phase));
-	fprintf(tunLogPtr,  "%s %s: ***************Start of Evaluate BIOS configuration****************\n\n", ctime_buf, phase2str(current_phase));
-
-	fprintf(tunLogPtr, "%s %*s %25s %20s\n", header2[0], HEADER_SETTINGS_PAD, header2[1], header2[2], header2[3]);
-	fflush(tunLogPtr);
-
-//	sprintf(aBiosSetting,"lscpu | grep -E '^CPU MHz|^CPU max MHz' > /tmp/BIOS.cfgfile");
 	sprintf(aBiosSetting,"cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /tmp/BIOS.cfgfile");
 	system(aBiosSetting);
 
@@ -880,8 +871,7 @@ void fDoBiosTuning(void)
 				{
 					//Apply Bios Tuning
 					sprintf(aBiosSetting,"sh -c \'echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor\'");
-					printf("%s\n",aBiosSetting);
-					//system(aBiosSetting);
+					system(aBiosSetting);
 				}
 				else
 					{
@@ -898,18 +888,127 @@ void fDoBiosTuning(void)
 			system("rm -f /tmp/BIOS.cfgfile"); //cleanup
 		}
 
-	/* find additional things that could be tuned */
-	fDo_lshw();
+	if (line)
+		free(line);
 
-	gettime(&clk, ctime_buf);
-	fprintf(tunLogPtr,"\n%s %s: ***For additional info about your hardware settings and capabilities, please run \n", ctime_buf, phase2str(current_phase));
-	fprintf(tunLogPtr,"%s %s: ***'sudo dmidecode' and/or 'sudo lshw'. \n", ctime_buf, phase2str(current_phase));
+	return;
+}
 
-	fprintf(tunLogPtr,"\n%s %s: ****************End of Evaluate BIOS configuration*****************\n", ctime_buf, phase2str(current_phase));
-	fprintf(tunLogPtr,  "%s %s: -------------------------------------------------------------------\n\n", ctime_buf, phase2str(current_phase));
+void fDoIrqBalance()
+{
+	char ctime_buf[27];
+	time_t clk;
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t nread;
+	char aBiosSetting[256];
+	char aBiosValue[256];
+	int vPad;
+	char * rec_irq_balance = "inactive";
+	FILE *biosCfgFPtr = 0;
+	int found = 0;
+
+	sprintf(aBiosSetting,"systemctl status irqbalance > /tmp/BIOS.cfgfile");
+	system(aBiosSetting);
+
+	biosCfgFPtr = fopen("/tmp/BIOS.cfgfile","r");
+	if (!biosCfgFPtr)
+	{
+		int save_errno = errno;
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: Could not open file /tmp/BIOS.cfgfile to work out CPU speed, errno = %d...\n", ctime_buf, phase2str(current_phase), save_errno);
+	}
+	else
+		{
+			while((nread = getline(&line, &len, biosCfgFPtr)) != -1)
+			{ 	//active or inactive?
+
+				int count = 0, ncount = 0;
+                char *y;
+
+                if ((y = strstr(line,"Active:")))
+                {
+                    y = y + strlen("Active:");
+                    while (!isalpha(y[count])) count++;
+
+                    while (isalpha(y[count]))
+                    {
+                        aBiosValue[ncount] = y[count];
+                        ncount++;
+                        count++;
+                    }
+
+                    aBiosValue[ncount] = 0;
+					found = 1;
+					break;
+                }
+			}
+
+			if (found)
+			{
+				vPad = SETTINGS_PAD_MAX-(strlen("IRQ Balance"));
+				fprintf(tunLogPtr,"%s", "IRQ Balance"); //redundancy for visual
+				fprintf(tunLogPtr,"%*s", vPad, aBiosValue);
+
+				if (strcmp(aBiosValue, rec_irq_balance) != 0)
+				{
+					fprintf(tunLogPtr,"%26s %20c\n", rec_irq_balance, gApplyBiosTuning); //could use %26.4f, 
+					if (gApplyBiosTuning == 'y')
+					{
+						//Apply Bios Tuning
+						sprintf(aBiosSetting,"systemctl stop irqbalance");
+						system(aBiosSetting);
+					}
+					else
+						{
+							//Save in Case Operator want to apply from menu
+							sprintf(aBiosSetting,"systemctl stop irqbalance");
+							memcpy(aApplyBiosDefTun2DArray[aApplyBiosDefTunCount], aBiosSetting, strlen(aBiosSetting));
+							aApplyBiosDefTunCount++;
+						}
+				}
+				else
+					fprintf(tunLogPtr,"%26s %20s\n", rec_irq_balance, "na");
+			}
+
+			fclose(biosCfgFPtr);
+			system("rm -f /tmp/BIOS.cfgfile"); //cleanup
+		}
 
 	if (line)
 		free(line);
+
+	return;
+}
+
+void fDoBiosTuning(void)
+{
+	char ctime_buf[27];
+	time_t clk;
+	char *header2[] = {"Setting", "Current Value", "Recommended Value", "Applied"};
+
+	gettime(&clk, ctime_buf);
+
+	fprintf(tunLogPtr,"\n%s %s: -------------------------------------------------------------------\n", ctime_buf, phase2str(current_phase));
+	fprintf(tunLogPtr,  "%s %s: ***************Start of Evaluate BIOS configuration****************\n\n", ctime_buf, phase2str(current_phase));
+
+	fprintf(tunLogPtr, "%s %*s %25s %20s\n", header2[0], HEADER_SETTINGS_PAD, header2[1], header2[2], header2[3]);
+	fflush(tunLogPtr);
+
+	fDoCpuPerformance();
+	fDoIrqBalance();
+
+#if 0
+	/* find additional things that could be tuned */
+	fDo_lshw();
+#endif
+
+	gettime(&clk, ctime_buf);
+	fprintf(tunLogPtr,"\n%s %s: ***For additional info about your hardware settings and capabilities,\n", ctime_buf, phase2str(current_phase));
+	fprintf(tunLogPtr,"%s %s: ***please run 'sudo dmidecode' and/or 'sudo lshw'. \n", ctime_buf, phase2str(current_phase));
+
+	fprintf(tunLogPtr,"\n%s %s: ****************End of Evaluate BIOS configuration*****************\n", ctime_buf, phase2str(current_phase));
+	fprintf(tunLogPtr,  "%s %s: -------------------------------------------------------------------\n\n", ctime_buf, phase2str(current_phase));
 
 	return;
 }
@@ -984,7 +1083,73 @@ void fDoGetDeviceCap(void)
 	return;
 }
 
-static int rec_txqueuelen = 20000; //recommended value for now
+int fDoGetNuma(void)
+{
+	char ctime_buf[27];
+	time_t clk;
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t nread;
+	char aNicSetting[256];
+	FILE *nicCfgFPtr = 0;
+	int numa = -1;
+	int found = 0;
+
+	gettime(&clk, ctime_buf);
+	sprintf(aNicSetting,"cat /sys/class/net/%s/device/numa_node > /tmp/NIC.cfgfile",netDevice);
+	system(aNicSetting);
+
+	nicCfgFPtr = fopen("/tmp/NIC.cfgfile","r");
+	if (!nicCfgFPtr)
+	{
+		int save_errno = errno;
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: Could not open file /tmp/NIC.cfgfile to retrieve speed value, errno = %d...\n", ctime_buf, phase2str(current_phase), save_errno);
+	}
+	else
+		{
+			while((nread = getline(&line, &len, nicCfgFPtr)) != -1)
+			{ 
+				char sValue[256];
+				int cfg_val = 0;
+				//printf("Retrieved line of length %zu:\n", nread);
+				//printf("&%s&",line);
+				strcpy(sValue,line);
+				if (sValue[strlen(sValue)-1] == '\n')
+					sValue[strlen(sValue)-1] = 0;
+
+				cfg_val = atoi(sValue);
+				if (cfg_val == -1) 
+				{
+					numa = 0;
+				}
+				else
+					{
+						numa = cfg_val;
+					}
+
+				found = 1;
+				break;
+			}
+
+			fclose(nicCfgFPtr);
+			system("rm -f /tmp/NIC.cfgfile"); //remove file after use
+		
+			if (!found)
+			{
+				fprintf(tunLogPtr,"%s %s: Could not find Numa Node for %s \n", ctime_buf, phase2str(current_phase), netDevice);
+			}	
+		}
+
+	if (line)
+		free(line);
+
+	return numa;
+}
+
+
+static int rec_txqueuelen_Greater10G = 20000; //recommended value for now if greater 10G
+static int rec_txqueuelen = 1000; //recommended value for now if 10G or less
 static int rec_mtu = 9000; //recommended value for now
 static char * rec_tcqdisc = "fq"; //recommended value for now
 void fDoTxQueueLen()
@@ -1033,26 +1198,50 @@ void fDoTxQueueLen()
 						fprintf(tunLogPtr,"%s", "txqueuelen"); //redundancy for visual
 						fprintf(tunLogPtr,"%*s", vPad, sValue);
 
-						if (rec_txqueuelen > cfg_val)
+						if (netDeviceSpeed <= 10000) //10G or less
 						{
-							fprintf(tunLogPtr,"%26d %20c\n", rec_txqueuelen, gApplyNicTuning);
-							if (gApplyNicTuning == 'y')
+							if (rec_txqueuelen > cfg_val)
 							{
-								//Apply Inital DefSys Tuning
-								sprintf(aNicSetting,"ifconfig %s txqueuelen %d", netDevice, rec_txqueuelen);
-								printf("%s\n",aNicSetting);
-								//system(aNicSetting);
+								fprintf(tunLogPtr,"%26d %20c\n", rec_txqueuelen, gApplyNicTuning);
+								if (gApplyNicTuning == 'y')
+								{
+									//Apply Inital DefSys Tuning
+									sprintf(aNicSetting,"ifconfig %s txqueuelen %d", netDevice, rec_txqueuelen);
+									system(aNicSetting);
+								}
+								else
+									{
+										//Save in Case Operator want to apply from menu
+										sprintf(aNicSetting,"ifconfig %s txqueuelen %d", netDevice, rec_txqueuelen);
+										memcpy(aApplyNicDefTun2DArray[aApplyNicDefTunCount], aNicSetting, strlen(aNicSetting));
+										aApplyNicDefTunCount++;
+									}
 							}
 							else
-								{
-									//Save in Case Operator want to apply from menu
-									sprintf(aNicSetting,"ifconfig %s txqueuelen %d", netDevice, rec_txqueuelen);
-									memcpy(aApplyNicDefTun2DArray[aApplyNicDefTunCount], aNicSetting, strlen(aNicSetting));
-									aApplyNicDefTunCount++;
-								}
+								fprintf(tunLogPtr,"%26d %20s\n", rec_txqueuelen, "na");
 						}
-						else
-							fprintf(tunLogPtr,"%26d %20s\n", rec_txqueuelen, "na");
+						else //greater than 10G
+							{
+								if (rec_txqueuelen_Greater10G > cfg_val)
+								{
+									fprintf(tunLogPtr,"%26d %20c\n", rec_txqueuelen_Greater10G, gApplyNicTuning);
+									if (gApplyNicTuning == 'y')
+									{
+										//Apply Inital DefSys Tuning
+										sprintf(aNicSetting,"ifconfig %s txqueuelen %d", netDevice, rec_txqueuelen_Greater10G);
+										system(aNicSetting);
+									}
+									else
+										{
+											//Save in Case Operator want to apply from menu
+											sprintf(aNicSetting,"ifconfig %s txqueuelen %d", netDevice, rec_txqueuelen_Greater10G);
+											memcpy(aApplyNicDefTun2DArray[aApplyNicDefTunCount], aNicSetting, strlen(aNicSetting));
+											aApplyNicDefTunCount++;
+										}
+								}
+								else
+									fprintf(tunLogPtr,"%26d %20s\n", rec_txqueuelen_Greater10G, "na");
+							}
 					}
 
 				//should only be one item
@@ -1183,8 +1372,7 @@ void fDoRingBufferSize()
 									{
 										//Apply Initial DefSys Tuning
 										sprintf(aNicSetting,"ethtool -G %s rx %d", netDevice, cfg_max_val);
-										printf("%s\n",aNicSetting);
-										//system(aNicSetting);
+										system(aNicSetting);
 									}
 									else
 										{
@@ -1211,8 +1399,7 @@ void fDoRingBufferSize()
 									{
 										//Apply Initial DefSys Tuning
 										sprintf(aNicSetting,"ethtool -G %s tx %d", netDevice, cfg_max_val);
-										printf("%s\n",aNicSetting);
-										//system(aNicSetting);
+										system(aNicSetting);
 									}
 									else
 										{
@@ -1318,8 +1505,7 @@ void fDoLRO()
 					{
 						//Apply Initial DefSys Tuning
 						sprintf(aNicSetting,"ethtool -K %s lro %s", netDevice, recommended_val);
-						printf("%s\n",aNicSetting);
-						//system(aNicSetting);
+						system(aNicSetting);
 					}
 					else
 						{
@@ -1410,8 +1596,7 @@ void fDoMTU()
 							{
 								//Apply Inital DefSys Tuning
 								sprintf(aNicSetting,"sudo ip link set dev %s mtu %d", netDevice, rec_mtu);
-								printf("%s\n",aNicSetting);
-								//system(aNicSetting);
+								system(aNicSetting);
 							}
 							else
 								{
@@ -1511,8 +1696,7 @@ void fDoTcQdiscFq()
 					{
 						//Apply Inital DefSys Tuning
 						sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq", netDevice, aQdiscVal, netDevice);
-						printf("%s\n",aNicSetting);
-						//system(aNicSetting);
+						system(aNicSetting);
 					}
 					else
 						{
@@ -1606,8 +1790,7 @@ void fDoFlowControl()
 					{
 							//Apply Initial DefSys Tuning
 							sprintf(aNicSetting,"ethtool -A %s rx %s", netDevice, rec_rx_val);
-							printf("%s\n",aNicSetting);
-							//system(aNicSetting);
+							system(aNicSetting);
 					}
 					else
 						{
@@ -1631,8 +1814,7 @@ void fDoFlowControl()
 					{
 						//Apply Initial DefSys Tuning
 						sprintf(aNicSetting,"ethtool -A %s tx %s", netDevice, rec_tx_val);
-						printf("%s\n",aNicSetting);
-						//system(aNicSetting);
+						system(aNicSetting);
 					}
 					else
 						{
@@ -1651,6 +1833,33 @@ void fDoFlowControl()
 	
 	if (line)
 		free(line);
+
+	return;
+}
+
+void fDoIrqAffinity()
+{
+	char ctime_buf[27];
+	time_t clk;
+	char aNicSetting[512];
+	gettime(&clk, ctime_buf);
+
+	{
+		fprintf(tunLogPtr,"\n%s %s: %s", ctime_buf, phase2str(current_phase), "NOTE: **IRQ Affinity Tuning** *will be done when NIC settings applied*\n"); 
+		if (gApplyNicTuning == 'y')
+		{
+			//Apply 
+			sprintf(aNicSetting,"./set_irq_affinity.sh %s", netDevice);
+			system(aNicSetting);
+		}
+		else
+			{
+				//Save in Case Operator want to apply from menu
+				sprintf(aNicSetting,"./set_irq_affinity.sh %s", netDevice);
+				memcpy(aApplyNicDefTun2DArray[aApplyNicDefTunCount], aNicSetting, strlen(aNicSetting));
+				aApplyNicDefTunCount++;
+			}
+	}
 
 	return;
 }
@@ -1676,6 +1885,13 @@ void fDoNicTuning(void)
 	fDoMTU();
 	fDoTcQdiscFq();
 	fDoFlowControl();
+	fDoIrqAffinity();
+
+/*
+ * ethtool -i enoX gives bus info
+ * then sudo lspci -vvv -s <bus info> gives speed, width etc.
+ * some systems dont dont show it though...
+*/
 
 	fprintf(tunLogPtr,"\n%s %s: *****************End of Evaluate NIC configuration*****************\n", ctime_buf, phase2str(current_phase));
 	fprintf(tunLogPtr,  "%s %s: -------------------------------------------------------------------\n\n", ctime_buf, phase2str(current_phase));
@@ -1730,7 +1946,11 @@ int main(int argc, char **argv)
 	fDoGetUserCfgValues();
 
 	if (vHaveNetDevice)
+	{
 		fDoGetDeviceCap();
+		numaNode = fDoGetNuma();
+			fprintf(tunLogPtr, "%s %s: NUMA NODE is  *%d***\n", ctime_buf, phase2str(current_phase), numaNode);
+	}
 
 	fDoSystemTuning();
 
