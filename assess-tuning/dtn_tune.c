@@ -1893,6 +1893,8 @@ void fDoNicTuning(void)
  * some systems dont dont show it though...
 */
 
+/* numactl --hardware will show number of cores per numa node */
+
 	fprintf(tunLogPtr,"\n%s %s: *****************End of Evaluate NIC configuration*****************\n", ctime_buf, phase2str(current_phase));
 	fprintf(tunLogPtr,  "%s %s: -------------------------------------------------------------------\n\n", ctime_buf, phase2str(current_phase));
 
