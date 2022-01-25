@@ -139,8 +139,6 @@ apply_recommended_bios_settings()
 			count=`expr $count + 1`
 		done	
 		
-		echo "#End of tuningMod modifications" >> /etc/sysctl.conf	
-
 		rm -f /tmp/tun_app_command
 		rm -f /tmp/applyBiosDefFile
 	else
