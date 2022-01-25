@@ -1725,6 +1725,7 @@ void fDoFlowControl()
 	ssize_t nread;
 	char aNicSetting[512];
 	int vPad;
+	struct stat sb;
 	FILE *nicCfgFPtr = 0;
 	char * rec_rx_val = "on";
 	char * rec_tx_val = "on";
@@ -1733,6 +1734,13 @@ void fDoFlowControl()
 
 	sprintf(aNicSetting,"ethtool -a %s  > /tmp/NIC.cfgfile",netDevice);
 	system(aNicSetting);
+
+	stat("/tmp/NIC.cfgfile", &sb);
+    if (sb.st_size == 0)
+    {
+        //doesn't support ethtool -a
+        goto dnflow_support;
+    }
 
 	nicCfgFPtr = fopen("/tmp/NIC.cfgfile","r");
 	if (!nicCfgFPtr)
@@ -1833,6 +1841,17 @@ void fDoFlowControl()
 	
 	if (line)
 		free(line);
+	
+	return;
+
+dnflow_support:
+	vPad = SETTINGS_PAD_MAX-(strlen("flow_control_rx_tx"));
+	fprintf(tunLogPtr,"%s", "flow_control_rx_tx"); //redundancy for visual
+	fprintf(tunLogPtr,"%*s", vPad, "not supported");
+	fprintf(tunLogPtr,"%26s %20s\n", "not supported", "na");
+
+    fclose(nicCfgFPtr);
+    system("rm -f /tmp/NIC.cfgfile"); //remove file after use
 
 	return;
 }
