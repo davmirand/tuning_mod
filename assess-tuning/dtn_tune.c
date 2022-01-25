@@ -1265,6 +1265,7 @@ void fDoRingBufferSize()
 	char *line = NULL;
 	size_t len = 0;
 	ssize_t nread;
+	struct stat sb;
 	char aNicSetting[512];
 	char sRXMAXValue[256];
 	char sRXCURRValue[256];
@@ -1275,8 +1276,15 @@ void fDoRingBufferSize()
 	int vPad;
 	FILE *nicCfgFPtr = 0;
 
-	sprintf(aNicSetting,"ethtool --show-ring %s  > /tmp/NIC.cfgfile",netDevice);
+	sprintf(aNicSetting,"ethtool --show-ring %s 2>/dev/null > /tmp/NIC.cfgfile",netDevice);
 	system(aNicSetting);
+
+	stat("/tmp/NIC.cfgfile", &sb);
+	if (sb.st_size == 0)
+	{
+		//doesn't support ethtool -a
+		goto dnrb_support;
+	}
 
 	nicCfgFPtr = fopen("/tmp/NIC.cfgfile","r");
 	if (!nicCfgFPtr)
@@ -1425,6 +1433,15 @@ void fDoRingBufferSize()
 	
 	if (line)
 		free(line);
+
+	return;
+
+dnrb_support:
+	vPad = SETTINGS_PAD_MAX-(strlen("ring_buffer_rx_tx"));
+	fprintf(tunLogPtr,"%s", "ring_buffer_rx_tx"); //redundancy for visual
+	fprintf(tunLogPtr,"%*s", vPad, "not supported");
+	fprintf(tunLogPtr,"%26s %20s\n", "not supported", "na");
+	system("rm -f /tmp/NIC.cfgfile"); //remove file after use
 
 	return;
 }
@@ -1732,7 +1749,7 @@ void fDoFlowControl()
 	char sRXCURRValue[256];
 	char sTXCURRValue[256];
 
-	sprintf(aNicSetting,"ethtool -a %s  > /tmp/NIC.cfgfile",netDevice);
+	sprintf(aNicSetting,"ethtool -a %s 2>/dev/null > /tmp/NIC.cfgfile",netDevice);
 	system(aNicSetting);
 
 	stat("/tmp/NIC.cfgfile", &sb);
