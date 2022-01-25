@@ -1968,7 +1968,6 @@ int main(int argc, char **argv)
 	{
 		fDoGetDeviceCap();
 		numaNode = fDoGetNuma();
-			fprintf(tunLogPtr, "%s %s: NUMA NODE is  *%d***\n", ctime_buf, phase2str(current_phase), numaNode);
 	}
 
 	fDoSystemTuning();
