@@ -1276,7 +1276,7 @@ void fDoRingBufferSize()
 	int vPad;
 	FILE *nicCfgFPtr = 0;
 
-	sprintf(aNicSetting,"ethtool --show-ring %s 2>/dev/null > /tmp/NIC.cfgfile",netDevice);
+	sprintf(aNicSetting,"ethtool --show-ring %s > /tmp/NIC.cfgfile 2>/dev/null",netDevice);
 	system(aNicSetting);
 
 	stat("/tmp/NIC.cfgfile", &sb);
@@ -1654,7 +1654,7 @@ void fDoTcQdiscFq()
 	char aNicSetting[1024];
 	FILE *nicCfgFPtr = 0;
 			
-	sprintf(aNicSetting,"tc qdisc show dev %s root 2>/dev/null > /tmp/NIC.cfgfile",netDevice);
+	sprintf(aNicSetting,"tc qdisc show dev %s root > /tmp/NIC.cfgfile 2>/dev/null",netDevice);
 	system(aNicSetting);
 	stat("/tmp/NIC.cfgfile", &sb);
 	if (sb.st_size == 0) //some OS don't like to have the "root" as an option
@@ -1749,7 +1749,7 @@ void fDoFlowControl()
 	char sRXCURRValue[256];
 	char sTXCURRValue[256];
 
-	sprintf(aNicSetting,"ethtool -a %s 2>/dev/null > /tmp/NIC.cfgfile",netDevice);
+	sprintf(aNicSetting,"ethtool -a %s > /tmp/NIC.cfgfile 2>/dev/null",netDevice);
 	system(aNicSetting);
 
 	stat("/tmp/NIC.cfgfile", &sb);
