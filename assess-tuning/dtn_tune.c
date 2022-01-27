@@ -1475,7 +1475,13 @@ void fDoLRO()
 			system(aNicSetting);
 	
 			stat("/tmp/NIC.cfgfile", &sb);
-			if (sb.st_size == 0); //not fixed
+			if (sb.st_size == 0) //not fixed
+			{
+				//do it again to get the truth
+				sprintf(aNicSetting,"ethtool --show-features %s | grep large-receive-offload > /tmp/NIC.cfgfile",netDevice);
+				system(aNicSetting);
+
+			}
 			else
 				{
 					fixed = 1;
