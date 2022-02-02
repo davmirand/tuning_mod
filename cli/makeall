@@ -1,0 +1,5 @@
+cc -o tuncli tuncli.c ../facil_io_7.0/lib/facil/fio.c ../facil_io_7.0/lib/facil/cli/fio_cli.c  ../facil_io_7.0/lib/facil/fiobj/fiobject.c \
+../facil_io_7.0/lib/facil/fiobj/fiobj_numbers.c ../facil_io_7.0/lib/facil/fiobj/fiobj_str.c ../facil_io_7.0/lib/facil/fiobj/fiobj_hash.c \
+../facil_io_7.0/lib/facil/fiobj/fiobj_ary.c ../facil_io_7.0/lib/facil/fiobj/fiobj_data.c  ../facil_io_7.0/lib/facil/http/http.c \
+-I ../facil_io_7.0/lib/facil/http -I ../facil_io_7.0/lib/facil/cli -I ../facil_io_7.0/lib/facil/http/parsers \
+-I ../facil_io_7.0/lib/facil -I ../facil_io_7.0/lib/facil/fiobj -l pthread
