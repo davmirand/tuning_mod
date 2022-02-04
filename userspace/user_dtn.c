@@ -1508,16 +1508,36 @@ void * fDoRunTalkToKernel(void * vargp)
 }
 
 /***** HTTP *************/
-void foo(http_s *h)
+void check_req(http_s *h, char aResp[])
 {
 	FIOBJ r = http_req2str(h);
 	time_t clk;
 	char ctime_buf[27];
-	char * my_udata = fiobj_obj2cstr(r).data;
+	char * pReqData = fiobj_obj2cstr(r).data;
 	
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Received Data from Http Client***\nData is:\n", ctime_buf, phase2str(current_phase));
-	fprintf(tunLogPtr,"%s", my_udata);
+	fprintf(tunLogPtr,"%s", pReqData);
+
+	if (strstr(pReqData,"GET /-t"))
+	{
+		/* TODO: Apply tuning */
+		strcpy(aResp,"Recommended Tuning applied!!!\n");
+	
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to apply recommended Tuning***\n", ctime_buf, phase2str(current_phase));
+		fprintf(tunLogPtr,"%s %s: ***Applying recommended Tuning now***\n", ctime_buf, phase2str(current_phase));
+		/* TODO: Apply tuning */
+	}
+	else
+		{
+			strcpy(aResp,"Received something else!!!\n");
+		
+			gettime(&clk, ctime_buf);
+			fprintf(tunLogPtr,"%s %s: ***Received some kind of request from Http Client***\n", ctime_buf, phase2str(current_phase));
+			fprintf(tunLogPtr,"%s %s: ***Applying some kind of request***\n", ctime_buf, phase2str(current_phase));
+		}
+
 
 return;
 }
@@ -1525,9 +1545,10 @@ return;
 /* TODO: edit this function to handle HTTP data and answer Websocket requests.*/
 static void on_http_request(http_s *h) 
 {
-	/* set a response and send it (finnish vs. destroy). */
-  	foo(h);
-  	http_send_body(h, "Helllo_srv World!", 17);
+	char aTheResp[512];	
+  	check_req(h, aTheResp);
+	/* set the response and send it (finnish vs. destroy). */
+  	http_send_body(h, aTheResp, strlen(aTheResp));
 }
 
 /* starts a listeninng socket for HTTP connections. */

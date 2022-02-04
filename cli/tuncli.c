@@ -96,6 +96,9 @@ int main(int argc, const char *argv[])
 	http_connect(fio_cli_unnamed(0), fio_cli_get("-u"),
 		.on_response = on_response);
 	fio_start(.threads = 1);
+
+	if (line)
+		free(line);
 	return 0;
 }
 
