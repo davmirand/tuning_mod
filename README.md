@@ -69,6 +69,10 @@ There are a few relevant directories here:
 ```modules```
 -	Contains source for a LKM (Loadable Kernel Module) that can be used for testing the Tuning Module
 
+```cli```
+-	Contains source for a HTTP client that is used as a CLI for sending instructions to
+-	or receiving information from the Tuning Module
+
 **To Compile:**
 
 In order to compile and work with the Tuning Module, do the following:
