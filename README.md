@@ -71,7 +71,7 @@ There are a few relevant directories here:
 
 ```cli```
 -	Contains source for a HTTP client that is used as a CLI for sending instructions to
--	or receiving information from the Tuning Module
+	or receiving information from the Tuning Module
 
 **To Compile:**
 
