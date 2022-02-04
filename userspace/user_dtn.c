@@ -1454,7 +1454,7 @@ void fDoNicTuning(void)
 	return;
 }
 
-void * fTalkToKernel(void * vargp)
+void * fDoRunTalkToKernel(void * vargp)
 {
 	int result = 0;
 	char aMessage[512];
@@ -1491,6 +1491,27 @@ void * fTalkToKernel(void * vargp)
 	}
 }
 
+void * fDoRunHttpServer(void * vargp)
+{
+	char aMessage[512];
+	//int * fd = (int *) vargp;
+	time_t clk;
+	char ctime_buf[27];
+
+
+	strcpy(aMessage,"This is a message from the Http Server...");
+	gettime(&clk, ctime_buf);
+	fprintf(tunLogPtr,"%s %s: ***Starting Http Server ...***\n", ctime_buf, phase2str(current_phase));
+	//catch_sigint();
+	while(1) 
+	{	
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: *%s*\n", ctime_buf, phase2str(current_phase), aMessage);
+		fflush(tunLogPtr);
+		sleep(gInterval + 1);
+	}
+}
+
 
 int main(int argc, char **argv) 
 {
@@ -1499,7 +1520,8 @@ int main(int argc, char **argv)
 	int fd; 
 	int vRetFromKernelThread, vRetFromKernelJoin;
 	int vRetFromRunBpfThread, vRetFromRunBpfJoin;
-	pthread_t talkToKernelThread_id, doRunBpfCollectionThread_id;
+	int vRetFromRunHttpServerThread, vRetFromRunHttpServerJoin;
+	pthread_t doRunTalkToKernelThread_id, doRunBpfCollectionThread_id, doRunHttpServerThread_id;
 	sArgv_t sArgv;
 	time_t clk;
 	char ctime_buf[27];
@@ -1544,7 +1566,7 @@ int main(int argc, char **argv)
 
 	if (fd > 0)
 	{
-		vRetFromKernelThread = pthread_create(&talkToKernelThread_id, NULL, fTalkToKernel, &fd);
+		vRetFromKernelThread = pthread_create(&doRunTalkToKernelThread_id, NULL, fDoRunTalkToKernel, &fd);
 	}
 	else
 	{
@@ -1589,11 +1611,18 @@ leave:
 #else //Using Map Type RINGBUF
 	vRetFromRunBpfThread = pthread_create(&doRunBpfCollectionThread_id, NULL, fDoRunBpfCollectionRingBuf, &sArgv);;
 #endif
+
+	//Start Http server Thread	
+	vRetFromRunHttpServerThread = pthread_create(&doRunHttpServerThread_id, NULL, fDoRunHttpServer, &sArgv);
+
 	if (vRetFromKernelThread == 0)
-    	vRetFromKernelJoin = pthread_join(talkToKernelThread_id, NULL);
+    		vRetFromKernelJoin = pthread_join(doRunTalkToKernelThread_id, NULL);
 
 	if (vRetFromRunBpfThread == 0)
-    	vRetFromRunBpfJoin = pthread_join(doRunBpfCollectionThread_id, NULL);
+    		vRetFromRunBpfJoin = pthread_join(doRunBpfCollectionThread_id, NULL);
+	
+	if (vRetFromRunHttpServerThread == 0)
+    		vRetFromRunHttpServerJoin = pthread_join(doRunHttpServerThread_id, NULL);
 
 	if (fd > 0)
 		close(fd);
