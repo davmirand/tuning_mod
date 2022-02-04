@@ -65,6 +65,7 @@ void fDoSystemtuning(void);
 void fDo_lshw(void);
 static char *pUserCfgFile = "user_config.txt";
 static int gInterval = 2; //default in seconds
+static int gAPI_listen_port = 5523; //default listening port
 static char gTuningMode = 0;
 static char gApplyBiosTuning = 'n';
 static char gApplyNicTuning = 'n';
@@ -525,6 +526,15 @@ void fDoGetUserCfgValues(void)
 							if (userValues[count].cfg_value[0] == 'y') 
 								gApplyNicTuning = 'y';
 						}
+						else
+							if (strcmp(userValues[count].aUserValues,"API_listen_port") == 0)
+							{
+								int cfg_val = atoi(userValues[count].cfg_value);
+								if (cfg_val == -1) //wasn't set properly
+									gAPI_listen_port = atoi(userValues[count].default_val);
+								else
+									gAPI_listen_port = cfg_val;
+							}
 	}
 
 	gettime(&clk, ctime_buf);
@@ -1501,14 +1511,13 @@ void * fDoRunTalkToKernel(void * vargp)
 void foo(http_s *h)
 {
 	FIOBJ r = http_req2str(h);
+	time_t clk;
+	char ctime_buf[27];
 	char * my_udata = fiobj_obj2cstr(r).data;
-	FILE * myptr;
-		fprintf(tunLogPtr," ***ERROR: GOT HEREy running?)...***\n");
-
-	myptr = fopen("/tmp/rr","a");
-	fprintf(myptr,"***%s***\n", my_udata);
-	fflush(myptr);
-	fclose(myptr);
+	
+	gettime(&clk, ctime_buf);
+	fprintf(tunLogPtr,"%s %s: ***Received Data from Http Client***\nData is:\n", ctime_buf, phase2str(current_phase));
+	fprintf(tunLogPtr,"%s", my_udata);
 
 return;
 }
@@ -1526,10 +1535,11 @@ void initialize_http_service(void)
 {
 	time_t clk;
 	char ctime_buf[27];
+  	char aListenPort[32];	
+
 	/* listen for inncoming connections */
-  	
-	//if (http_listen("3000", fio_cli_get("-b"),
-	if (http_listen("3000", NULL, .on_request = on_http_request) == -1) 
+	sprintf(aListenPort,"%d",gAPI_listen_port);
+	if (http_listen(aListenPort, NULL, .on_request = on_http_request) == -1) 
 	{
     		/* listen failed ?*/
 		gettime(&clk, ctime_buf);
