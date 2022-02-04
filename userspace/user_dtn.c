@@ -17,6 +17,12 @@ static const char *__doc__ = "Tuning Module Userspace program\n"
 #include <pthread.h>
 #include <signal.h>
 
+/******HTTP server *****/
+#include "fio.h"
+#include "http.h"
+void initialize_http_service(void);
+/**********************/
+
 #define WORKFLOW_NAMES_MAX	4
 #define USING_PERF_EVENT_ARRAY 1
 #define TEST 1
@@ -1491,25 +1497,74 @@ void * fDoRunTalkToKernel(void * vargp)
 	}
 }
 
+/***** HTTP *************/
+void foo(http_s *h)
+{
+	FIOBJ r = http_req2str(h);
+	char * my_udata = fiobj_obj2cstr(r).data;
+	FILE * myptr;
+		fprintf(tunLogPtr," ***ERROR: GOT HEREy running?)...***\n");
+
+	myptr = fopen("/tmp/rr","a");
+	fprintf(myptr,"***%s***\n", my_udata);
+	fflush(myptr);
+	fclose(myptr);
+
+return;
+}
+
+/* TODO: edit this function to handle HTTP data and answer Websocket requests.*/
+static void on_http_request(http_s *h) 
+{
+	/* set a response and send it (finnish vs. destroy). */
+  	foo(h);
+  	http_send_body(h, "Helllo_srv World!", 17);
+}
+
+/* starts a listeninng socket for HTTP connections. */
+void initialize_http_service(void) 
+{
+	time_t clk;
+	char ctime_buf[27];
+	/* listen for inncoming connections */
+  	
+	//if (http_listen("3000", fio_cli_get("-b"),
+	if (http_listen("3000", NULL, .on_request = on_http_request) == -1) 
+	{
+    		/* listen failed ?*/
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***ERROR: facil couldn't initialize HTTP service (already running?)...***\n", ctime_buf, phase2str(current_phase));
+		return;
+  	}
+#if 0
+  if (http_listen(fio_cli_get("-p"), fio_cli_get("-b"),
+                  .on_request = on_http_request,
+                  .max_body_size = fio_cli_get_i("-maxbd") * 1024 * 1024,
+                  .ws_max_msg_size = fio_cli_get_i("-max-msg") * 1024,
+                  .public_folder = fio_cli_get("-public"),
+                  .log = fio_cli_get_bool("-log"),
+                  .timeout = fio_cli_get_i("-keep-alive"),
+                  .ws_timeout = fio_cli_get_i("-ping")) == -1) {
+    /* listen failed ?*/
+    perror("ERROR: facil couldn't initialize HTTP service (already running?)");
+    exit(1);
+  }
+#endif
+}
+
 void * fDoRunHttpServer(void * vargp)
 {
-	char aMessage[512];
 	//int * fd = (int *) vargp;
 	time_t clk;
 	char ctime_buf[27];
 
-
-	strcpy(aMessage,"This is a message from the Http Server...");
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Starting Http Server ...***\n", ctime_buf, phase2str(current_phase));
 	//catch_sigint();
-	while(1) 
-	{	
-		gettime(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: *%s*\n", ctime_buf, phase2str(current_phase), aMessage);
-		fflush(tunLogPtr);
-		sleep(gInterval + 1);
-	}
+	initialize_http_service();
+	/* start facil */
+	fio_start(.threads = 1, .workers = 0);
+	return ;
 }
 
 
