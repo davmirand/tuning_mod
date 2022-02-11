@@ -8,37 +8,16 @@
 
 # The main script is at the bottom, after all support functions are defined
 
-return='Return to previous menu'
-select_choice='Enter option : '
-
 clear_screen()
 {
 	tput clear
 }
 
-enter_to_continue()
-{
-	printf '\n\t%s' "Hit ENTER to continue: "
-	read junk
-}
-
 prune_logs()
 {
 	clear_screen
-	printf '\n\t%s\n\t%s\n' \
-		"This will remove all the old tuningLog log files except the" \
-		"current one."
-	printf '\n\t%s (y/n): ' \
-		"Do you wish to continue? "
-	read answer
-	if [ "$answer" != 'y' -a "$answer" != 'Y' ]
-	then
-		enter_to_continue
-		return 0
-	fi
 	rm -rf /tmp/tuningLogOld.*
 	echo 0 > /tmp/tuningLog.count
-	enter_to_continue
 	return 0
 }
 
@@ -144,7 +123,6 @@ apply_all_recommended_settings()
 
 		echo "#Finished Applying All Tuning Recommendations..."	
 	fi
-    enter_to_continue
 	return 0
 }
 
@@ -162,25 +140,8 @@ logcount=
 	else
 		echo 0 > /tmp/tuningLog.count
 	fi
-	./dtn_tune $1
-
-	if [ $? = 0 ]
-	then	
-		more -d /tmp/tuningLog	
-		printf '\n###%s' "This output has been saved in /tmp/tuningLog"
-	else
-		more -d /tmp/tuningLog	
-		printf '\n###%s' "This output has been saved in /tmp/tuningLog"
-		echo >&2
-    	echo >&2 $UsageString
-	fi
-	enter_to_continue
-	return 0
 }
 
-UsageString="\
-Usage:\\t[sudo ./dtnmenu]\\t\\t- Configure Tunables \\n\
-\\t[sudo ./dtnmenu <device>]\\t- Configure Tunables and Device"
-
 # main execution thread
+run_dtntune
 apply_all_recommended_settings
