@@ -56,7 +56,7 @@ int msleep(long msec)
 	return res;
 }
 
-static char netDevice[128];
+char netDevice[128];
 
 #define SIGINT_MSG "SIGINT received.\n"
 void sig_int_handler(int signum, siginfo_t *info, void *ptr)

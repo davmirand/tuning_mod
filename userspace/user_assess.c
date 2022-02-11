@@ -35,8 +35,7 @@ char gApplyBiosTuning = 'n';
 char gApplyNicTuning = 'n';
 char gApplyDefSysTuning = 'n';
 char gMakeTuningPermanent = 'n';
-char netDevice[128];
-char vHaveNetDevice = 0;
+//char vHaveNetDevice = 0;
 
 enum workflow_phases current_phase = STARTING;
 
@@ -2003,44 +2002,18 @@ int user_assess(int argc, char **argv)
 	current_phase = ASSESSMENT;
 	gettime(&clk, ctime_buf);
 
-	if (argc == 2)
-	{
-		int vRet;
-		strcpy(netDevice,argv[1]);
-		vRet = fCheckInterfaceExist();
-		if (!vRet)
-		{
-			vHaveNetDevice = 1;
-			fprintf(tunLogPtr, "%s %s: Found Device %s***\n", ctime_buf, phase2str(current_phase), argv[1]);
-		}
-		else
-		{
-			gettime(&clk, ctime_buf);
-			fprintf(tunLogPtr, "%s %s: Device not found, Invalid device name *%s*, Exiting...***\n", ctime_buf, phase2str(current_phase), argv[1]);
-			exit(-1);
-		}
-
-	}
-	else
-		{
-			gettime(&clk, ctime_buf);
-			fprintf(tunLogPtr, "%s %s: Device name not supplied, Will just tune kernel ***\n", ctime_buf, phase2str(current_phase));
-		}
+	fprintf(tunLogPtr, "%s %s: Found Device %s***\n", ctime_buf, phase2str(current_phase), netDevice);
 
 	gettime(&clk, ctime_buf);
 
 	fDoGetUserCfgValues();
 
-	if (vHaveNetDevice)
-	{
-		fDoGetDeviceCap();
-		numaNode = fDoGetNuma();
-	}
+	fDoGetDeviceCap();
+	numaNode = fDoGetNuma();
 
 	fDoSystemTuning();
 
-	if (argc == 2)
-		fDoNicTuning();
+	fDoNicTuning();
 
 	fDoBiosTuning();
 
