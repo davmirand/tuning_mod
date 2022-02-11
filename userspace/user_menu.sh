@@ -44,32 +44,10 @@ prune_logs()
 
 apply_recommended_kernel_settings()
 {
-	clear_screen
 	if [ -f  /tmp/applyKernelDefFile ]
 	then
-		printf '\n\t%s\n' \
-			"You are attempting to apply the Kernel Tuning Recommendations" 
-		printf '\n\t%s (y/n): ' \
-			"Do you wish to continue? "
-		read answer
-		if [ "$answer" != 'y' -a "$answer" != 'Y' ]
-		then
-			enter_to_continue
-			return 0
-		fi
-
-		sysctlmodified=0
-		
-		printf '\n\t%s (y/n): ' \
-			"Do you wish to apply the Kernel Tuning Recommendations permanently? " 
-		read answer
-		if [ "$answer" != 'y' -a "$answer" != 'Y' ]
-		then
-			printf '\n###%s\n\n' "Applying Kernel Tuning Recommendations until a reboot..."
-		else
-			printf '\n###%s\n\n' "Applying Kernel Tuning Recommendations Permanently..."
-			sysctlmodified=1
-		fi
+		printf '\n###%s\n\n' "Applying Kernel Tuning Recommendations Permanently..."
+		sysctlmodified=1
 
 		nlines=`sed -n '1p' /tmp/applyKernelDefFile`	
 		count=2
@@ -101,31 +79,14 @@ apply_recommended_kernel_settings()
 
 		rm -f /tmp/tun_app_command
 		rm -f /tmp/applyKernelDefFile
-	else
-		printf '\n###%s\n\n' "Sorry. You do not have any Kernel Tuning Recommendations to apply..."
-
 	fi
-    enter_to_continue
 	return 0
 }
 
 apply_recommended_bios_settings()
 {
-	clear_screen
 	if [ -f  /tmp/applyBiosDefFile ]
 	then
-		printf '\n\t%s\n' \
-			"You are attempting to apply the BIOS Tuning Recommendations" 
-		printf '\n\t%s (y/n): ' \
-			"Do you wish to continue? "
-		read answer
-		if [ "$answer" != 'y' -a "$answer" != 'Y' ]
-		then
-			enter_to_continue
-			return 0
-		fi
-		
-
 		nlines=`sed -n '1p' /tmp/applyBiosDefFile`	
 		count=2
 
@@ -141,30 +102,14 @@ apply_recommended_bios_settings()
 		
 		rm -f /tmp/tun_app_command
 		rm -f /tmp/applyBiosDefFile
-	else
-		printf '\n###%s\n\n' "Sorry. You do not have any BIOS Tuning Recommendations to apply..."
-
 	fi
-    enter_to_continue
 	return 0
 }
 
 apply_recommended_nic_settings()
 {
-	clear_screen
 	if [ -f  /tmp/applyNicDefFile ]
 	then
-		printf '\n\t%s\n' \
-			"You are attempting to apply the NIC Tuning Recommendations" 
-		printf '\n\t%s (y/n): ' \
-			"Do you wish to continue? "
-		read answer
-		if [ "$answer" != 'y' -a "$answer" != 'Y' ]
-		then
-			enter_to_continue
-			return 0
-		fi
-
 		nlines=`sed -n '1p' /tmp/applyNicDefFile`	
 		count=2
 
@@ -182,11 +127,7 @@ apply_recommended_nic_settings()
 
 		rm -f /tmp/tun_app_command
 		rm -f /tmp/applyNicDefFile
-	else
-		printf '\n###%s\n\n' "Sorry. You do not have any Tuning Recommendations to apply..."
-
 	fi
-    enter_to_continue
 	return 0
 }
 
@@ -195,17 +136,6 @@ apply_all_recommended_settings()
 	clear_screen
 	if [ -f  /tmp/applyKernelDefFile -o -f /tmp/applyBiosDefFile -o -f  /tmp/applyNicDefFile ]
 	then
-		printf '\n\t%s\n' \
-			"You are attempting to apply All Tuning Recommendations" 
-		printf '\n\t%s (y/n): ' \
-			"Do you wish to continue? "
-		read answer
-		if [ "$answer" != 'y' -a "$answer" != 'Y' ]
-		then
-			enter_to_continue
-			return 0
-		fi
-
 		echo "#Applying All Tuning Recommendations..." 
 
 		apply_recommended_kernel_settings
@@ -213,9 +143,6 @@ apply_all_recommended_settings()
 		apply_recommended_nic_settings
 
 		echo "#Finished Applying All Tuning Recommendations..."	
-	else
-		printf '\n###%s\n\n' "Sorry. You do not have any All Tuning Recommendations to apply..."
-
 	fi
     enter_to_continue
 	return 0
@@ -256,56 +183,4 @@ Usage:\\t[sudo ./dtnmenu]\\t\\t- Configure Tunables \\n\
 \\t[sudo ./dtnmenu <device>]\\t- Configure Tunables and Device"
 
 # main execution thread
-
-	
-	repeat_main=1
-	while  [ $repeat_main = 1 ]
-	do
-		clear_screen
-		printf '\n\n\t%s\n\n\t%s\n\t%s\n\t%s\n\t%s\n\t%s\n\t%s\n\t%s\n\t%s\n\t%s' \
-			"DTN Tuning Utility" \
-			"1) Run DTN Tune" \
-			"2) Apply Recommended Kernel Tuning Values Only" \
-			"3) Apply Recommended BIOS Tuning Values Only" \
-			"4) Apply Recommended NIC Tuning Values Only" \
-			"5) Apply All Recommended Tuning Values" \
-			"6) Prune Old Logs" \
-			"7) Escape to Linux Shell" \
-			"8) Exit" \
-			"$select_choice"
-
-		read answer
-		case "$answer" in
-			1)
-				run_dtntune "$1"
-				;;
-			2)
-				apply_recommended_kernel_settings
-				;;
-			3)
-				apply_recommended_bios_settings
-				;;
-			4)
-				apply_recommended_nic_settings
-				;;
-			5)
-				apply_all_recommended_settings
-				;;
-			6)
-				prune_logs
-				;;
-			7)
-				clear_screen
-				$SHELL
-				clear_screen
-				enter_to_continue
-				;;
-			q|8)
-				clear_screen
-				exit 0
-				;;
-			*)
-				;;
-		esac
-	done
-	echo
+apply_all_recommended_settings

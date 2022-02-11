@@ -412,6 +412,7 @@ void check_req(http_s *h, char aResp[])
 	FIOBJ r = http_req2str(h);
 	time_t clk;
 	char ctime_buf[27];
+	char aHttpRequest[256];
 	char * pReqData = fiobj_obj2cstr(r).data;
 	
 	gettime(&clk, ctime_buf);
@@ -426,6 +427,8 @@ void check_req(http_s *h, char aResp[])
 		gettime(&clk, ctime_buf);
 		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to apply recommended Tuning***\n", ctime_buf, phase2str(current_phase));
 		fprintf(tunLogPtr,"%s %s: ***Applying recommended Tuning now***\n", ctime_buf, phase2str(current_phase));
+		sprintf(aHttpRequest,"sh ./user_menu.sh");
+		system(aHttpRequest);
 		/* TODO: Apply tuning */
 	}
 	else
