@@ -850,8 +850,14 @@ void fDoCpuPerformance()
 	if (sb.st_size == 0)
 	{
 		//doesn't support scaling Gov this way - could be Debian - lets try another way
-		sprintf(aBiosSetting,"sudo cpupower frequency-info | grep \"The governor\" > /tmp/BIOS.cfgfile");
+		sprintf(aBiosSetting,"sudo cpupower frequency-info | grep \"The governor\" > /tmp/BIOS.cfgfile 2>/dev/null");
 		system(aBiosSetting);
+		
+		stat("/tmp/BIOS.cfgfile", &sb);
+		if (sb.st_size == 0) 
+		{ //again - doesn't have values available
+			goto unable_to_det;
+		}
 		
 		biosCfgFPtr = fopen("/tmp/BIOS.cfgfile","r");
 		while((nread = getline(&line, &len, biosCfgFPtr)) != -1)
@@ -871,6 +877,9 @@ void fDoCpuPerformance()
 				goto get_freq_other_way;
 			}
 		}
+		
+		if (!other_way) //just in case - should not happen!!!
+			goto unable_to_det;
 	}
 
 	biosCfgFPtr = fopen("/tmp/BIOS.cfgfile","r");
@@ -932,6 +941,22 @@ get_freq_other_way:
 		free(line);
 
 	return;
+
+unable_to_det:
+	vPad = SETTINGS_PAD_MAX-(strlen("CPU Governor"));
+	fprintf(tunLogPtr,"%s", "CPU Governor"); //redundancy for visual
+        fprintf(tunLogPtr,"%*s", vPad, "not available");
+        fprintf(tunLogPtr,"%26s %20s\n", "not available", "na");
+	
+	if (line)
+		free(line);
+
+	if (biosCfgFPtr)
+		fclose(biosCfgFPtr);
+
+        system("rm -f /tmp/BIOS.cfgfile"); //remove file after use
+
+        return;
 }
 
 void fDoIrqBalance()
