@@ -31,6 +31,7 @@ void fDoBiosTuning(void);
 void fDoNicTuning(void);
 void fDoSystemtuning(void);
 void fDo_lshw(void);
+int fCheckForNicsAndSpeeds();
 
 static int gInterval = 2; //default
 static int netDeviceSpeed = 0;
@@ -66,6 +67,68 @@ const char *phase2str(enum workflow_phases phase)
 	if (phase < WORKFLOW_NAMES_MAX)
 		return workflow_names[phase];
 	return NULL;
+}
+
+int fCheckForNicsAndSpeeds()
+{
+	char ctime_buf[27];
+	time_t clk;
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t nread;
+	char aNicSetting[256];
+	FILE *nicCfgFPtr = 0;
+	int tmpSpeed = 0;
+
+	gettime(&clk, ctime_buf);
+	sprintf(aNicSetting,"cat /sys/class/net/*/speed > /tmp/NIC.cfgfile 2>/dev/null");
+	system(aNicSetting);
+
+	nicCfgFPtr = fopen("/tmp/NIC.cfgfile","r");
+	if (!nicCfgFPtr)
+	{
+		int save_errno = errno;
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: Could not open file /tmp/NIC.cfgfile to retrieve speed value, errno = %d...\n", ctime_buf, phase2str(current_phase), save_errno);
+	}
+	else
+		{
+			while((nread = getline(&line, &len, nicCfgFPtr)) != -1)
+			{ 
+				char sValue[256];
+				int cfg_val = 0;
+				//printf("Retrieved line of length %zu:\n", nread);
+				//printf("&%s&",line);
+				strcpy(sValue,line);
+				if (sValue[strlen(sValue)-1] == '\n')
+					sValue[strlen(sValue)-1] = 0;
+
+				cfg_val = atoi(sValue);
+				if (cfg_val == 0) //wasn't set properly
+				{
+					int save_errno = errno;
+					gettime(&clk, ctime_buf);
+					fprintf(tunLogPtr,"%s %s: Value for speed is invalid, value is %s, errno = %d...\n", ctime_buf, phase2str(current_phase), sValue, save_errno);
+				}
+				else
+					{
+						if (cfg_val >= tmpSpeed)
+							tmpSpeed = cfg_val;
+						printf("tmpSpeed = %d****\n",tmpSpeed);
+					}
+			}
+
+			fclose(nicCfgFPtr);
+			system("rm -f /tmp/NIC.cfgfile"); //remove file after use
+		}
+
+	if (line)
+		free(line);
+
+	gettime(&clk, ctime_buf);
+	fprintf(tunLogPtr,"%s %s: Highest NIC speed is %d...\n", ctime_buf, phase2str(current_phase), tmpSpeed);
+
+return tmpSpeed;
 }
 
 /* Must change NUMUSERVALUES below if adding more values */
@@ -1542,7 +1605,7 @@ void fDoLRO()
 	int fixed = 0;
 	char * recommended_val = "on";
 
-	sprintf(aNicSetting,"ethtool --show-features %s | grep large-receive-offload > /tmp/NIC.cfgfile",netDevice);
+	sprintf(aNicSetting,"ethtool --show-features %s | grep large-receive-offload > /tmp/NIC.cfgfile 2>/dev/null",netDevice);
 	system(aNicSetting);
     
 	stat("/tmp/NIC.cfgfile", &sb);
@@ -1553,14 +1616,14 @@ void fDoLRO()
 	}
 	else
 		{
-			sprintf(aNicSetting,"ethtool --show-features %s | grep large-receive-offload | grep fixed > /tmp/NIC.cfgfile",netDevice);
+			sprintf(aNicSetting,"ethtool --show-features %s | grep large-receive-offload | grep fixed > /tmp/NIC.cfgfile 2>/dev/null",netDevice);
 			system(aNicSetting);
 	
 			stat("/tmp/NIC.cfgfile", &sb);
 			if (sb.st_size == 0) //not fixed
 			{
 				//do it again to get the truth
-				sprintf(aNicSetting,"ethtool --show-features %s | grep large-receive-offload > /tmp/NIC.cfgfile",netDevice);
+				sprintf(aNicSetting,"ethtool --show-features %s | grep large-receive-offload > /tmp/NIC.cfgfile 2>/dev/null",netDevice);
 				system(aNicSetting);
 
 			}
@@ -1609,13 +1672,13 @@ void fDoLRO()
 					if (gApplyNicTuning == 'y')
 					{
 						//Apply Initial DefSys Tuning
-						sprintf(aNicSetting,"ethtool -K %s lro %s", netDevice, recommended_val);
+						sprintf(aNicSetting,"ethtool -K %s lro %s 2>/dev/null", netDevice, recommended_val);
 						system(aNicSetting);
 					}
 					else
 						{
 							//Save in Case Operator want to apply from menu
-							sprintf(aNicSetting,"ethtool -K %s lro %s", netDevice, recommended_val);
+							sprintf(aNicSetting,"ethtool -K %s lro %s 2>/dev/null", netDevice, recommended_val);
 							memcpy(aApplyNicDefTun2DArray[aApplyNicDefTunCount], aNicSetting, strlen(aNicSetting));
 							aApplyNicDefTunCount++;
 						}
@@ -2062,6 +2125,8 @@ int main(int argc, char **argv)
 		{
 			gettime(&clk, ctime_buf);
 			fprintf(tunLogPtr, "%s %s: Device name not supplied, Will just tune kernel ***\n", ctime_buf, phase2str(current_phase));
+			fprintf(tunLogPtr, "%s %s: Will check NIC speeds, if any, on the system ***\n", ctime_buf, phase2str(current_phase));
+			netDeviceSpeed = fCheckForNicsAndSpeeds(); //simulated since no NIC specified
 		}
 
 	gettime(&clk, ctime_buf);
