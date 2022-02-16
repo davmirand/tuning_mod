@@ -2240,7 +2240,8 @@ int main(int argc, char **argv)
 		{
 			gettime(&clk, ctime_buf);
 			fprintf(tunLogPtr, "%s %s: Device name not supplied, Will just tune kernel ***\n", ctime_buf, phase2str(current_phase));
-			fprintf(tunLogPtr, "%s %s: Will check NIC speeds, if any, on the system ***\n", ctime_buf, phase2str(current_phase));
+			fprintf(tunLogPtr, "%s %s: Will check NIC speeds on the system ***\n", ctime_buf, phase2str(current_phase));
+			fflush(tunLogPtr);
 			netDeviceSpeed = fCheckForNicsAndSpeeds(); //simulated since no NIC specified
 		}
 
