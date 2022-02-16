@@ -778,14 +778,16 @@ void fDoSystemTuning(void)
 				len = (r-q) + 1;
 				strncpy(value,q,len);
 				value[--len] = 0;
-	
+				
+				printf("Value = ***%s***\n",value);	
 				if(isdigit(value[0]))
 				{
 					intvalue = atoi(value);
-					if(intvalue <= aTuningNumsToUse[count].minimum)
+					if((intvalue <= aTuningNumsToUse[count].minimum) || (aTuningNumsToUse[count].xDefault != -1))
 					{
 						if (aTuningNumsToUse[count].xDefault == -1) //only one value
 						{
+							printf("intvalue = ***%d***\n",intvalue);
 							fprintf(tunLogPtr,"%*s", vPad, value);	
 							if (intvalue == aTuningNumsToUse[count].minimum)
 								fprintf(tunLogPtr,"%26d %20s\n",aTuningNumsToUse[count].minimum, "na");
@@ -831,6 +833,7 @@ void fDoSystemTuning(void)
 								memset(def,0,256);
 								memset(max,0,256);
 								i = 0;
+								printf("intvalue3 = ***%d***\n",intvalue);
 								while (isdigit(value[i]))
 								{
 									min[i] = value[i];
@@ -875,6 +878,7 @@ void fDoSystemTuning(void)
 									y = sprintf(strValmax,"%d",aTuningNumsToUse[count].maximum);
 									total += y;
 									vPad = SETTINGS_PAD_MAX3-total;
+									printf("intvalue4, aTuningNumsToUse[count].maximum = *%d*, currmax = ***%d***\n",aTuningNumsToUse[count].maximum, currmax);
 									if (aTuningNumsToUse[count].maximum > currmax)
 									{
 										fprintf(tunLogPtr,"%*s %s %s %20c\n", vPad, strValmin, strValdef, strValmax, gApplyDefSysTuning);
@@ -916,9 +920,11 @@ void fDoSystemTuning(void)
 								fprintf(tunLogPtr,"%*s", vPad, value);
 								fprintf(tunLogPtr,"%26d %20s\n",aTuningNumsToUse[count].minimum, "na");
 							}
+#if 0
 							else
 								{//has min, default and max values - get them...
 								 //Let's parse the value stringand get the min, etc. separately
+								 //let get the max value too
 									int i, j;
 									char min[256];
 									char def[256];
@@ -974,6 +980,7 @@ void fDoSystemTuning(void)
 										fprintf(tunLogPtr,"%*s %s %s %20s\n", vPad, strValmin, strValdef, strValmax, "na");
 									}
 								}
+#endif
 						}
 #if 0
 					else //Leaving out this case for now
