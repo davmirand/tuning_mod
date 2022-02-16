@@ -779,7 +779,6 @@ void fDoSystemTuning(void)
 				strncpy(value,q,len);
 				value[--len] = 0;
 				
-				printf("Value = ***%s***\n",value);	
 				if(isdigit(value[0]))
 				{
 					intvalue = atoi(value);
@@ -787,7 +786,6 @@ void fDoSystemTuning(void)
 					{
 						if (aTuningNumsToUse[count].xDefault == -1) //only one value
 						{
-							printf("intvalue = ***%d***\n",intvalue);
 							fprintf(tunLogPtr,"%*s", vPad, value);	
 							if (intvalue == aTuningNumsToUse[count].minimum)
 								fprintf(tunLogPtr,"%26d %20s\n",aTuningNumsToUse[count].minimum, "na");
@@ -833,7 +831,6 @@ void fDoSystemTuning(void)
 								memset(def,0,256);
 								memset(max,0,256);
 								i = 0;
-								printf("intvalue3 = ***%d***\n",intvalue);
 								while (isdigit(value[i]))
 								{
 									min[i] = value[i];
@@ -892,7 +889,6 @@ void fDoSystemTuning(void)
 									y = sprintf(strValmax,"%d",aTuningNumsToUse[count].maximum);
 									total += y;
 									vPad = SETTINGS_PAD_MAX3-total;
-									printf("intvalue4, aTuningNumsToUse[count].maximum = *%d*, currmax = ***%d***\n",aTuningNumsToUse[count].maximum, currmax);
 									if (aTuningNumsToUse[count].maximum > currmax)
 									{
 										fprintf(tunLogPtr,"%*s %s %s %20c\n", vPad, strValmin, strValdef, strValmax, gApplyDefSysTuning);
