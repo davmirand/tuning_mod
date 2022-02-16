@@ -79,6 +79,9 @@ int fCheckForNicsAndSpeeds()
 	char aNicSetting[256];
 	FILE *nicCfgFPtr = 0;
 	int tmpSpeed = 0;
+	int v10G = 0;
+	int v40G = 0;
+	int v100G = 0;
 
 	gettime(&clk, ctime_buf);
 	sprintf(aNicSetting,"cat /sys/class/net/*/speed > /tmp/NIC.cfgfile 2>/dev/null");
@@ -114,10 +117,122 @@ int fCheckForNicsAndSpeeds()
 					{
 						if (cfg_val >= tmpSpeed)
 							tmpSpeed = cfg_val;
+						
+						if (cfg_val <= 10000) //10G
+							v10G++;
+						else
+							if (cfg_val < 100000) //100G
+								v40G++;
+							else
+								v100G++;
+				
 						printf("tmpSpeed = %d****\n",tmpSpeed);
 					}
 			}
 
+			if (v10G && v40G && v100G)
+			{
+				char *buffer = NULL;
+				ssize_t read;
+				size_t len;
+
+				printf("You have NIC cards with <=10G, 40G and 100G speeds\n");
+				printf("1) Tune as a 10G Server\n");
+				printf("2) Tune as a 40G Server\n");
+				printf("3) Tune as a 100G Server\n");
+				printf("Please Enter 1, 2, or 3\n");
+				read = getline(&buffer, &len, stdin);
+				if (-1 != read)
+					puts(buffer);
+				else
+					printf("No line read...\n");
+
+				printf("Size read: %ld\n Len: %ld\n", read, len);
+				free(buffer);
+			}
+			else
+				if (v40G && v100G)
+				{
+					char *buffer = NULL;
+					ssize_t read;
+					size_t len;
+				
+					printf("You have NIC cards with 40G and 100G speeds\n");
+					printf("1) Tune as a 40G Server\n");
+					printf("2) Tune as a 100G Server\n");
+					printf("Please Enter 1 or 2\n");
+					read = getline(&buffer, &len, stdin);
+					if (-1 != read)
+						puts(buffer);
+					else
+						printf("No line read...\n");
+
+					printf("Size read: %ld\n Len: %ld\n", read, len);
+					free(buffer);
+				}
+				else
+					if (v10G && v100G)
+					{
+						char *buffer = NULL;
+						ssize_t read;
+						size_t len;
+					
+						printf("You have NIC cards with <=10G and 100G speeds\n");
+						printf("1) Tune as a 10G Server\n");
+						printf("2) Tune as a 100G Server\n");
+						printf("Please Enter 1 or 2\n");
+						read = getline(&buffer, &len, stdin);
+						if (-1 != read)
+							puts(buffer);
+						else
+							printf("No line read...\n");
+
+						printf("Size read: %ld\n Len: %ld\n", read, len);
+						free(buffer);
+					}
+					else
+						if (v10G && v40G)
+						{
+							char *buffer = NULL;
+							ssize_t read;
+							size_t len;
+
+							printf("You have NIC cards with <=10G and 40G speeds\n");
+							printf("1) Tune as a 10G Server\n");
+							printf("2) Tune as a 40G Server\n");
+							printf("Please Enter 1 or 2\n");
+							read = getline(&buffer, &len, stdin);
+							if (-1 != read)
+								puts(buffer);
+							else
+								printf("No line read...\n");
+
+							printf("Size read: %ld\n Len: %ld\n", read, len);
+							free(buffer);
+						}
+						else
+							if (v100G)
+							{
+								printf("You only have NIC cards with 100G speeds\n");
+								printf("Will tune system for 100G speeds\n");
+							}
+							else
+								if ( v40G)
+								{
+									printf("You only have NIC cards with 40G speeds\n");
+									printf("Will tune system for 40G speeds\n");
+								}
+								else
+									if ( v10G)
+									{
+										printf("You only have NIC cards with 10G speeds or less\n");
+										printf("Will tune system for 10G speeds\n");
+									}
+									else
+										{
+											printf("Tuning system for 10G speeds\n");
+											tmpSpeed = 10000;	
+										}
 			fclose(nicCfgFPtr);
 			system("rm -f /tmp/NIC.cfgfile"); //remove file after use
 		}
