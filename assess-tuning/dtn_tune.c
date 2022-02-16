@@ -285,7 +285,7 @@ int fCheckForNicsAndSpeeds()
 								else
 									if (buffer[0] == '2')
 									{
-										tmpSpeed = 100000;
+										tmpSpeed = 40000;
 										break;
 									}
 									else
@@ -311,26 +311,26 @@ int fCheckForNicsAndSpeeds()
 							{
 								system("clear");
 								printf("\n\tYou only have NIC cards with 100G speeds\n");
-								printf("\tWill tune system for 100G speeds\n");
+								printf("\tWill tune as a 100G system\n");
 							}
 							else
 								if ( v40G)
 								{
 									system("clear");
 									printf("\n\tYou only have NIC cards with 40G speeds\n");
-									printf("\tWill tune system for 40G speeds\n");
+									printf("\tWill tune as a 40G system\n");
 								}
 								else
 									if ( v10G)
 									{
 										system("clear");
 										printf("\n\tYou only have NIC cards with 10G speeds or less\n");
-										printf("\tWill tune system for 10G speeds\n");
+										printf("\tWill tune as a 10G system\n");
 									}
 									else
 										{
 											system("clear");
-											printf("\n\tTuning system for 10G speeds\n");
+											printf("\n\tTuning system as a 10G Server\n");
 											tmpSpeed = 10000;	
 										}
 			fclose(nicCfgFPtr);
