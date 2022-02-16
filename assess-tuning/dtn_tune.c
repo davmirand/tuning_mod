@@ -863,6 +863,20 @@ void fDoSystemTuning(void)
 								}
 #define SETTINGS_PAD_MAX2 43
 								vPad = SETTINGS_PAD_MAX2-(strlen(min) + strlen(def) + strlen(max));
+								{
+									int vPadStrLen;
+									int vPadAbs;
+									char strValmin[128];
+									char strValdef[128];
+									int total;
+									int y = sprintf(strValmin,"%d",aTuningNumsToUse[count].minimum);
+									total = y;
+									y = sprintf(strValdef,"%d",aTuningNumsToUse[count].xDefault);
+									total += y;
+									vPadStrLen = strlen(min) + strlen(def);
+									vPadAbs = abs(vPadStrLen - total);
+									vPad += vPadAbs;
+								}
 								fprintf(tunLogPtr,"%*s %s %s", vPad, min, def, max);	
 								currmax = atoi(max);
 #define SETTINGS_PAD_MAX3 28
