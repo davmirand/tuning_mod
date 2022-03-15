@@ -511,8 +511,8 @@ void * fDoRunGetThresholds(void * vargp)
 	fprintf(tunLogPtr,"%s %s: ***Starting Check Threshold thread ...***\n", ctime_buf, phase2str(current_phase));
 	char buffer[128];
 	FILE *pipe;
-	time_t before = 0;
-	time_t now = 0;
+	int before = 0;
+	int now = 0;
 	time_t secs_passed = 1;
 	unsigned long rx_before, rx_now, rx_bytes_tot;
 	unsigned long tx_before, tx_now, tx_bytes_tot;
@@ -521,11 +521,12 @@ void * fDoRunGetThresholds(void * vargp)
 
 	rx_before =  rx_now = rx_bytes_tot = rx_bits_per_sec = 0;
 	tx_before =  tx_now =  tx_bytes_tot = tx_bits_per_sec = 0;
-	sprintf(try,"bpftrace -e \'BEGIN { @name;} kfunc:dev_get_stats { $nd = (struct net_device *) args->dev; @name = $nd->name; } kretfunc:dev_get_stats /@name == \"%s\"/ { $nd = (struct net_device *) args->dev; $rtnl = (struct rtnl_link_stats64 *) args->storage; $rx_bytes = $rtnl->rx_bytes; $tx_bytes = $rtnl->tx_bytes; printf(\"%s %s\\n\", $tx_bytes, $rx_bytes); exit(); } END { clear(@name); }\'",netDevice,"%lu","%lu");
+	sprintf(try,"bpftrace -e \'BEGIN { @name;} kfunc:dev_get_stats { $nd = (struct net_device *) args->dev; @name = $nd->name; } kretfunc:dev_get_stats /@name == \"%s\"/ { $nd = (struct net_device *) args->dev; $rtnl = (struct rtnl_link_stats64 *) args->storage; $rx_bytes = $rtnl->rx_bytes; $tx_bytes = $rtnl->tx_bytes; printf(\"%s %s\\n\", $tx_bytes, $rx_bytes); time(\"%s\"); exit(); } END { clear(@name); }\'",netDevice,"%lu","%lu","%S");
+	/*sprintf(try,"bpftrace -e \'BEGIN { @name;} kfunc:dev_get_stats { $nd = (struct net_device *) args->dev; @name = $nd->name; } kretfunc:dev_get_stats /@name == \"%s\"/ { $nd = (struct net_device *) args->dev; $rtnl = (struct rtnl_link_stats64 *) args->storage; $rx_bytes = $rtnl->rx_bytes; $tx_bytes = $rtnl->tx_bytes; printf(\"%s %s\\n\", $tx_bytes, $rx_bytes); exit(); } END { clear(@name); }\'",netDevice,"%lu","%lu");*/
 
 start:
 	secs_passed = 0;
-	before = time((time_t *)0);
+	//before = time((time_t *)0);
 	pipe = popen(try,"r");
 	if (!pipe)
 	{
@@ -545,8 +546,9 @@ start:
 
  		if (fgets(buffer, 128, pipe) != NULL)
 		{
-			printf("*%s*\n",buffer);
 			sscanf(buffer,"%lu %lu", &tx_before, &rx_before);
+			fgets(buffer, 128, pipe);
+			sscanf(buffer,"%d", &before);
 			pclose(pipe);
 
 			sleep(1);
@@ -556,7 +558,7 @@ start:
 				printf("popen failed!\n");
 				return ((char *) 0);
 			}
-			now = time((time_t *)0);
+			//now = time((time_t *)0);
 			stage = 1;
 			break;
 		}
@@ -578,13 +580,22 @@ start:
 			}
 		if (fgets(buffer, 128, pipe) != NULL)
 		{
-			printf("***%s***\n",buffer);
 			sscanf(buffer,"%lu %lu", &tx_now, &rx_now);
+			fgets(buffer, 128, pipe);
+			sscanf(buffer,"%d", &now);
 
 			tx_bytes_tot =  tx_now - tx_before;
 			rx_bytes_tot =  rx_now - rx_before;
-			secs_passed = now - before;
-			if (!secs_passed) secs_passed = 1;;
+
+			if (now < before) //seconds started over
+			{
+				secs_passed = (60 - before) + now;
+			}
+			else
+				secs_passed = now - before;
+
+			if (!secs_passed) 
+				secs_passed = 1;;
 #if 1
 			tx_bits_per_sec = ((8 * tx_bytes_tot) / 1024) / secs_passed;
 			rx_bits_per_sec = ((8 * rx_bytes_tot) / 1024) / secs_passed;;
