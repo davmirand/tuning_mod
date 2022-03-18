@@ -17,6 +17,12 @@ static const char *__doc__ = "Tuning Module Userspace program\n"
 #include <pthread.h>
 #include <signal.h>
 
+#include <bpf/bpf.h>
+#include <bpf/libbpf.h>
+#include <linux/bpf.h>
+#include <arpa/inet.h>
+
+
 #include "user_dtn.h"
 FILE * tunLogPtr = 0;
 void gettime(time_t *clk, char *ctime_buf)
@@ -89,13 +95,8 @@ const char *pin_basedir =  "/sys/fs/bpf";
 #include <locale.h>
 #include <time.h>
 
-//#include <bpf/bpf.h>
-//Looks like I don't need <bpf/bpf.h> - I do need libbpf.h below though.
 //Looks like because of the ringbuf stuff
-#include "../libbpf/src/libbpf.h"
-/* Lesson#1: this prog does not need to #include <bpf/libbpf.h> as it only uses
- * the simple bpf-syscall wrappers, defined in libbpf #include<bpf/bpf.h>
- */
+//#include "../libbpf/src/libbpf.h"
 
 #include <net/if.h>
 #include <linux/if_link.h> /* depend on kernel-headers installed */
@@ -111,7 +112,7 @@ void read_buffer_sample_perf(void *ctx, int cpu, void *data, unsigned int len)
 	time_t clk;
 	char ctime_buf[27];
 	struct int_telemetry *evt = (struct int_telemetry *)data;
-	int	 do_something;
+	int	 do_something = 0;
 
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr,"%s %s: %s::: \n", ctime_buf, phase2str(current_phase), "MetaData from Collector Module:");
@@ -184,6 +185,192 @@ typedef struct {
 } sArgv_t;
 
 #ifdef USING_PERF_EVENT_ARRAY
+#if 0
+#include <bpf/bpf.h>
+#include <bpf/libbpf.h>
+#include <linux/bpf.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#endif
+
+#include "../../int-sink/src/shared/int_defs.h"
+#include "../../int-sink/src/shared/filter_defs.h"
+
+enum ARGS{
+	CMD_ARG,
+	BPF_MAPS_DIR_ARG,
+	MAX_ARG_COUNT
+};
+
+struct threshold_maps
+{
+	int flow_thresholds;
+	int hop_thresholds;
+	int flow_counters;
+};
+
+#define MAP_DIR "/sys/fs/bpf/test_maps"
+#define HOP_LATENCY_DELTA 20000
+#define FLOW_LATENCY_DELTA 50000
+#define QUEUE_OCCUPANCY_DELTA 80
+#define FLOW_SINK_TIME_DELTA 1000000000
+
+#define INT_DSCP (0x17)
+
+#define PERF_PAGE_COUNT 512
+#define MAX_FLOW_COUNTERS 512
+
+void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size);
+void lost_func(struct threshold_maps *ctx, int cpu, __u64 cnt);
+void print_hop_key(struct hop_key *key);
+
+void * fDoRunBpfCollectionPerfEventArray2(void * vargp)
+{
+	time_t clk;
+	char ctime_buf[27];
+	int perf_output_map;
+	int int_dscp_map;
+	struct perf_buffer *pb;
+	struct threshold_maps maps = {};
+open_maps: {
+	gettime(&clk, ctime_buf);
+	fprintf(tunLogPtr,"%s %s: Opening maps.\n", ctime_buf, phase2str(current_phase));
+	//maps.counters = bpf_obj_get(MAP_DIR "/counters_map");
+	fprintf(tunLogPtr,"%s %s: Opening flow_counters_map.\n", ctime_buf, phase2str(current_phase));
+	maps.flow_counters = bpf_obj_get(MAP_DIR "/flow_counters_map");
+	if (maps.flow_counters < 0) { goto close_maps; }
+	fprintf(tunLogPtr,"%s %s: Opening flow_thresholds_map.\n", ctime_buf, phase2str(current_phase));
+	maps.flow_thresholds = bpf_obj_get(MAP_DIR "/flow_thresholds_map");
+	if (maps.flow_thresholds < 0) { goto close_maps; }
+	fprintf(tunLogPtr,"%s %s: Opening hop_thresholds_map.\n", ctime_buf, phase2str(current_phase));
+	maps.hop_thresholds = bpf_obj_get(MAP_DIR "/hop_thresholds_map");
+	if (maps.hop_thresholds < 0) { goto close_maps; }
+	fprintf(tunLogPtr,"%s %s: Opening perf_output_map.\n", ctime_buf, phase2str(current_phase));
+	perf_output_map = bpf_obj_get(MAP_DIR "/perf_output_map");
+	if (perf_output_map < 0) { goto close_maps; }
+	fprintf(tunLogPtr,"%s %s: Opening int_dscp_map.\n", ctime_buf, phase2str(current_phase));
+	int_dscp_map = bpf_obj_get(MAP_DIR "/int_dscp_map");
+	if (int_dscp_map < 0) { goto close_maps; }
+	}
+set_int_dscp: {
+	fprintf(tunLogPtr,"%s %s: Setting INT DSCP.\n", ctime_buf, phase2str(current_phase));
+	__u32 int_dscp = INT_DSCP;
+	__u32 zero_value = 0;
+	bpf_map_update_elem(int_dscp_map, &int_dscp, &zero_value, BPF_NOEXIST);
+    }
+open_perf_event: {
+	fprintf(tunLogPtr,"%s %s: Opening perf event buffer.\n", ctime_buf, phase2str(current_phase));
+#if 0
+	struct perf_buffer_opts opts = {
+	(perf_buffer_sample_fn)sample_func,
+	(perf_buffer_lost_fn)lost_func,
+	&maps
+	};
+#else
+	struct perf_buffer_opts opts;
+	opts.sample_cb = (perf_buffer_sample_fn)sample_func;
+	opts.lost_cb = (perf_buffer_lost_fn)lost_func;
+	opts.ctx = &maps;
+#endif
+	pb = perf_buffer__new(perf_output_map, PERF_PAGE_COUNT, &opts);
+	if (pb == 0) { goto close_maps; }
+	}
+perf_event_loop: {
+	fprintf(tunLogPtr,"%s %s: Running perf event loop.\n", ctime_buf, phase2str(current_phase));
+ 	int err = 0;
+	do {
+	err = perf_buffer__poll(pb, 500);
+	}
+	while(err >= 0);
+	fprintf(tunLogPtr,"%s %s: Exited perf event loop with err %d..\n", ctime_buf, phase2str(current_phase), -err);
+	}
+close_maps: {
+	fprintf(tunLogPtr,"%s %s: Closing maps.\n", ctime_buf, phase2str(current_phase));
+	if (maps.flow_counters <= 0) { goto exit_program; }
+	close(maps.flow_counters);
+	if (maps.flow_thresholds <= 0) { goto exit_program; }
+	close(maps.flow_thresholds);
+	if (maps.hop_thresholds <= 0) { goto exit_program; }
+	close(maps.hop_thresholds);
+	if (perf_output_map <= 0) { goto exit_program; }
+	close(perf_output_map);
+	if (int_dscp_map <= 0) { goto exit_program; }
+	close(int_dscp_map);
+	if (pb == 0) { goto exit_program; }
+	perf_buffer__free(pb);
+	}
+exit_program: {
+	return ((char *)0);
+	}
+}
+
+void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
+{
+	void *data_end = data + size;
+	__u32 data_offset = 0;
+	struct hop_key hop_key;
+
+	if(data + data_offset + sizeof(hop_key) > data_end) return;
+
+	memcpy(&hop_key, data + data_offset, sizeof(hop_key));
+	data_offset += sizeof(hop_key);
+
+	struct flow_thresholds flow_threshold_update = {
+		0,
+		FLOW_LATENCY_DELTA,
+		0,
+		FLOW_SINK_TIME_DELTA,
+		0
+	};
+
+	hop_key.hop_index = 0;
+	
+	while (data + data_offset + sizeof(struct int_hop_metadata) <= data_end)
+	{
+		struct int_hop_metadata *hop_metadata_ptr = data + data_offset;
+		data_offset += sizeof(struct int_hop_metadata);
+
+		struct hop_thresholds hop_threshold_update = {
+			ntohs(hop_metadata_ptr->egress_time) - ntohs(hop_metadata_ptr->ingress_time),
+			HOP_LATENCY_DELTA,
+			ntohs(hop_metadata_ptr->queue_info) & 0xffffff,
+			QUEUE_OCCUPANCY_DELTA,
+			ntohs(hop_metadata_ptr->switch_id)
+		};
+
+		bpf_map_update_elem(ctx->hop_thresholds, &hop_key, &hop_threshold_update, BPF_ANY);
+		if(hop_key.hop_index == 0) { flow_threshold_update.sink_time_threshold = ntohs(hop_metadata_ptr->ingress_time); }
+		flow_threshold_update.hop_latency_threshold += ntohs(hop_metadata_ptr->egress_time) - ntohs(hop_metadata_ptr->ingress_time);
+		print_hop_key(&hop_key);
+		hop_key.hop_index++;
+	}
+
+	flow_threshold_update.total_hops = hop_key.hop_index;
+	bpf_map_update_elem(ctx->flow_thresholds, &hop_key.flow_key, &flow_threshold_update, BPF_ANY);
+	struct counter_set empty_counter = {};
+	bpf_map_update_elem(ctx->flow_counters, &(hop_key.flow_key), &empty_counter, BPF_NOEXIST);
+}
+
+void lost_func(struct threshold_maps *ctx, int cpu, __u64 cnt)
+{
+	fprintf(stderr, "Missed %llu sets of packet metadata.\n", cnt);
+}
+
+void print_flow_key(struct flow_key *key)
+{
+	fprintf(stdout, "Flow Key:\n");
+	fprintf(stdout, "\tegress_switch:%X\n", key->switch_id);
+	fprintf(stdout, "\tegress_port:%hu\n", key->egress_port);
+	fprintf(stdout, "\tvlan_id:%hu\n", key->vlan_id);
+}
+
+void print_hop_key(struct hop_key *key)
+{
+	fprintf(stdout, "Hop Key:\n");
+	print_flow_key(&(key->flow_key));
+	fprintf(stdout, "\thop_index: %X\n", key->hop_index);
+}
+
 void * fDoRunBpfCollectionPerfEventArray(void * vargp) 
 {
 
@@ -269,6 +456,7 @@ void * fDoRunBpfCollectionPerfEventArray(void * vargp)
 
 cleanup:
 	perf_buffer__free(pb);
+	//if (err) err++; //get rid of silly warning
 	return (void *)7;
 }
 #else
@@ -595,7 +783,9 @@ start:
 				secs_passed = now - before;
 
 			if (!secs_passed) 
-				secs_passed = 1;;
+				secs_passed = 1;
+			if (secs_passed == 1) //bump up - can it really just be 1
+				secs_passed++;
 #if 1
 			tx_bits_per_sec = ((8 * tx_bytes_tot) / 1024) / secs_passed;
 			rx_bits_per_sec = ((8 * rx_bytes_tot) / 1024) / secs_passed;;
@@ -697,7 +887,8 @@ int main(int argc, char **argv)
 	fflush(tunLogPtr);
 
 #ifdef USING_PERF_EVENT_ARRAY
-	vRetFromRunBpfThread = pthread_create(&doRunBpfCollectionThread_id, NULL, fDoRunBpfCollectionPerfEventArray, &sArgv);
+	//vRetFromRunBpfThread = pthread_create(&doRunBpfCollectionThread_id, NULL, fDoRunBpfCollectionPerfEventArray, &sArgv);
+	vRetFromRunBpfThread = pthread_create(&doRunBpfCollectionThread_id, NULL, fDoRunBpfCollectionPerfEventArray2, &sArgv);
 #else //Using Map Type RINGBUF
 	vRetFromRunBpfThread = pthread_create(&doRunBpfCollectionThread_id, NULL, fDoRunBpfCollectionRingBuf, &sArgv);;
 #endif
