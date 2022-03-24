@@ -2013,7 +2013,7 @@ int user_assess(int argc, char **argv)
 
 	fDoSystemTuning();
 
-	fDoNicTuning();
+	//fDoNicTuning();
 
 	fDoBiosTuning();
 

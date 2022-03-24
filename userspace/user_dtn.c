@@ -38,7 +38,7 @@ void gettime(time_t *clk, char *ctime_buf)
 void initialize_http_service(void);
 /**********************/
 
-#define USING_PERF_EVENT_ARRAY 1
+#define USING_PERF_EVENT_ARRAY2 
 
 /* msleep(): Sleep for the requested number of milliseconds. */
 int msleep(long msec)
@@ -106,7 +106,7 @@ const char *pin_basedir =  "/sys/fs/bpf";
 #include "common_kern_user.h"
 #include "bpf_util.h" /* bpf_num_possible_cpus */
 
-#ifdef USING_PERF_EVENT_ARRAY
+#if defined(USING_PERF_EVENT_ARRAY1)
 void read_buffer_sample_perf(void *ctx, int cpu, void *data, unsigned int len) 
 {
 	time_t clk;
@@ -135,7 +135,9 @@ void read_buffer_sample_perf(void *ctx, int cpu, void *data, unsigned int len)
 
 	return;
 }
-#else
+#endif
+
+#if !defined(USING_PERF_EVENT_ARRAY1) && !defined(USING_PERF_EVENT_ARRAY2)
 static int read_buffer_sample(void *ctx, void *data, size_t len) 
 {
 	time_t clk;
@@ -184,15 +186,7 @@ typedef struct {
 	char ** argv;
 } sArgv_t;
 
-#ifdef USING_PERF_EVENT_ARRAY
-#if 0
-#include <bpf/bpf.h>
-#include <bpf/libbpf.h>
-#include <linux/bpf.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#endif
-
+#ifdef USING_PERF_EVENT_ARRAY2
 #include "../../int-sink/src/shared/int_defs.h"
 #include "../../int-sink/src/shared/filter_defs.h"
 
@@ -277,6 +271,7 @@ open_perf_event: {
 	}
 perf_event_loop: {
 	fprintf(tunLogPtr,"%s %s: Running perf event loop.\n", ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
  	int err = 0;
 	do {
 	err = perf_buffer__poll(pb, 500);
@@ -371,6 +366,7 @@ void print_hop_key(struct hop_key *key)
 	fprintf(stdout, "\thop_index: %X\n", key->hop_index);
 }
 
+#elif defined(USING_PERF_EVENT_ARRAY1)
 void * fDoRunBpfCollectionPerfEventArray(void * vargp) 
 {
 
@@ -459,6 +455,7 @@ cleanup:
 	//if (err) err++; //get rid of silly warning
 	return (void *)7;
 }
+
 #else
 void * fDoRunBpfCollectionRingBuf(void * vargp) 
 {
@@ -555,9 +552,9 @@ void * fDoRunBpfCollectionRingBuf(void * vargp)
 	return (void *)7;
 }
 #endif
-
 /* End of bpf stuff ****/
 
+#if defined(RUN_KERNEL_MODULE)
 void * fDoRunTalkToKernel(void * vargp)
 {
 	int result = 0;
@@ -594,6 +591,7 @@ void * fDoRunTalkToKernel(void * vargp)
 		sleep(gInterval);
 	}
 }
+#endif
 
 /***** HTTP *************/
 void check_req(http_s *h, char aResp[])
@@ -629,7 +627,7 @@ void check_req(http_s *h, char aResp[])
 			fprintf(tunLogPtr,"%s %s: ***Applying some kind of request***\n", ctime_buf, phase2str(current_phase));
 		}
 
-
+	fflush(tunLogPtr);
 return;
 }
 
@@ -822,17 +820,19 @@ return ((char *) 0);
 
 int main(int argc, char **argv) 
 {
-
-	char *pDevName = "/dev/tuningMod";
-	int fd; 
-	int vRetFromKernelThread, vRetFromKernelJoin;
 	int vRetFromRunBpfThread, vRetFromRunBpfJoin;
 	int vRetFromRunHttpServerThread, vRetFromRunHttpServerJoin;
 	int vRetFromRunGetThresholdsThread, vRetFromRunGetThresholdsJoin;
-	pthread_t doRunTalkToKernelThread_id, doRunBpfCollectionThread_id, doRunHttpServerThread_id, doRunGetThresholds_id;
+	pthread_t doRunBpfCollectionThread_id, doRunHttpServerThread_id, doRunGetThresholds_id;
 	sArgv_t sArgv;
 	time_t clk;
 	char ctime_buf[27];
+#ifdef RUN_KERNEL_MODULE
+	char *pDevName = "/dev/tuningMod";
+	int fd = 0; 
+	int vRetFromKernelThread, vRetFromKernelJoin;
+	pthread_t doRunTalkToKernelThread_id;
+#endif
 
 	sArgv.argc = argc;
 	sArgv.argv = argv;
@@ -858,16 +858,11 @@ int main(int argc, char **argv)
 		}
 		
 	user_assess(argc, argv);
-#if 0
-	fDoGetUserCfgValues();
-
-	fDoSystemTuning();
-	fDoNicTuning();
-	fDoBiosTuning();
-#endif
+	
 	gettime(&clk, ctime_buf);
 	current_phase = LEARNING;
 
+#if defined(RUN_KERNEL_MODULE)
 	fd = open(pDevName, O_RDWR,0);
 
 	if (fd > 0)
@@ -883,11 +878,13 @@ int main(int argc, char **argv)
 		fclose(tunLogPtr);
 		exit(-8);
 	}
-			
+#endif
+
 	fflush(tunLogPtr);
 
-#ifdef USING_PERF_EVENT_ARRAY
-	//vRetFromRunBpfThread = pthread_create(&doRunBpfCollectionThread_id, NULL, fDoRunBpfCollectionPerfEventArray, &sArgv);
+#if defined(USING_PERF_EVENT_ARRAY1) //testing with a test bpf object
+	vRetFromRunBpfThread = pthread_create(&doRunBpfCollectionThread_id, NULL, fDoRunBpfCollectionPerfEventArray, &sArgv);
+#elif defined(USING_PERF_EVENT_ARRAY2) //current int-sink compatible
 	vRetFromRunBpfThread = pthread_create(&doRunBpfCollectionThread_id, NULL, fDoRunBpfCollectionPerfEventArray2, &sArgv);
 #else //Using Map Type RINGBUF
 	vRetFromRunBpfThread = pthread_create(&doRunBpfCollectionThread_id, NULL, fDoRunBpfCollectionRingBuf, &sArgv);;
@@ -896,22 +893,25 @@ int main(int argc, char **argv)
 	//Start Http server Thread	
 	vRetFromRunHttpServerThread = pthread_create(&doRunHttpServerThread_id, NULL, fDoRunHttpServer, &sArgv);
 	
-	vRetFromRunGetThresholdsThread = pthread_create(&doRunGetThresholds_id, NULL, fDoRunGetThresholds, &sArgv); 
+	//vRetFromRunGetThresholdsThread = pthread_create(&doRunGetThresholds_id, NULL, fDoRunGetThresholds, &sArgv); 
 
+#if defined(RUN_KERNEL_MODULE)
 	if (vRetFromKernelThread == 0)
     		vRetFromKernelJoin = pthread_join(doRunTalkToKernelThread_id, NULL);
-
+#endif
 	if (vRetFromRunBpfThread == 0)
     		vRetFromRunBpfJoin = pthread_join(doRunBpfCollectionThread_id, NULL);
 	
 	if (vRetFromRunHttpServerThread == 0)
     		vRetFromRunHttpServerJoin = pthread_join(doRunHttpServerThread_id, NULL);
 	
-	if (vRetFromRunGetThresholdsThread == 0)
-    		vRetFromRunGetThresholdsJoin = pthread_join(doRunGetThresholds_id, NULL);
+	//if (vRetFromRunGetThresholdsThread == 0)
+    	//	vRetFromRunGetThresholdsJoin = pthread_join(doRunGetThresholds_id, NULL);
 
+#if defined(RUN_KERNEL_MODULE)
 	if (fd > 0)
 		close(fd);
+#endif
 
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr, "%s %s: Closing tuning Log***\n", ctime_buf, phase2str(current_phase));
