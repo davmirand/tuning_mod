@@ -1,6 +1,8 @@
+#if defined(USING_PERF_EVENT_ARRAY1)
 static const char *__doc__ = "Tuning Module Userspace program\n"
         " - Finding xdp_stats_map via --dev name info\n"
 	" - Has a Tuning Module counterpart in the kernel\n";
+#endif
 
 #include <stdio.h>
 #include <errno.h>
@@ -16,6 +18,7 @@ static const char *__doc__ = "Tuning Module Userspace program\n"
 #include <getopt.h>
 #include <pthread.h>
 #include <signal.h>
+#include <sys/wait.h>
 
 #include <bpf/bpf.h>
 #include <bpf/libbpf.h>
@@ -168,6 +171,7 @@ static int read_buffer_sample(void *ctx, void *data, size_t len)
 }
 #endif
 
+#if defined(USING_PERF_EVENT_ARRAY1)
 static const struct option_wrapper long_options[] = {
 	{{"help",        no_argument,       NULL, 'h' },
 		"Show help", false},
@@ -180,6 +184,7 @@ static const struct option_wrapper long_options[] = {
 
 	{{0, 0, NULL,  0 }}
 };
+#endif
 
 typedef struct {
 	int argc;
@@ -816,12 +821,76 @@ start:
 return ((char *) 0);
 }
 
+void * fDoRunHelperDtn(void * vargp)
+{
+	time_t clk;
+	char ctime_buf[27];
+	struct stat sb;
+	char aDev[512];
+
+	gettime(&clk, ctime_buf);
+	fprintf(tunLogPtr,"%s %s: ***Starting HelperDtn thread ...***\n", ctime_buf, phase2str(current_phase));
+
+	sprintf(aDev,"%s","netro-switch");
+
+	//check if already running
+	system("ps -ef | grep -v grep | grep help_dtn.sh  > /tmp/help_dtn_alive.out 2>/dev/null");
+	stat("/tmp/help_dtn_alive.out", &sb);
+	if (sb.st_size == 0); //good - no runaway process
+	else //kill it
+	{
+		printf("Killing runaway help_dtn.sh process\n");
+		system("pkill -9 help_dtn.sh");
+	}
+
+	system("rm -f /tmp/help_dtn_alive.out");
+	sleep(1); //relax
+
+restart_vfork:
+	printf("About to fork new help_dtn.sh process\n");
+	pid_t pid = vfork();
+	if (pid == 0)
+	{
+		if (execlp("./help_dtn.sh", "help_dtn.sh",aDev, (char*) NULL) == -1)
+		{
+			perror("Could not execlp");
+			exit(-1);;
+		}
+	}
+#if 0
+	else
+		{
+			printf("I'm the parent process; the child got pid %d.\n", pid);
+			//  return 0;
+		}
+#endif
+
+	while (1)
+	{
+		sleep(5); //check every 5 seconds to see if process alive
+		system("ps -ef | grep -v grep | grep -v defunct | grep help_dtn.sh  > /tmp/help_dtn_alive.out 2>/dev/null");
+		stat("/tmp/help_dtn_alive.out", &sb);
+		if (sb.st_size == 0) //process died, restart it
+		{
+			int status;
+			system("rm -f /tmp/help_dtn_alive.out");
+			wait(&status);
+			goto restart_vfork;
+		}
+
+		system("rm -f /tmp/help_dtn_alive.out");
+	}
+
+return ((char *) 0);
+}
+
 int main(int argc, char **argv) 
 {
 	int vRetFromRunBpfThread, vRetFromRunBpfJoin;
 	int vRetFromRunHttpServerThread, vRetFromRunHttpServerJoin;
 	int vRetFromRunGetThresholdsThread, vRetFromRunGetThresholdsJoin;
-	pthread_t doRunBpfCollectionThread_id, doRunHttpServerThread_id, doRunGetThresholds_id;
+	int vRetFromRunHelperDtnThread, vRetFromRunHelperDtnJoin;
+	pthread_t doRunBpfCollectionThread_id, doRunHttpServerThread_id, doRunGetThresholds_id, doRunHelperDtn_id;
 	sArgv_t sArgv;
 	time_t clk;
 	char ctime_buf[27];
@@ -890,8 +959,10 @@ int main(int argc, char **argv)
 
 	//Start Http server Thread	
 	vRetFromRunHttpServerThread = pthread_create(&doRunHttpServerThread_id, NULL, fDoRunHttpServer, &sArgv);
-	
+	//Start Threshhold monitoring	
 	vRetFromRunGetThresholdsThread = pthread_create(&doRunGetThresholds_id, NULL, fDoRunGetThresholds, &sArgv); 
+	//Start Helper functioning	
+	vRetFromRunHelperDtnThread = pthread_create(&doRunHelperDtn_id, NULL, fDoRunHelperDtn, &sArgv); 
 
 #if defined(RUN_KERNEL_MODULE)
 	if (vRetFromKernelThread == 0)
@@ -905,6 +976,9 @@ int main(int argc, char **argv)
 	
 	if (vRetFromRunGetThresholdsThread == 0)
     		vRetFromRunGetThresholdsJoin = pthread_join(doRunGetThresholds_id, NULL);
+
+	if (vRetFromRunHelperDtnThread == 0)
+    		vRetFromRunHelperDtnJoin = pthread_join(doRunHelperDtn_id, NULL);
 
 #if defined(RUN_KERNEL_MODULE)
 	if (fd > 0)
