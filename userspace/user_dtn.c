@@ -707,8 +707,8 @@ void * fDoRunGetThresholds(void * vargp)
 
 	rx_before =  rx_now = rx_bytes_tot = rx_bits_per_sec = 0;
 	tx_before =  tx_now =  tx_bytes_tot = tx_bits_per_sec = 0;
-	sprintf(try,"bpftrace -e \'BEGIN { @name;} kfunc:dev_get_stats { $nd = (struct net_device *) args->dev; @name = $nd->name; } kretfunc:dev_get_stats /@name == \"%s\"/ { $nd = (struct net_device *) args->dev; $rtnl = (struct rtnl_link_stats64 *) args->storage; $rx_bytes = $rtnl->rx_bytes; $tx_bytes = $rtnl->tx_bytes; printf(\"%s %s\\n\", $tx_bytes, $rx_bytes); time(\"%s\"); exit(); } END { clear(@name); }\'",netDevice,"%lu","%lu","%S");
-	/*sprintf(try,"bpftrace -e \'BEGIN { @name;} kfunc:dev_get_stats { $nd = (struct net_device *) args->dev; @name = $nd->name; } kretfunc:dev_get_stats /@name == \"%s\"/ { $nd = (struct net_device *) args->dev; $rtnl = (struct rtnl_link_stats64 *) args->storage; $rx_bytes = $rtnl->rx_bytes; $tx_bytes = $rtnl->tx_bytes; printf(\"%s %s\\n\", $tx_bytes, $rx_bytes); exit(); } END { clear(@name); }\'",netDevice,"%lu","%lu");*/
+	sprintf(try,"bpftrace -e \'BEGIN { @name;} kprobe:dev_get_stats { $nd = (struct net_device *) arg0; @name = $nd->name; } kretprobe:dev_get_stats /@name == \"%s\"/ { $rtnl = (struct rtnl_link_stats64 *) retval; $rx_bytes = $rtnl->rx_bytes; $tx_bytes = $rtnl->tx_bytes; printf(\"%s %s\\n\", $tx_bytes, $rx_bytes); time(\"%s\"); exit(); } END { clear(@name); }\'",netDevice,"%lu","%lu","%S");
+	/*sprintf(try,"bpftrace -e \'BEGIN { @name;} kfunc:dev_get_stats { $nd = (struct net_device *) args->dev; @name = $nd->name; } kretfunc:dev_get_stats /@name == \"%s\"/ { $nd = (struct net_device *) args->dev; $rtnl = (struct rtnl_link_stats64 *) args->storage; $rx_bytes = $rtnl->rx_bytes; $tx_bytes = $rtnl->tx_bytes; printf(\"%s %s\\n\", $tx_bytes, $rx_bytes); time(\"%s\"); exit(); } END { clear(@name); }\'",netDevice,"%lu","%lu","%S");*/
 
 start:
 	secs_passed = 0;
@@ -737,7 +737,7 @@ start:
 			sscanf(buffer,"%d", &before);
 			pclose(pipe);
 
-			sleep(1);
+			//sleep(1);
 			pipe = popen(try,"r");
 			if (!pipe)
 			{
@@ -782,8 +782,6 @@ start:
 
 			if (!secs_passed) 
 				secs_passed = 1;
-			if (secs_passed == 1) //bump up - can it really just be 1
-				secs_passed++;
 #if 1
 			tx_bits_per_sec = ((8 * tx_bytes_tot) / 1024) / secs_passed;
 			rx_bits_per_sec = ((8 * rx_bytes_tot) / 1024) / secs_passed;;
@@ -893,7 +891,7 @@ int main(int argc, char **argv)
 	//Start Http server Thread	
 	vRetFromRunHttpServerThread = pthread_create(&doRunHttpServerThread_id, NULL, fDoRunHttpServer, &sArgv);
 	
-	//vRetFromRunGetThresholdsThread = pthread_create(&doRunGetThresholds_id, NULL, fDoRunGetThresholds, &sArgv); 
+	vRetFromRunGetThresholdsThread = pthread_create(&doRunGetThresholds_id, NULL, fDoRunGetThresholds, &sArgv); 
 
 #if defined(RUN_KERNEL_MODULE)
 	if (vRetFromKernelThread == 0)
@@ -905,8 +903,8 @@ int main(int argc, char **argv)
 	if (vRetFromRunHttpServerThread == 0)
     		vRetFromRunHttpServerJoin = pthread_join(doRunHttpServerThread_id, NULL);
 	
-	//if (vRetFromRunGetThresholdsThread == 0)
-    	//	vRetFromRunGetThresholdsJoin = pthread_join(doRunGetThresholds_id, NULL);
+	if (vRetFromRunGetThresholdsThread == 0)
+    		vRetFromRunGetThresholdsJoin = pthread_join(doRunGetThresholds_id, NULL);
 
 #if defined(RUN_KERNEL_MODULE)
 	if (fd > 0)
