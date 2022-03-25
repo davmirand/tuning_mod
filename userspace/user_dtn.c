@@ -826,12 +826,9 @@ void * fDoRunHelperDtn(void * vargp)
 	time_t clk;
 	char ctime_buf[27];
 	struct stat sb;
-	char aDev[512];
 
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Starting HelperDtn thread ...***\n", ctime_buf, phase2str(current_phase));
-
-	sprintf(aDev,"%s","netro-switch");
 
 	//check if already running
 	system("ps -ef | grep -v grep | grep help_dtn.sh  > /tmp/help_dtn_alive.out 2>/dev/null");
@@ -851,7 +848,7 @@ restart_vfork:
 	pid_t pid = vfork();
 	if (pid == 0)
 	{
-		if (execlp("./help_dtn.sh", "help_dtn.sh",aDev, (char*) NULL) == -1)
+		if (execlp("./help_dtn.sh", "help_dtn.sh", netDevice, (char*) NULL) == -1)
 		{
 			perror("Could not execlp");
 			exit(-1);;
