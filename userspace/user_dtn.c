@@ -1,8 +1,4 @@
-#if defined(USING_PERF_EVENT_ARRAY1)
-static const char *__doc__ = "Tuning Module Userspace program\n"
-        " - Finding xdp_stats_map via --dev name info\n"
-	" - Has a Tuning Module counterpart in the kernel\n";
-#endif
+#define USING_PERF_EVENT_ARRAY2
 
 #include <stdio.h>
 #include <errno.h>
@@ -40,8 +36,6 @@ void gettime(time_t *clk, char *ctime_buf)
 #include "http.h"
 void initialize_http_service(void);
 /**********************/
-
-#define USING_PERF_EVENT_ARRAY2 
 
 /* msleep(): Sleep for the requested number of milliseconds. */
 int msleep(long msec)
@@ -372,6 +366,10 @@ void print_hop_key(struct hop_key *key)
 }
 
 #elif defined(USING_PERF_EVENT_ARRAY1)
+static const char *__doc__ = "Tuning Module Userspace program\n"
+        " - Finding xdp_stats_map via --dev name info\n"
+        " - Has a Tuning Module counterpart in the kernel\n";
+
 void * fDoRunBpfCollectionPerfEventArray(void * vargp) 
 {
 
