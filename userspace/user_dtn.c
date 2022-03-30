@@ -103,83 +103,6 @@ const char *pin_basedir =  "/sys/fs/bpf";
 #include "common_kern_user.h"
 #include "bpf_util.h" /* bpf_num_possible_cpus */
 
-#if defined(USING_PERF_EVENT_ARRAY1)
-void read_buffer_sample_perf(void *ctx, int cpu, void *data, unsigned int len) 
-{
-	time_t clk;
-	char ctime_buf[27];
-	struct int_telemetry *evt = (struct int_telemetry *)data;
-	int	 do_something = 0;
-
-	gettime(&clk, ctime_buf);
-	fprintf(tunLogPtr,"%s %s: %s::: \n", ctime_buf, phase2str(current_phase), "MetaData from Collector Module:");
-	fprintf(tunLogPtr,"%s %s: ::: switch %d egress port %d ingress port %d ingress time %d egress time %d queue id %d queue_occupancy %d\n", ctime_buf, phase2str(current_phase), evt->switch_id, evt->egress_port_id, evt->ingress_port_id, evt->ingress_time, evt->egress_time, evt->queue_id, evt->queue_occupancy);
-
-	//Process network state received from Collector
-	//Make suggestions and or apply if authorized by the DTN operator
-	//
-	//Also, look at INT Queue Occupancy and Hop Delay to estimate 
-	//bottlenecks in the path. Tuning will be suggested based on these
-	//premises. 
-	//
-	if (gTuningMode)
-	{
-		//DTN operator has authorized the app to apply the suggestions.
-		//make it so. 
-		//
-		do_something = 1;
-	}
-
-	return;
-}
-#endif
-
-#if !defined(USING_PERF_EVENT_ARRAY1) && !defined(USING_PERF_EVENT_ARRAY2)
-static int read_buffer_sample(void *ctx, void *data, size_t len) 
-{
-	time_t clk;
-	char ctime_buf[27];
-	struct int_telemetry *evt = (struct int_telemetry *)data;
-	int	 do_something;
-
-	gettime(&clk, ctime_buf);
-  	fprintf(tunLogPtr,"%s %s: %s::: \n", ctime_buf, phase2str(current_phase), "MetaData from Collector Module:");
-	fprintf(tunLogPtr,"%s %s: ::: switch %d egress port %d ingress port %d ingress time %d egress time %d queue id %d queue_occupancy %d\n", ctime_buf, phase2str(current_phase), evt->switch_id, evt->egress_port_id, evt->ingress_port_id, evt->ingress_time, evt->egress_time, evt->queue_id, evt->queue_occupancy);
-
-	//Process network state received from Collector
-	//Make suggestions and or apply if authorized by the DTN operator
-	//
-	//Also, look at INT Queue Occupancy and Hop Delay to estimate 
-	//bottlenecks in the path. Tuning will be suggested based on these
-	//premises. 
-	//
-	if (gTuningMode)
-	{
-		//DTN operator has authorized the app to apply the suggestions.
-		//make it so. 
-		//
-		do_something = 1;
-	}
-
-	return 0;
-}
-#endif
-
-#if defined(USING_PERF_EVENT_ARRAY1)
-static const struct option_wrapper long_options[] = {
-	{{"help",        no_argument,       NULL, 'h' },
-		"Show help", false},
-
-	{{"dev",         required_argument, NULL, 'd' },
-		"Operate on device <ifname>", "<ifname>", true},
-
-	{{"quiet",       no_argument,       NULL, 'q' },
-		"Quiet mode (no output)"},
-
-	{{0, 0, NULL,  0 }}
-};
-#endif
-
 typedef struct {
 	int argc;
 	char ** argv;
@@ -370,6 +293,48 @@ static const char *__doc__ = "Tuning Module Userspace program\n"
         " - Finding xdp_stats_map via --dev name info\n"
         " - Has a Tuning Module counterpart in the kernel\n";
 
+static const struct option_wrapper long_options[] = {
+	{{"help",        no_argument,       NULL, 'h' },
+		"Show help", false},
+
+	{{"dev",         required_argument, NULL, 'd' },
+		"Operate on device <ifname>", "<ifname>", true},
+
+	{{"quiet",       no_argument,       NULL, 'q' },
+		"Quiet mode (no output)"},
+
+	{{0, 0, NULL,  0 }}
+};
+
+void read_buffer_sample_perf(void *ctx, int cpu, void *data, unsigned int len) 
+{
+	time_t clk;
+	char ctime_buf[27];
+	struct int_telemetry *evt = (struct int_telemetry *)data;
+	int	 do_something = 0;
+
+	gettime(&clk, ctime_buf);
+	fprintf(tunLogPtr,"%s %s: %s::: \n", ctime_buf, phase2str(current_phase), "MetaData from Collector Module:");
+	fprintf(tunLogPtr,"%s %s: ::: switch %d egress port %d ingress port %d ingress time %d egress time %d queue id %d queue_occupancy %d\n", ctime_buf, phase2str(current_phase), evt->switch_id, evt->egress_port_id, evt->ingress_port_id, evt->ingress_time, evt->egress_time, evt->queue_id, evt->queue_occupancy);
+	fflush(tunLogPtr);
+	//Process network state received from Collector
+	//Make suggestions and or apply if authorized by the DTN operator
+	//
+	//Also, look at INT Queue Occupancy and Hop Delay to estimate 
+	//bottlenecks in the path. Tuning will be suggested based on these
+	//premises. 
+	//
+	if (gTuningMode)
+	{
+		//DTN operator has authorized the app to apply the suggestions.
+		//make it so. 
+		//
+		do_something = 1;
+	}
+
+	return;
+}
+
 void * fDoRunBpfCollectionPerfEventArray(void * vargp) 
 {
 
@@ -389,7 +354,13 @@ void * fDoRunBpfCollectionPerfEventArray(void * vargp)
 
 	sArgv_t * sArgv = (sArgv_t * ) vargp;
 
+
 	/* Cmdline options can change progsec */
+
+	gettime(&clk, ctime_buf);
+	fprintf(tunLogPtr,"\n%s %s: Starting Collection of perf event array thread***\n", ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
+
 	parse_cmdline_args(sArgv->argc, sArgv->argv, long_options, &cfg, __doc__);
 
 	/* Required option */
@@ -443,6 +414,7 @@ void * fDoRunBpfCollectionPerfEventArray(void * vargp)
 
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr,"%s %s: Starting communication with Collector Module...***\n", ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
 
 	if (gTuningMode) 
 		current_phase = TUNING;
@@ -460,6 +432,35 @@ cleanup:
 }
 
 #else
+static int read_buffer_sample(void *ctx, void *data, size_t len) 
+{
+	time_t clk;
+	char ctime_buf[27];
+	struct int_telemetry *evt = (struct int_telemetry *)data;
+	int	 do_something;
+
+	gettime(&clk, ctime_buf);
+  	fprintf(tunLogPtr,"%s %s: %s::: \n", ctime_buf, phase2str(current_phase), "MetaData from Collector Module:");
+	fprintf(tunLogPtr,"%s %s: ::: switch %d egress port %d ingress port %d ingress time %d egress time %d queue id %d queue_occupancy %d\n", ctime_buf, phase2str(current_phase), evt->switch_id, evt->egress_port_id, evt->ingress_port_id, evt->ingress_time, evt->egress_time, evt->queue_id, evt->queue_occupancy);
+
+	//Process network state received from Collector
+	//Make suggestions and or apply if authorized by the DTN operator
+	//
+	//Also, look at INT Queue Occupancy and Hop Delay to estimate 
+	//bottlenecks in the path. Tuning will be suggested based on these
+	//premises. 
+	//
+	if (gTuningMode)
+	{
+		//DTN operator has authorized the app to apply the suggestions.
+		//make it so. 
+		//
+		do_something = 1;
+	}
+
+	return 0;
+}
+
 void * fDoRunBpfCollectionRingBuf(void * vargp) 
 {
 
@@ -478,6 +479,8 @@ void * fDoRunBpfCollectionRingBuf(void * vargp)
 	};
 
 	sArgv_t * sArgv = (sArgv_t * ) vargp;
+	
+	gettime(&clk, ctime_buf);
 
 	/* Cmdline options can change progsec */
 	parse_cmdline_args(sArgv->argc, sArgv->argv, long_options, &cfg, __doc__);
@@ -683,6 +686,7 @@ void * fDoRunHttpServer(void * vargp)
 
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Starting Http Server ...***\n", ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
 	//catch_sigint();
 	initialize_http_service();
 	/* start facil */
@@ -698,6 +702,7 @@ void * fDoRunGetThresholds(void * vargp)
 
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Starting Check Threshold thread ...***\n", ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
 	char buffer[128];
 	FILE *pipe;
 	int before = 0;
@@ -827,7 +832,7 @@ void * fDoRunHelperDtn(void * vargp)
 
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Starting HelperDtn thread ...***\n", ctime_buf, phase2str(current_phase));
-
+	fflush(tunLogPtr);
 	//check if already running
 	system("ps -ef | grep -v grep | grep help_dtn.sh  > /tmp/help_dtn_alive.out 2>/dev/null");
 	stat("/tmp/help_dtn_alive.out", &sb);
