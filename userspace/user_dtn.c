@@ -249,7 +249,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 	double vCurrent_Rtt = 0.0;
 	long long flow_hop_latency_threshold = 0;
 	time_t clk;
-        char ctime_buf[27];
+	char ctime_buf[27];
 
 	if(data + data_offset + sizeof(hop_key) > data_end) return;
 
@@ -373,7 +373,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 void lost_func(struct threshold_maps *ctx, int cpu, __u64 cnt)
 {
 	time_t clk;
-        char ctime_buf[27];
+	char ctime_buf[27];
 
 	fprintf(stderr, "Missed %llu sets of packet metadata.\n", cnt);
 	gettime(&clk, ctime_buf);
