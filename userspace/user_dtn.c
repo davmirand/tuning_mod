@@ -996,7 +996,7 @@ void check_req(http_s *h, char aResp[])
 
 	if (strstr(pReqData,"GET /-b#sock_rx_buff#"))
 	{
-		/* Change tx ring buffer size */
+		/* Change OS receive buffer size */
 		char *p = (pReqData + sizeof("GET /-b#sock_rx_buff#")) - 1;
 		while (isdigit(*p))
 		{
@@ -1009,7 +1009,29 @@ void check_req(http_s *h, char aResp[])
 		gettime(&clk, ctime_buf);
 		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change the maximum OS receive buffer size for all types of connections to %s***\n", ctime_buf, phase2str(current_phase), aNumber);
 		fprintf(tunLogPtr,"%s %s: ***Changing receive buffer size now***\n", ctime_buf, phase2str(current_phase));
-		sprintf(aSettingFromHttp,"sysctl -w net.core.rmem_max=%d", aNumber);
+		sprintf(aSettingFromHttp,"sysctl -w net.core.rmem_max=%s", aNumber);
+		
+		fprintf(tunLogPtr,"%s %s: ***Doing *%s***\n", ctime_buf, phase2str(current_phase), aSettingFromHttp);
+		system(aSettingFromHttp);
+		goto after_check;
+	}
+
+	if (strstr(pReqData,"GET /-b#sock_tx_buff#"))
+	{
+		/* Change OS send buffer size */
+		char *p = (pReqData + sizeof("GET /-b#sock_tx_buff#")) - 1;
+		while (isdigit(*p))
+		{
+			aNumber[count++] = *p;
+			p++;
+		}
+
+		sprintf(aResp,"Changed the maximum OS send buffer size for all types of connections to %s!\n", aNumber);
+		
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change the maximum OS send buffer size for all types of connections to %s***\n", ctime_buf, phase2str(current_phase), aNumber);
+		fprintf(tunLogPtr,"%s %s: ***Changing send buffer size now***\n", ctime_buf, phase2str(current_phase));
+		sprintf(aSettingFromHttp,"sysctl -w net.core.wmem_max=%s", aNumber);
 		
 		fprintf(tunLogPtr,"%s %s: ***Doing *%s***\n", ctime_buf, phase2str(current_phase), aSettingFromHttp);
 		system(aSettingFromHttp);
