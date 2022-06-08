@@ -37,6 +37,7 @@ char gApplyBiosTuning = 'n';
 char gApplyNicTuning = 'n';
 char gApplyDefSysTuning = 'n';
 char gMakeTuningPermanent = 'n';
+int gMaxnum_tuning_logs = 10; //default
 //char vHaveNetDevice = 0;
 
 enum workflow_phases current_phase = STARTING;
@@ -56,7 +57,7 @@ const char *phase2str(enum workflow_phases phase)
 }
 
 /* Must change NUMUSERVALUES below if adding more values */
-#define NUMUSERVALUES	7
+#define NUMUSERVALUES	8
 #define USERVALUEMAXLENGTH	256
 typedef struct {
 	char aUserValues[USERVALUEMAXLENGTH];
@@ -70,8 +71,56 @@ sUserValues_t userValues = {{"evaluation_timer", "2000", "-1"},
 			{"apply_default_system_tuning","n","-1"},
 			{"apply_bios_tuning","n","-1"},
 			{"apply_nic_tuning","n","-1"},
-			{"make_default_system_tuning_perm","n","-1"}
+			{"make_default_system_tuning_perm","n","-1"},
+			{"maxnum_tuning_logs","10","-1"}
 			};
+
+void fCheck_log_limit(void)
+{
+	FILE * userCfgPtr = 0;	
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t nread;
+	char *p = 0;
+	char setting[256];
+	int count = 0;
+	time_t clk;
+	char ctime_buf[27];
+	char *header[] = {"Name", "Default Value", "Configured Value"};
+    
+	gettime(&clk, ctime_buf);
+	fprintf(tunLogPtr,"\n%s %s: Opening user provided config file: *%s*\n",ctime_buf, phase2str(current_phase), pUserCfgFile);
+	userCfgPtr = fopen(pUserCfgFile,"r");
+	if (!userCfgPtr)
+	{
+		int save_errno = errno;
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"\n%s %s: Opening of %s failed, errno = %d\n",ctime_buf, phase2str(current_phase), pUserCfgFile, save_errno);
+		return;
+	}
+
+	while ((nread = getline(&line, &len, userCfgPtr)) != -1) 
+	{
+		int ind = 0;
+		memset(setting,0,sizeof(setting));
+		p = line;
+		while (!isblank((int)p[ind])) {
+			setting[ind] = p[ind];
+			ind++;
+		}
+
+			int cfg_val = atoi(userValues[count].cfg_value);
+			if (cfg_val == 0) //wasn't set properly - error
+				gInterval = atoi(userValues[count].default_val);
+			else
+				gInterval = cfg_val;
+
+	gettime(&clk, ctime_buf);
+	fprintf(tunLogPtr,"\n%s ***Using 'evaluation_timer' with value %d microseconds***\n", ctime_buf, gInterval);
+	free(line); //must free
+
+return;
+}
 
 void fDoGetUserCfgValues(void)
 {
@@ -190,6 +239,15 @@ void fDoGetUserCfgValues(void)
 									else
 										gAPI_listen_port = cfg_val;
 								}
+								else
+									if (strcmp(userValues[count].aUserValues,"maxnum_tuning_logs") == 0)
+									{
+										int cfg_val = atoi(userValues[count].cfg_value);
+										if (cfg_val == 0) //wasn't set properly - error
+											gMaxnum_tuning_logs = atoi(userValues[count].default_val);
+										else
+											gMaxnum_tuning_logs = cfg_val;
+									}
 	}
 
 	gettime(&clk, ctime_buf);

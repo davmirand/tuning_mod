@@ -1349,6 +1349,7 @@ int main(int argc, char **argv)
 		}
 		
 	user_assess(argc, argv);
+	fCheck_log_limit();
 	
 	gettime(&clk, ctime_buf);
 	current_phase = LEARNING;
