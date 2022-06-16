@@ -337,7 +337,6 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 	void *data_end = data + size;
 	__u32 data_offset = 0;
 	struct hop_key hop_key;
-	double vCurrent_Rtt = 0.0;
 	long long flow_hop_latency_threshold = 0;
 	time_t clk;
 	char ctime_buf[27];
@@ -444,7 +443,6 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		
 		flow_threshold_update.hop_latency_threshold += ntohl(hop_metadata_ptr->egress_time) - ntohl(hop_metadata_ptr->ingress_time);
 		flow_hop_latency_threshold += ntohl(hop_metadata_ptr->egress_time) - ntohl(hop_metadata_ptr->ingress_time);
-		vCurrent_Rtt += ntohl(hop_metadata_ptr->egress_time) - ntohl(hop_metadata_ptr->ingress_time);
 		print_hop_key(&hop_key);
 		hop_key.hop_index++;
 
@@ -454,10 +452,9 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 	bpf_map_update_elem(ctx->flow_thresholds, &hop_key.flow_key, &flow_threshold_update, BPF_ANY);
 	struct counter_set empty_counter = {};
 	bpf_map_update_elem(ctx->flow_counters, &(hop_key.flow_key), &empty_counter, BPF_NOEXIST);
-	vCurrent_Rtt = vCurrent_Rtt * 2; //double up for now to simulate 2 way value - should be in nanosecs
 
 	if (vDebugLevel > 2)
-		fprintf(stdout, "PSUEDO_CURRENT_RTT = %f, flow_hop_latency_threshold = %lld\n",vCurrent_Rtt/1000000.0, flow_hop_latency_threshold);
+		fprintf(stdout, "flow_hop_latency_threshold = %lld\n", flow_hop_latency_threshold);
 	
 	if (vDebugLevel > 1)
 	{
@@ -1260,9 +1257,10 @@ void * fDoRunFindHighestRtt(void * vargp)
 	fprintf(tunLogPtr,"%s %s: ***Starting Finding Highest RTT thread ...***\n", ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
 
-	sprintf(try,"sudo bpftrace -e \'BEGIN { @ca_rtt_us;} kprobe:tcp_ack_update_rtt { @ca_rtt_us = arg4; } kretprobe:tcp_ack_update_rtt /pid != 0/ { printf(\"%s\\n\", @ca_rtt_us); } interval:s:60 {  exit(); } END { clear(@ca_rtt_us); }\'", "%lu");
+	sprintf(try,"sudo bpftrace -e \'BEGIN { @ca_rtt_us;} kprobe:tcp_ack_update_rtt { @ca_rtt_us = arg4; } kretprobe:tcp_ack_update_rtt /pid != 0/ { printf(\"%s\\n\", @ca_rtt_us); } interval:s:5 {  exit(); } END { clear(@ca_rtt_us); }\'", "%lu");
 
-start:
+rttstart:
+		highest_rtt = 0;
 		pipe = popen(try,"r");
 		if (!pipe)
 		{
@@ -1270,7 +1268,7 @@ start:
 			return (char *) -1;
 		}
 
-		//get the first line
+		//get the first line and forget about it
 		if (fgets(buffer, 128, pipe) != NULL);
 		else
 		{
@@ -1278,30 +1276,36 @@ start:
 			pclose(pipe);
 			return (char *) -2;
 		}
-		printf("%s",buffer);
 
 		// read until process exits after "interval" seconds above
-   		while (!feof(pipe))
+		while (!feof(pipe))
 		{
 			// use buffer to read and add to result
 			if (fgets(buffer, 128, pipe) != NULL);
 			else
 			{
-				printf(" Pipe finished****\n");
+				goto finish_up;
 				return (char *)-2;
 			}
-			printf("%s",buffer);
 			sscanf(buffer,"%lu", &rtt);
 			if (rtt > highest_rtt)
 				highest_rtt = rtt;
-			printf("**rtt = %lu, highest rtt = %lu\n",rtt, highest_rtt);
-		}
-		pclose(pipe);
-		if (highest_rtt)
-			printf("***highest rtt is %lu\n", highest_rtt);
 
-		sleep(5);
-		goto start;
+			if (vDebugLevel > 3)
+				printf("**rtt = %luus, highest rtt = %luus\n",rtt, highest_rtt);
+		}
+finish_up:
+		pclose(pipe);
+
+		if (highest_rtt)
+		{
+			if (vDebugLevel > 2)
+				printf("***highest rtt is %.3fms\n", highest_rtt/(double)1000);
+		}
+
+		sleep(3); //check again in 5 secs
+		goto rttstart;
+
 return ((char *) 0);
 }
 
