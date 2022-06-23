@@ -1369,6 +1369,25 @@ restart_vfork:
 return ((char *) 0);
 }
 
+void * fDoRunGetMessageFromPeer(void * vargp)
+{
+	//int * fd = (int *) vargp;
+	time_t clk;
+	char ctime_buf[27];
+
+	gettime(&clk, ctime_buf);
+	fprintf(tunLogPtr,"%s %s: ***Starting Listener for messages from peer...***\n", ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
+	//catch_sigint();
+	
+	while (1)
+	{
+		sleep(5);
+	}
+
+	return ((char *)0);
+}
+
 int main(int argc, char **argv) 
 {
 	int vRetFromRunBpfThread, vRetFromRunBpfJoin;
@@ -1376,8 +1395,9 @@ int main(int argc, char **argv)
 	int vRetFromRunGetThresholdsThread, vRetFromRunGetThresholdsJoin;
 	int vRetFromRunHelperDtnThread, vRetFromRunHelperDtnJoin;
 	int vRetFromRunFindHighestRttThread, vRetFromRunFindHighestRttJoin;
+	int vRetFromRunGetMessageFromPeerThread, vRetFromRunGetMessageFromPeerJoin;
 	pthread_t doRunBpfCollectionThread_id, doRunHttpServerThread_id, doRunGetThresholds_id, doRunHelperDtn_id;
-	pthread_t doRunFindHighestRttThread_id;
+	pthread_t doRunFindHighestRttThread_id, doRunGetMessageFromPeerThread_id;
 	sArgv_t sArgv;
 	time_t clk;
 	char ctime_buf[27];
@@ -1456,6 +1476,9 @@ int main(int argc, char **argv)
 	vRetFromRunHelperDtnThread = pthread_create(&doRunHelperDtn_id, NULL, fDoRunHelperDtn, &sArgv); 
 	//Start Rtt monitoring
 	vRetFromRunFindHighestRttThread = pthread_create(&doRunFindHighestRttThread_id, NULL, fDoRunFindHighestRtt, &sArgv); 
+	//Listen for messages from destination DTN
+	vRetFromRunGetMessageFromPeerThread = pthread_create(&doRunGetMessageFromPeerThread_id, NULL, fDoRunGetMessageFromPeer, &sArgv); 
+	
 
 #if defined(RUN_KERNEL_MODULE)
 	if (vRetFromKernelThread == 0)
@@ -1475,6 +1498,9 @@ int main(int argc, char **argv)
 
 	if (vRetFromRunFindHighestRttThread == 0)
     		vRetFromRunFindHighestRttJoin = pthread_join(doRunFindHighestRttThread_id, NULL);
+	
+	if (vRetFromRunGetMessageFromPeerThread == 0)
+    		vRetFromRunGetMessageFromPeerJoin = pthread_join(doRunGetMessageFromPeerThread_id, NULL);
 
 #if defined(RUN_KERNEL_MODULE)
 	if (fd > 0)
