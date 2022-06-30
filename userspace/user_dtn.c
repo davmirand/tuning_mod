@@ -110,8 +110,8 @@ typedef struct {
 } sArgv_t;
 
 #ifdef USING_PERF_EVENT_ARRAY2
-#include "../../int-sink/src/shared/int_defs.h"
-#include "../../int-sink/src/shared/filter_defs.h"
+#include "../../c++-int-sink/int-sink/src/shared/int_defs.h"
+#include "../../c++-int-sink/int-sink/src/shared/filter_defs.h"
 
 enum ARGS{
 	CMD_ARG,
@@ -379,6 +379,8 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 			fprintf(stdout, "ingress_time = %u\n",ingress_time);
 			fprintf(stdout, "egress_time = %u\n",egress_time);
 			fprintf(stdout, "hop_hop_latency_threshold = %u\n",hop_hop_latency_threshold);
+			fprintf(stdout, "sizeof struct int_hop-metadata = %lu\n",sizeof(struct int_hop_metadata));
+			fprintf(stdout, "sizeof struct hop_key = %lu\n",sizeof(struct hop_key));
 		}
 #if 1
 		if ((hop_hop_latency_threshold > vHOP_LATENCY_DELTA) && (Qinfo > vQUEUE_OCCUPANCY_DELTA))
@@ -485,21 +487,33 @@ void lost_func(struct threshold_maps *ctx, int cpu, __u64 cnt)
 	fprintf(tunLogPtr, "%s %s: Missed %llu sets of packet metadata.\n", ctime_buf, phase2str(current_phase), cnt);
 	fflush(tunLogPtr);
 }
+	
+union uu {
+	 __u32 y;
+       	 unsigned char  a[4];
+};
 
 void print_flow_key(struct flow_key *key)
 {
+	union   uu t;
+        t.y = ntohl(key->src_ip);
+
 	fprintf(stdout, "Flow Key:\n");
+#if 0
 	fprintf(stdout, "\tegress_switch:%X\n", key->switch_id);
 	fprintf(stdout, "\tegress_port:%hu\n", key->egress_port);
 	fprintf(stdout, "\tvlan_id:%hu\n", key->vlan_id);
+#endif
+	//fprintf(stdout, "\tsrc_ip:%u\n", ntohl(key->src_ip));
+        fprintf(stdout, "\tsrc_ip = %d.%d.%d.%d\n",(unsigned char)t.a[0], t.a[1], t.a[2], t.a[3]);
 }
 
 void print_hop_key(struct hop_key *key)
 {
-	if (vDebugLevel > 2)
+	if (vDebugLevel > 0 )
 	{
 		//fprintf(stdout, "Hop Key:\n");
-		//print_flow_key(&(key->flow_key));
+		print_flow_key(&(key->flow_key));
 		fprintf(stdout, "\thop_index: %X\n", key->hop_index);
 	}
 }
