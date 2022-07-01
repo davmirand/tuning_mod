@@ -1125,7 +1125,7 @@ void * fDoRunGetThresholds(void * vargp)
 	//int * fd = (int *) vargp;
 	time_t clk;
 	char ctime_buf[27];
-
+	
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Starting Check Threshold thread ...***\n", ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
@@ -1143,6 +1143,7 @@ void * fDoRunGetThresholds(void * vargp)
 	rx_missed_errs_before = rx_missed_errs_now = rx_missed_errs_tot = 0;
 	rx_before =  rx_now = rx_bytes_tot = rx_bits_per_sec = 0;
 	tx_before =  tx_now =  tx_bytes_tot = tx_bits_per_sec = 0;
+
 	sprintf(try,"bpftrace -e \'BEGIN { @name;} kprobe:dev_get_stats { $nd = (struct net_device *) arg0; @name = $nd->name; } kretprobe:dev_get_stats /@name == \"%s\"/ { $rtnl = (struct rtnl_link_stats64 *) retval; $rx_bytes = $rtnl->rx_bytes; $tx_bytes = $rtnl->tx_bytes; $rx_missed_errors = $rtnl->rx_missed_errors; printf(\"%s %s %s\\n\", $tx_bytes, $rx_bytes, $rx_missed_errors); time(\"%s\"); exit(); } END { clear(@name); }\'",netDevice,"%lu","%lu","%lu","%S");
 	/* fix for kfunc below too */
 	/*sprintf(try,"bpftrace -e \'BEGIN { @name;} kfunc:dev_get_stats { $nd = (struct net_device *) args->dev; @name = $nd->name; } kretfunc:dev_get_stats /@name == \"%s\"/ { $nd = (struct net_device *) args->dev; $rtnl = (struct rtnl_link_stats64 *) args->storage; $rx_bytes = $rtnl->rx_bytes; $tx_bytes = $rtnl->tx_bytes; printf(\"%s %s\\n\", $tx_bytes, $rx_bytes); time(\"%s\"); exit(); } END { clear(@name); }\'",netDevice,"%lu","%lu","%S");*/
@@ -1270,7 +1271,7 @@ void * fDoRunFindHighestRtt(void * vargp)
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Starting Finding Highest RTT thread ...***\n", ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
-
+        
 	sprintf(try,"sudo bpftrace -e \'BEGIN { @ca_rtt_us;} kprobe:tcp_ack_update_rtt { @ca_rtt_us = arg4; } kretprobe:tcp_ack_update_rtt /pid != 0/ { printf(\"%s\\n\", @ca_rtt_us); } interval:s:5 {  exit(); } END { clear(@ca_rtt_us); }\'", "%lu");
 
 rttstart:
@@ -1383,21 +1384,146 @@ restart_vfork:
 return ((char *) 0);
 }
 
+#include "unp.h"
+
+void sig_chld_handler(int signum)
+{
+        pid_t pid;
+        int stat;
+
+        while ( (pid = waitpid(-1, &stat, WNOHANG)) > 0)
+                printf("Child %d terminated\n", pid);
+
+        return;
+}
+
+void catch_sigchld()
+{
+        static struct sigaction act;
+
+        memset(&act, 0, sizeof(act));
+
+        act.sa_handler = sig_chld_handler;
+        sigemptyset(&act.sa_mask); //no additional signals will be blocked
+        act.sa_flags = 0;
+
+        sigaction(SIGCHLD, &act, NULL);
+}
+
+ssize_t                                         /* Read "n" bytes from a descriptor. */
+readn(int fd, void *vptr, size_t n)
+{
+        size_t  nleft;
+        ssize_t nread;
+        char    *ptr;
+
+        ptr = vptr;
+        nleft = n;
+        while (nleft > 0) {
+                if ( (nread = read(fd, ptr, nleft)) < 0) {
+                        if (errno == EINTR)
+                                nread = 0;              /* and call read() again */
+                        else
+                                return(-1);
+                } else if (nread == 0)
+                        break;                          /* EOF */
+
+                nleft -= nread;
+                ptr   += nread;
+        }
+        return(n - nleft);              /* return >= 0 */
+}
+/* end readn */
+
+ssize_t
+Readn(int fd, void *ptr, size_t nbytes)
+{
+        ssize_t         n;
+
+        if ( (n = readn(fd, ptr, nbytes)) < 0)
+                err_sys("readn error");
+        return(n);
+}
+
+void
+str_echo(int sockfd)
+{
+        ssize_t                 n;
+        struct args             from_cli;
+
+        for ( ; ; ) {
+                if ( (n = Readn(sockfd, &from_cli, sizeof(from_cli))) == 0)
+                        return;         /* connection closed by other end */
+
+                printf("arg len = %d, arg buf = %s", ntohl(from_cli.len), from_cli.msg);
+                //Writen(sockfd, &result, sizeof(result));
+        }
+}
+
 void * fDoRunGetMessageFromPeer(void * vargp)
 {
 	//int * fd = (int *) vargp;
 	time_t clk;
 	char ctime_buf[27];
-
+	int                                     listenfd, connfd;
+        pid_t                           childpid;
+        socklen_t                       clilen;
+        struct sockaddr_in      cliaddr, servaddr;
+        void                            sig_chld_handler(int);
+        sigset_t set;
+        int sigret;
+	
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Starting Listener for messages from peer...***\n", ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
-	//catch_sigint();
 	
-	while (1)
-	{
-		sleep(5);
-	}
+	listenfd = Socket(AF_INET, SOCK_STREAM, 0);
+
+        bzero(&servaddr, sizeof(servaddr));
+        servaddr.sin_family      = AF_INET;
+        servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+        servaddr.sin_port        = htons(SERV_PORT);
+
+        Bind(listenfd, (SA *) &servaddr, sizeof(servaddr));
+
+        Listen(listenfd, LISTENQ);
+        
+	//while (1)
+	//	sleep(5);
+
+
+        sigemptyset(&set);
+        sigaddset(&set,SIGCHLD);
+		sigret = pthread_sigmask(SIG_UNBLOCK, &set, NULL); //block SIGCHLD here
+       		if (sigret == 0)
+		       	printf("SIGCHLD unblocked***\n");
+
+        catch_sigchld(); //set up SIGCHLD catcher
+
+	        for ( ; ; ) {
+                clilen = sizeof(cliaddr);
+                if ( (connfd = accept(listenfd, (SA *) &cliaddr, &clilen)) < 0) {
+                        if (errno == EINTR)
+                                continue;               /* back to for() */
+                        else
+                                err_sys("accept error");
+                }
+        	
+//		sigret = pthread_sigmask(SIG_UNBLOCK, &set, NULL); //block SIGCHLD here
+ //      		if (sigret == 0)
+//		       	printf("SIGCHLD unblocked***\n");
+
+                if ( (childpid = Fork()) == 0) {        /* child process */
+                        Close(listenfd);        /* close listening socket */
+                        str_echo(connfd);       /* process the request */
+                        exit(0);
+                }
+                Close(connfd);                  /* parent closes connected socket */
+        
+//		sigret = pthread_sigmask(SIG_BLOCK, &set, NULL); //block SIGCHLD here
+ //       	if (sigret == 0)
+  //              	printf("SIGCHLD nblocked***\n");
+        }
 
 	return ((char *)0);
 }
@@ -1415,12 +1541,22 @@ int main(int argc, char **argv)
 	sArgv_t sArgv;
 	time_t clk;
 	char ctime_buf[27];
+	 
+	sigset_t set;
+        int sigret;
+
 #ifdef RUN_KERNEL_MODULE
 	char *pDevName = "/dev/tuningMod";
 	int fd = 0; 
 	int vRetFromKernelThread, vRetFromKernelJoin;
 	pthread_t doRunTalkToKernelThread_id;
+
 #endif
+        sigemptyset(&set);
+        sigaddset(&set,SIGCHLD);
+        sigret = pthread_sigmask(SIG_BLOCK, &set, NULL); //block SIGCHLD here
+        if (sigret == 0)
+                printf("SIGCHLD blocked***\n");
 
 	sArgv.argc = argc;
 	sArgv.argv = argv;
