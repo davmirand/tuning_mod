@@ -21,12 +21,64 @@
 #include        <stdarg.h>              /* ANSI C header file */
 #include        <syslog.h>              /* for syslog() */
 
+void Pthread_mutex_lock(pthread_mutex_t *);
+void Pthread_mutex_unlock(pthread_mutex_t *);
+void Pthread_cond_signal(pthread_cond_t *cptr);
+void Pthread_cond_wait(pthread_cond_t *cptr, pthread_mutex_t *mptr);
+
+void
+Pthread_cond_signal(pthread_cond_t *cptr)
+{
+        int             n;
+
+        if ( (n = pthread_cond_signal(cptr)) == 0)
+                return;
+        errno = n;
+        err_sys("pthread_cond_signal error");
+}
+
+void
+Pthread_cond_wait(pthread_cond_t *cptr, pthread_mutex_t *mptr)
+{
+        int             n;
+
+        if ( (n = pthread_cond_wait(cptr, mptr)) == 0)
+                return;
+        errno = n;
+        err_sys("pthread_cond_wait error");
+}
+
+/* include Pthread_mutex_lock */
+void
+Pthread_mutex_lock(pthread_mutex_t *mptr)
+{
+        int             n;
+
+        if ( (n = pthread_mutex_lock(mptr)) == 0)
+                return;
+        errno = n;
+        err_sys("pthread_mutex_lock error");
+}
+/* end Pthread_mutex_lock */
+
+void
+Pthread_mutex_unlock(pthread_mutex_t *mptr)
+{
+        int             n;
+
+        if ( (n = pthread_mutex_unlock(mptr)) == 0)
+                return;
+        errno = n;
+        err_sys("pthread_mutex_unlock error");
+}
+
 int             daemon_proc;            /* set nonzero by daemon_init() */
 
 static void     err_doit(int, int, const char *, va_list);
 
 /* Fatal error related to system call
  * Print message and terminate */
+
 
 int
 err_sys(const char *fmt, ...)

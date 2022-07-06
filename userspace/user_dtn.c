@@ -21,8 +21,15 @@
 #include <linux/bpf.h>
 #include <arpa/inet.h>
 
-
+#include "unp.h"
 #include "user_dtn.h"
+
+pthread_mutex_t dtn_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t dtn_cond = PTHREAD_COND_INITIALIZER;
+static int cdone = 0;
+static unsigned int sleep_count = 5;
+struct args test;
+
 FILE * tunLogPtr = 0;
 void gettime(time_t *clk, char *ctime_buf)
 {
@@ -877,6 +884,15 @@ void check_req(http_s *h, char aResp[])
 		gettime(&clk, ctime_buf);
 		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change debug level of Tuning Module from %d to %d***\n", ctime_buf, phase2str(current_phase), vDebugLevel, vNewDebugLevel);
 		vDebugLevel = vNewDebugLevel;
+		if (vDebugLevel > 3)
+		{
+			Pthread_mutex_lock(&dtn_mutex);
+        		strcpy(test.msg, "Hello there!!!\n");
+        		test.len = htonl(sleep_count);
+        		cdone = 1;
+        		Pthread_cond_signal(&dtn_cond);
+        		Pthread_mutex_unlock(&dtn_mutex);
+		}
 		fprintf(tunLogPtr,"%s %s: ***New debug level is %d***\n", ctime_buf, phase2str(current_phase), vDebugLevel);
 		goto after_check;
 	}
@@ -1384,8 +1400,6 @@ restart_vfork:
 return ((char *) 0);
 }
 
-#include "unp.h"
-
 void sig_chld_handler(int signum)
 {
         pid_t pid;
@@ -1572,22 +1586,27 @@ void * fDoRunSendMessageToPeer(void * vargp)
 	char ctime_buf[27];
 	int sockfd;
 	struct sockaddr_in servaddr;
-	struct args test;
+	struct args test2;
 	int check = 0;
-	unsigned int sleep_count = 5;
 
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Starting Client for sending messages to source DTN...***\n", ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
 
 cli_again:
-	sleep(120);
-	strcpy(test.msg, "Hello there!!!\n");
+	Pthread_mutex_lock(&dtn_mutex);
+	//strcpy(test.msg, "Hello there!!!\n");
+	//test.len = htonl(sleep_count);
+	while(cdone == 0)
+		Pthread_cond_wait(&dtn_cond, &dtn_mutex);
+	memcpy(&test2,&test,sizeof(test2));
+	cdone = 0;
+	Pthread_mutex_unlock(&dtn_mutex);
+
 	//test.len = strlen(test.msg);
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Sending message %d to source DTN...***\n", ctime_buf, phase2str(current_phase), sleep_count);
 	fflush(tunLogPtr);
-	test.len = htonl(sleep_count);
 
 	sockfd = Socket(AF_INET, SOCK_STREAM, 0);
 
@@ -1598,11 +1617,10 @@ cli_again:
 
         if (Connect(sockfd, (SA *) &servaddr, sizeof(servaddr)))
 	{
-		sleep(2);
 		goto cli_again;
 	}
 
-        str_cli(sockfd, &test);         /* do it all */
+        str_cli(sockfd, &test2);         /* do it all */
         check = shutdown(sockfd, SHUT_WR);
 //      close(sockfd); - use shutdown instead of close
         if (!check)
