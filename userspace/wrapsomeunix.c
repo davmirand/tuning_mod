@@ -28,7 +28,7 @@ static void     err_doit(int, int, const char *, va_list);
 /* Fatal error related to system call
  * Print message and terminate */
 
-void
+int
 err_sys(const char *fmt, ...)
 {
         va_list         ap;
@@ -36,7 +36,8 @@ err_sys(const char *fmt, ...)
         va_start(ap, fmt);
         err_doit(1, LOG_ERR, fmt, ap);
         va_end(ap);
-        exit(1);
+//        exit(1);
+return 1;
 }
 
 /* Fatal error unrelated to system call
@@ -182,7 +183,7 @@ Bind(int fd, const struct sockaddr *sa, socklen_t salen)
 		err_sys("bind error");
 }
 
-void
+int
 Connect(int fd, const struct sockaddr *sa, socklen_t salen)
 {
 	if (connect(fd, sa, salen) < 0)

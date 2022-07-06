@@ -215,7 +215,7 @@ struct args {
 };
 /*****************/
 void str_cli(int sockfd, struct args *this_test);
-void     str_echo(int);
+void     process_request(int);
 void     read_sock(int);
 //void     str_cli(FILE *, int);
 const char              *Inet_ntop(int, const void *, char *, size_t);
@@ -259,7 +259,7 @@ void	 Fputs(const char *, FILE *);
 			/* prototypes for our socket wrapper functions: see {Sec errors} */
 int		 Accept(int, SA *, socklen_t *);
 void	 Bind(int, const SA *, socklen_t);
-void	 Connect(int, const SA *, socklen_t);
+int	 Connect(int, const SA *, socklen_t);
 void	 Getpeername(int, SA *, socklen_t *);
 void	 Getsockname(int, SA *, socklen_t *);
 void	 Getsockopt(int, int, int, void *, socklen_t *);
@@ -297,5 +297,5 @@ void	 Socketpair(int, int, int, int *);
 void	 Writen(int, void *, size_t);
 
 void	 err_quit(const char *, ...);
-void	 err_sys(const char *, ...);
+int	 err_sys(const char *, ...);
 #endif	/* __unp_h */

@@ -1410,6 +1410,26 @@ void catch_sigchld()
         sigaction(SIGCHLD, &act, NULL);
 }
 
+void ignore_sigchld()
+{
+	int sigret;
+	static struct sigaction act;
+        memset(&act, 0, sizeof(act));
+
+        act.sa_handler = SIG_IGN;;
+        sigemptyset(&act.sa_mask); //no additional signals will be blocked
+        act.sa_flags = 0;
+
+        sigret = sigaction(SIGCHLD, &act, NULL);
+	if (sigret == 0)
+		printf("SIGCHLD ignored***\n");
+	else
+		printf("SIGCHLD not ignored***\n");
+	
+	return;
+}
+
+
 ssize_t                                         /* Read "n" bytes from a descriptor. */
 readn(int fd, void *vptr, size_t n)
 {
@@ -1446,7 +1466,86 @@ Readn(int fd, void *ptr, size_t nbytes)
 }
 
 void
-str_echo(int sockfd)
+process_request(int sockfd)
+{
+	ssize_t                 n;
+	struct args             from_cli;
+	time_t clk;
+	char ctime_buf[27];
+
+	for ( ; ; ) 
+	{
+		if ( (n = Readn(sockfd, &from_cli, sizeof(from_cli))) == 0)
+			return;         /* connection closed by other end */
+
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received message %d from destination DTN...***\n", ctime_buf, phase2str(current_phase), ntohl(from_cli.len));
+		fflush(tunLogPtr);
+		printf("arg len = %d, arg buf = %s", ntohl(from_cli.len), from_cli.msg);
+	}
+}
+
+void * fDoRunGetMessageFromPeer(void * vargp)
+{
+	//int * fd = (int *) vargp;
+	time_t clk;
+	char ctime_buf[27];
+	int listenfd, connfd;
+	pid_t childpid;
+	socklen_t clilen;
+	struct sockaddr_in cliaddr, servaddr;
+#if 0
+        sigset_t set;
+        int sigret;
+#endif	
+	gettime(&clk, ctime_buf);
+	fprintf(tunLogPtr,"%s %s: ***Starting Listener for receiving messages destination DTN...***\n", ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
+	
+	listenfd = Socket(AF_INET, SOCK_STREAM, 0);
+
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family      = AF_INET;
+	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	servaddr.sin_port        = htons(gSource_Dtn_Port);
+
+	Bind(listenfd, (SA *) &servaddr, sizeof(servaddr));
+	Listen(listenfd, LISTENQ);
+#if 0
+	sigemptyset(&set);
+	sigaddset(&set,SIGCHLD);
+	sigret = pthread_sigmask(SIG_UNBLOCK, &set, NULL); //block SIGCHLD here
+	if (sigret == 0)
+		printf("SIGCHLD unblocked***\n");
+
+	catch_sigchld(); //set up SIGCHLD catcher
+#endif
+	for ( ; ; ) 
+	{
+		clilen = sizeof(cliaddr);
+		if ( (connfd = accept(listenfd, (SA *) &cliaddr, &clilen)) < 0) 
+		{
+			if (errno == EINTR)
+				continue;  /* back to for() */
+			else
+				err_sys("accept error");
+		}
+        	
+		if ( (childpid = Fork()) == 0) 
+		{        /* child process */
+			Close(listenfd); /* close listening socket */
+			process_request(connfd);/* process the request */
+			exit(0);
+		}
+		
+		Close(connfd); /* parent closes connected socket */
+	}
+
+	return ((char *)0);
+}
+
+void
+read_sock(int sockfd)
 {
         ssize_t                 n;
         struct args             from_cli;
@@ -1455,75 +1554,64 @@ str_echo(int sockfd)
                 if ( (n = Readn(sockfd, &from_cli, sizeof(from_cli))) == 0)
                         return;         /* connection closed by other end */
 
-                printf("arg len = %d, arg buf = %s", ntohl(from_cli.len), from_cli.msg);
+                printf("arg len = %d, arg buf = %s", from_cli.len, from_cli.msg);
                 //Writen(sockfd, &result, sizeof(result));
         }
 }
 
-void * fDoRunGetMessageFromPeer(void * vargp)
+void
+str_cli(int sockfd, struct args *this_test) //str_cli09
 {
-	//int * fd = (int *) vargp;
+        Writen(sockfd, this_test, sizeof(struct args));
+        return;
+}
+
+void * fDoRunSendMessageToPeer(void * vargp)
+{
 	time_t clk;
 	char ctime_buf[27];
-	int                                     listenfd, connfd;
-        pid_t                           childpid;
-        socklen_t                       clilen;
-        struct sockaddr_in      cliaddr, servaddr;
-        void                            sig_chld_handler(int);
-        sigset_t set;
-        int sigret;
-	
+	int sockfd;
+	struct sockaddr_in servaddr;
+	struct args test;
+	int check = 0;
+	unsigned int sleep_count = 5;
+
 	gettime(&clk, ctime_buf);
-	fprintf(tunLogPtr,"%s %s: ***Starting Listener for messages from peer...***\n", ctime_buf, phase2str(current_phase));
+	fprintf(tunLogPtr,"%s %s: ***Starting Client for sending messages to source DTN...***\n", ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
-	
-	listenfd = Socket(AF_INET, SOCK_STREAM, 0);
+
+cli_again:
+	sleep(120);
+	strcpy(test.msg, "Hello there!!!\n");
+	//test.len = strlen(test.msg);
+	gettime(&clk, ctime_buf);
+	fprintf(tunLogPtr,"%s %s: ***Sending message %d to source DTN...***\n", ctime_buf, phase2str(current_phase), sleep_count);
+	fflush(tunLogPtr);
+	test.len = htonl(sleep_count);
+
+	sockfd = Socket(AF_INET, SOCK_STREAM, 0);
 
         bzero(&servaddr, sizeof(servaddr));
-        servaddr.sin_family      = AF_INET;
-        servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-        servaddr.sin_port        = htons(SERV_PORT);
+        servaddr.sin_family = AF_INET;
+        servaddr.sin_port = htons(gSource_Dtn_Port);
+        Inet_pton(AF_INET, "127.0.0.1", &servaddr.sin_addr);
 
-        Bind(listenfd, (SA *) &servaddr, sizeof(servaddr));
+        if (Connect(sockfd, (SA *) &servaddr, sizeof(servaddr)))
+	{
+		sleep(2);
+		goto cli_again;
+	}
 
-        Listen(listenfd, LISTENQ);
-        
-	//while (1)
-	//	sleep(5);
+        str_cli(sockfd, &test);         /* do it all */
+        check = shutdown(sockfd, SHUT_WR);
+//      close(sockfd); - use shutdown instead of close
+        if (!check)
+                read_sock(sockfd); //final read to wait on close from other end
+        else
+                printf("shutdown failed, check = %d\n",check);
 
-
-        sigemptyset(&set);
-        sigaddset(&set,SIGCHLD);
-		sigret = pthread_sigmask(SIG_UNBLOCK, &set, NULL); //block SIGCHLD here
-       		if (sigret == 0)
-		       	printf("SIGCHLD unblocked***\n");
-
-        catch_sigchld(); //set up SIGCHLD catcher
-
-	        for ( ; ; ) {
-                clilen = sizeof(cliaddr);
-                if ( (connfd = accept(listenfd, (SA *) &cliaddr, &clilen)) < 0) {
-                        if (errno == EINTR)
-                                continue;               /* back to for() */
-                        else
-                                err_sys("accept error");
-                }
-        	
-//		sigret = pthread_sigmask(SIG_UNBLOCK, &set, NULL); //block SIGCHLD here
- //      		if (sigret == 0)
-//		       	printf("SIGCHLD unblocked***\n");
-
-                if ( (childpid = Fork()) == 0) {        /* child process */
-                        Close(listenfd);        /* close listening socket */
-                        str_echo(connfd);       /* process the request */
-                        exit(0);
-                }
-                Close(connfd);                  /* parent closes connected socket */
-        
-//		sigret = pthread_sigmask(SIG_BLOCK, &set, NULL); //block SIGCHLD here
- //       	if (sigret == 0)
-  //              	printf("SIGCHLD nblocked***\n");
-        }
+	sleep_count++;
+	goto cli_again;
 
 	return ((char *)0);
 }
@@ -1536,15 +1624,13 @@ int main(int argc, char **argv)
 	int vRetFromRunHelperDtnThread, vRetFromRunHelperDtnJoin;
 	int vRetFromRunFindHighestRttThread, vRetFromRunFindHighestRttJoin;
 	int vRetFromRunGetMessageFromPeerThread, vRetFromRunGetMessageFromPeerJoin;
+	int vRetFromRunSendMessageToPeerThread, vRetFromRunSendMessageToPeerJoin;
 	pthread_t doRunBpfCollectionThread_id, doRunHttpServerThread_id, doRunGetThresholds_id, doRunHelperDtn_id;
-	pthread_t doRunFindHighestRttThread_id, doRunGetMessageFromPeerThread_id;
+	pthread_t doRunFindHighestRttThread_id, doRunGetMessageFromPeerThread_id, doRunSendMessageToPeerThread_id;;
 	sArgv_t sArgv;
 	time_t clk;
 	char ctime_buf[27];
 	 
-	sigset_t set;
-        int sigret;
-
 #ifdef RUN_KERNEL_MODULE
 	char *pDevName = "/dev/tuningMod";
 	int fd = 0; 
@@ -1552,11 +1638,7 @@ int main(int argc, char **argv)
 	pthread_t doRunTalkToKernelThread_id;
 
 #endif
-        sigemptyset(&set);
-        sigaddset(&set,SIGCHLD);
-        sigret = pthread_sigmask(SIG_BLOCK, &set, NULL); //block SIGCHLD here
-        if (sigret == 0)
-                printf("SIGCHLD blocked***\n");
+	ignore_sigchld(); //won't leave zombie processes
 
 	sArgv.argc = argc;
 	sArgv.argv = argv;
@@ -1628,7 +1710,8 @@ int main(int argc, char **argv)
 	vRetFromRunFindHighestRttThread = pthread_create(&doRunFindHighestRttThread_id, NULL, fDoRunFindHighestRtt, &sArgv); 
 	//Listen for messages from destination DTN
 	vRetFromRunGetMessageFromPeerThread = pthread_create(&doRunGetMessageFromPeerThread_id, NULL, fDoRunGetMessageFromPeer, &sArgv); 
-	
+	//Send messages to source DTN
+	vRetFromRunSendMessageToPeerThread = pthread_create(&doRunSendMessageToPeerThread_id, NULL, fDoRunSendMessageToPeer, &sArgv); 
 
 #if defined(RUN_KERNEL_MODULE)
 	if (vRetFromKernelThread == 0)
@@ -1651,6 +1734,9 @@ int main(int argc, char **argv)
 	
 	if (vRetFromRunGetMessageFromPeerThread == 0)
     		vRetFromRunGetMessageFromPeerJoin = pthread_join(doRunGetMessageFromPeerThread_id, NULL);
+
+	if (vRetFromRunSendMessageToPeerThread == 0)
+    		vRetFromRunSendMessageToPeerJoin = pthread_join(doRunSendMessageToPeerThread_id, NULL);
 
 #if defined(RUN_KERNEL_MODULE)
 	if (fd > 0)
