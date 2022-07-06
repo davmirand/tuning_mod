@@ -1525,15 +1525,7 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 
 	Bind(listenfd, (SA *) &servaddr, sizeof(servaddr));
 	Listen(listenfd, LISTENQ);
-#if 0
-	sigemptyset(&set);
-	sigaddset(&set,SIGCHLD);
-	sigret = pthread_sigmask(SIG_UNBLOCK, &set, NULL); //block SIGCHLD here
-	if (sigret == 0)
-		printf("SIGCHLD unblocked***\n");
-
-	catch_sigchld(); //set up SIGCHLD catcher
-#endif
+	
 	for ( ; ; ) 
 	{
 		clilen = sizeof(cliaddr);
@@ -1558,26 +1550,24 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 	return ((char *)0);
 }
 
-void
-read_sock(int sockfd)
+void read_sock(int sockfd)
 {
-        ssize_t                 n;
-        struct args             from_cli;
+	ssize_t                 n;
+	struct args             from_cli;
 
-        for ( ; ; ) {
-                if ( (n = Readn(sockfd, &from_cli, sizeof(from_cli))) == 0)
-                        return;         /* connection closed by other end */
+	for ( ; ; ) 
+	{
+		if ( (n = Readn(sockfd, &from_cli, sizeof(from_cli))) == 0)
+			return;         /* connection closed by other end */
 
-                printf("arg len = %d, arg buf = %s", from_cli.len, from_cli.msg);
-                //Writen(sockfd, &result, sizeof(result));
-        }
+		printf("arg len = %d, arg buf = %s", from_cli.len, from_cli.msg);
+	}
 }
 
-void
-str_cli(int sockfd, struct args *this_test) //str_cli09
+void str_cli(int sockfd, struct args *this_test) //str_cli09
 {
-        Writen(sockfd, this_test, sizeof(struct args));
-        return;
+	Writen(sockfd, this_test, sizeof(struct args));
+	return;
 }
 
 void * fDoRunSendMessageToPeer(void * vargp)
@@ -1595,43 +1585,41 @@ void * fDoRunSendMessageToPeer(void * vargp)
 
 cli_again:
 	Pthread_mutex_lock(&dtn_mutex);
-	//strcpy(test.msg, "Hello there!!!\n");
-	//test.len = htonl(sleep_count);
+	
 	while(cdone == 0)
 		Pthread_cond_wait(&dtn_cond, &dtn_mutex);
 	memcpy(&test2,&test,sizeof(test2));
 	cdone = 0;
 	Pthread_mutex_unlock(&dtn_mutex);
 
-	//test.len = strlen(test.msg);
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Sending message %d to source DTN...***\n", ctime_buf, phase2str(current_phase), sleep_count);
 	fflush(tunLogPtr);
 
 	sockfd = Socket(AF_INET, SOCK_STREAM, 0);
 
-        bzero(&servaddr, sizeof(servaddr));
-        servaddr.sin_family = AF_INET;
-        servaddr.sin_port = htons(gSource_Dtn_Port);
-        Inet_pton(AF_INET, "127.0.0.1", &servaddr.sin_addr);
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_port = htons(gSource_Dtn_Port);
+	Inet_pton(AF_INET, "127.0.0.1", &servaddr.sin_addr);
 
-        if (Connect(sockfd, (SA *) &servaddr, sizeof(servaddr)))
+	if (Connect(sockfd, (SA *) &servaddr, sizeof(servaddr)))
 	{
 		goto cli_again;
 	}
 
-        str_cli(sockfd, &test2);         /* do it all */
-        check = shutdown(sockfd, SHUT_WR);
-//      close(sockfd); - use shutdown instead of close
-        if (!check)
-                read_sock(sockfd); //final read to wait on close from other end
-        else
-                printf("shutdown failed, check = %d\n",check);
+	str_cli(sockfd, &test2);         /* do it all */
+	check = shutdown(sockfd, SHUT_WR);
+//	close(sockfd); - use shutdown instead of close
+	if (!check)
+		read_sock(sockfd); //final read to wait on close from other end
+	else
+		printf("shutdown failed, check = %d\n",check);
 
 	sleep_count++;
 	goto cli_again;
 
-	return ((char *)0);
+return ((char *)0);
 }
 
 int main(int argc, char **argv) 
