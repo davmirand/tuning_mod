@@ -29,6 +29,7 @@ pthread_cond_t dtn_cond = PTHREAD_COND_INITIALIZER;
 static int cdone = 0;
 static unsigned int sleep_count = 5;
 struct args test;
+char aSrc_Ip[32];
 
 FILE * tunLogPtr = 0;
 void gettime(time_t *clk, char *ctime_buf)
@@ -512,7 +513,8 @@ void print_flow_key(struct flow_key *key)
 	fprintf(stdout, "\tvlan_id:%hu\n", key->vlan_id);
 #endif
 	//fprintf(stdout, "\tsrc_ip:%u\n", ntohl(key->src_ip));
-        fprintf(stdout, "\tsrc_ip = %d.%d.%d.%d\n",(unsigned char)t.a[0], t.a[1], t.a[2], t.a[3]);
+	sprintf(aSrc_Ip,"%u.%u.%u.%u", t.a[0], t.a[1], t.a[2], t.a[3]);
+        fprintf(stdout, "\tsrc_ip = %s\n",aSrc_Ip);
 }
 
 void print_hop_key(struct hop_key *key)
@@ -884,7 +886,7 @@ void check_req(http_s *h, char aResp[])
 		gettime(&clk, ctime_buf);
 		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change debug level of Tuning Module from %d to %d***\n", ctime_buf, phase2str(current_phase), vDebugLevel, vNewDebugLevel);
 		vDebugLevel = vNewDebugLevel;
-		if (vDebugLevel > 3)
+		if (vDebugLevel > 1)
 		{
 			Pthread_mutex_lock(&dtn_mutex);
         		strcpy(test.msg, "Hello there!!!\n");
@@ -1601,7 +1603,7 @@ cli_again:
 	bzero(&servaddr, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_port = htons(gSource_Dtn_Port);
-	Inet_pton(AF_INET, "127.0.0.1", &servaddr.sin_addr);
+	Inet_pton(AF_INET, aSrc_Ip, &servaddr.sin_addr);
 
 	if (Connect(sockfd, (SA *) &servaddr, sizeof(servaddr)))
 	{
