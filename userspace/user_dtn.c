@@ -30,6 +30,12 @@ static int cdone = 0;
 static unsigned int sleep_count = 5;
 struct args test;
 char aSrc_Ip[32];
+union uIP {
+	 __u32 y;
+       	 unsigned char  a[4];
+};
+
+static union uIP src_ip_addr;
 
 FILE * tunLogPtr = 0;
 void gettime(time_t *clk, char *ctime_buf)
@@ -157,9 +163,9 @@ static sFlowCounters_t sFlowCounters[NUM_OF_FLOWS_TO_KEEP_TRACK_OF];
 #define QUEUE_OCCUPANCY_DELTA 80
 #define FLOW_SINK_TIME_DELTA 1000000000
 #else
-static __u32 vHOP_LATENCY_DELTA = 120000;
-static __u32 vFLOW_LATENCY_DELTA = 280000;
-static __u32 vQUEUE_OCCUPANCY_DELTA = 6400; //can try 6000 //25000 ok when no MSS set - we currently set MSS to 7500
+static __u32 vHOP_LATENCY_DELTA = 500000; //was  120000
+static __u32 vFLOW_LATENCY_DELTA = 500000; //was 280000
+static __u32 vQUEUE_OCCUPANCY_DELTA = 30000; //was 6400
 static __u32 vFLOW_SINK_TIME_DELTA = 4000000000;
 #endif
 #define INT_DSCP (0x17)
@@ -454,6 +460,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		flow_threshold_update.hop_latency_threshold += ntohl(hop_metadata_ptr->egress_time) - ntohl(hop_metadata_ptr->ingress_time);
 		flow_hop_latency_threshold += ntohl(hop_metadata_ptr->egress_time) - ntohl(hop_metadata_ptr->ingress_time);
 		print_hop_key(&hop_key);
+		src_ip_addr.y = ntohl(hop_key.flow_key.src_ip);
 		hop_key.hop_index++;
 
 	}
@@ -496,32 +503,24 @@ void lost_func(struct threshold_maps *ctx, int cpu, __u64 cnt)
 	fflush(tunLogPtr);
 }
 	
-union uu {
-	 __u32 y;
-       	 unsigned char  a[4];
-};
-
 void print_flow_key(struct flow_key *key)
 {
-	union   uu t;
-        t.y = ntohl(key->src_ip);
-
 	fprintf(stdout, "Flow Key:\n");
-#if 0
+#if 1
 	fprintf(stdout, "\tegress_switch:%X\n", key->switch_id);
 	fprintf(stdout, "\tegress_port:%hu\n", key->egress_port);
 	fprintf(stdout, "\tvlan_id:%hu\n", key->vlan_id);
+
+	if (src_ip_addr.y)
+		fprintf(stdout,"%u.%u.%u.%u", src_ip_addr.a[0], src_ip_addr.a[1], src_ip_addr.a[2], src_ip_addr.a[3]);
 #endif
-	//fprintf(stdout, "\tsrc_ip:%u\n", ntohl(key->src_ip));
-	sprintf(aSrc_Ip,"%u.%u.%u.%u", t.a[0], t.a[1], t.a[2], t.a[3]);
-        fprintf(stdout, "\tsrc_ip = %s\n",aSrc_Ip);
 }
 
 void print_hop_key(struct hop_key *key)
 {
-	if (vDebugLevel > 0 )
+	if (vDebugLevel > 3 )
 	{
-		//fprintf(stdout, "Hop Key:\n");
+		fprintf(stdout, "Hop Key:\n");
 		print_flow_key(&(key->flow_key));
 		fprintf(stdout, "\thop_index: %X\n", key->hop_index);
 	}
@@ -886,7 +885,7 @@ void check_req(http_s *h, char aResp[])
 		gettime(&clk, ctime_buf);
 		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change debug level of Tuning Module from %d to %d***\n", ctime_buf, phase2str(current_phase), vDebugLevel, vNewDebugLevel);
 		vDebugLevel = vNewDebugLevel;
-		if (vDebugLevel > 1)
+		if (vDebugLevel > 1 && src_ip_addr.y)
 		{
 			Pthread_mutex_lock(&dtn_mutex);
         		strcpy(test.msg, "Hello there!!!\n");
@@ -1336,7 +1335,7 @@ finish_up:
 				printf("***highest rtt is %.3fms\n", highest_rtt/(double)1000);
 		}
 
-		sleep(3); //check again in 5 secs
+		sleep(3); //check again in 3 secs
 		goto rttstart;
 
 return ((char *) 0);
@@ -1603,7 +1602,16 @@ cli_again:
 	bzero(&servaddr, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_port = htons(gSource_Dtn_Port);
-	Inet_pton(AF_INET, aSrc_Ip, &servaddr.sin_addr);
+	if (src_ip_addr.y)
+	{
+		sprintf(aSrc_Ip,"%u.%u.%u.%u", src_ip_addr.a[0], src_ip_addr.a[1], src_ip_addr.a[2], src_ip_addr.a[3]);
+		Inet_pton(AF_INET, aSrc_Ip, &servaddr.sin_addr);
+	}
+	else
+	{
+		fprintf(stdout, "Source (Peer) IP address is zero. Can't connect to it****\n");
+		goto cli_again;
+	}
 
 	if (Connect(sockfd, (SA *) &servaddr, sizeof(servaddr)))
 	{
@@ -1697,6 +1705,8 @@ int main(int argc, char **argv)
 	}
 #endif
 	memset(sFlowCounters,0,sizeof(sFlowCounters));
+	memset(aSrc_Ip,0,sizeof(aSrc_Ip));
+	src_ip_addr.y = 0;
 
 	fflush(tunLogPtr);
 
