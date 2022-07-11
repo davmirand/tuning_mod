@@ -45,6 +45,23 @@ void gettime(time_t *clk, char *ctime_buf)
 	ctime_buf[24] = ':';
 }
 
+static void timerHandler( int sig, siginfo_t *si, void *uc )
+{
+	timer_t *tidp;
+	tidp = si->si_value.sival_ptr;
+
+	if ( *tidp == firstTimerID )
+		firstCB(sig, si, uc);
+	else 
+		if ( *tidp == secondTimerID )
+			secondCB(sig, si, uc);
+		else 
+			if ( *tidp == thirdTimerID )
+				thirdCB(sig, si, uc);
+
+	return;
+}
+
 static int makeTimer( char *name, timer_t *timerID, int expireMS, int intervalMS )
 {
 	struct sigevent         te;
@@ -332,6 +349,32 @@ exit_program: {
 
 static int gFlowCountUsed = 0;
 static __u32 curr_hop_key_hop_index = 0;
+
+#if 0
+void EvaluateQOcc_and_HopDelay(__u32 hop_key_hop_index)
+{
+	time_t clk;
+	char ctime_buf[27];
+	int vRetTimer;
+
+	if (!vTimerIsSet)
+	{
+		vRetTimer = setitimer(ITIMER_REAL, &sStartTimer, (struct itimerval *)NULL);	
+		if (!vRetTimer)
+		{
+			vTimerIsSet = 1;
+			curr_hop_key_hop_index = hop_key_hop_index;
+			if (vDebugLevel > 0)
+			{
+				gettime(&clk, ctime_buf);
+				printf("%s %s: ***Timer set to %d microseconds for Queue Occupancy and HopDelay over threshholds***\n",ctime_buf, phase2str(current_phase), gInterval); 
+			}
+		}
+	}
+
+	return;
+}
+#endif
 
 void EvaluateQOcc_and_HopDelay(__u32 hop_key_hop_index)
 {
