@@ -37,6 +37,9 @@ union uIP {
 
 static union uIP src_ip_addr;
 
+void qOCC_Hop_TimerID_Handler(int signum, siginfo_t *info, void *ptr);
+static void timerHandler( int sig, siginfo_t *si, void *uc );
+
 FILE * tunLogPtr = 0;
 void gettime(time_t *clk, char *ctime_buf)
 {
@@ -45,19 +48,15 @@ void gettime(time_t *clk, char *ctime_buf)
 	ctime_buf[24] = ':';
 }
 
+timer_t qOCC_Hop_TimerID;
+
 static void timerHandler( int sig, siginfo_t *si, void *uc )
 {
 	timer_t *tidp;
 	tidp = si->si_value.sival_ptr;
 
-	if ( *tidp == firstTimerID )
-		firstCB(sig, si, uc);
-	else 
-		if ( *tidp == secondTimerID )
-			secondCB(sig, si, uc);
-		else 
-			if ( *tidp == thirdTimerID )
-				thirdCB(sig, si, uc);
+	if ( *tidp == qOCC_Hop_TimerID )
+		qOCC_Hop_TimerID_Handler(sig, si, uc);
 
 	return;
 }
@@ -75,7 +74,7 @@ static int makeTimer( char *name, timer_t *timerID, int expireMS, int intervalMS
 	sigemptyset(&sa.sa_mask);
 	if (sigaction(sigNo, &sa, NULL) == -1)
 	{
-		fprintf(stderr, "%s: Failed to setup signal handling for %s.\n", PROG, name);
+		fprintf(stderr, "Err***: Failed to setup signal handling for %s.\n", name);
 		return(-1);
 	}
 
@@ -89,7 +88,7 @@ static int makeTimer( char *name, timer_t *timerID, int expireMS, int intervalMS
 	its.it_interval.tv_nsec = intervalMS * 1000000;
 	its.it_value.tv_sec = 0;
 	its.it_value.tv_nsec = expireMS * 1000000;
-	timer_settime(*timerID, 0, &its, NULL);
+	//timer_settime(*timerID, 0, &its, NULL);
 
 	return(0);
 }
@@ -228,11 +227,13 @@ void print_hop_key(struct hop_key *key);
 void record_activity(void); 
 
 #define SIGALRM_MSG "SIGALRM received.\n"
+#if 0
 struct itimerval sStartTimer;
 struct itimerval sDisableTimer;
 int vTimerIsSet = 0;
+#endif
 
-void sig_alrm_handler(int signum, siginfo_t *info, void *ptr)
+void qOCC_Hop_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 {
 	time_t clk;
 	char ctime_buf[27];
@@ -260,18 +261,26 @@ void * fDoRunBpfCollectionPerfEventArray2(void * vargp)
 {
 	time_t clk;
 	char ctime_buf[27];
+	int timerRc = 0;
 	int perf_output_map;
 	int int_dscp_map;
 	struct perf_buffer *pb;
 	struct threshold_maps maps = {};
 
-	memset (&sStartTimer,0,sizeof(struct itimerval));
-	memset (&sDisableTimer,0,sizeof(struct itimerval));
+//	memset (&sStartTimer,0,sizeof(struct itimerval));
+//	memset (&sDisableTimer,0,sizeof(struct itimerval));
 
 	//sStartTimer.it_value.tv_sec = gInterval; //global evaluation timer
-	sStartTimer.it_value.tv_usec = gInterval; //global evaluation timer
+//	sStartTimer.it_value.tv_usec = gInterval; //global evaluation timer
+//
 
-	catch_sigalrm(); //set up SIGALRM catcher
+	//catch_sigalrm(); //set up SIGALRM catcher
+	timerRc = makeTimer("qOCC_Hop_TimerID", &qOCC_Hop_TimerID, 40, 40);
+	if (timerRC)
+	{
+		fprintf(tunLogPtr, "%s %s: Problem creating timer.\n", ctime_buf, phase2str(current_phase));
+		return ((char *)1);
+	}
 
 open_maps: {
 	gettime(&clk, ctime_buf);
@@ -387,6 +396,7 @@ void EvaluateQOcc_and_HopDelay(__u32 hop_key_hop_index)
 		vRetTimer = setitimer(ITIMER_REAL, &sStartTimer, (struct itimerval *)NULL);	
 		if (!vRetTimer)
 		{
+			 //timer_settime(*timerID, 0, &its, NULL);
 			vTimerIsSet = 1;
 			curr_hop_key_hop_index = hop_key_hop_index;
 			if (vDebugLevel > 0)
