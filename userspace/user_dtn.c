@@ -59,6 +59,8 @@ static void timerHandler( int sig, siginfo_t *si, void *uc )
 
 	if ( *tidp == qOCC_Hop_TimerID )
 		qOCC_Hop_TimerID_Handler(sig, si, uc);
+	else
+		fprintf(stdout, "Timer handler incorrect***\n");
 
 	return;
 }
@@ -68,6 +70,8 @@ static int makeTimer( char *name, timer_t *timerID, int expires_usecs)
 	struct sigevent         te;
 	struct sigaction        sa;
 	int                     sigNo = SIGRTMIN;
+	long 			sec   = ((long)expires_usecs * 1000L) / 1000000000L;
+       	long 			nsec  = ((long)expires_usecs * 1000L) % 1000000000L; //going fron micro to nano
 
 	/* Set up signal handler. */
 	sa.sa_flags = SA_SIGINFO;
@@ -85,8 +89,10 @@ static int makeTimer( char *name, timer_t *timerID, int expires_usecs)
 	te.sigev_value.sival_ptr = timerID;
 	timer_create(CLOCK_REALTIME, &te, timerID);
 
-	sStartTimer.it_value.tv_sec = expires_usecs / 1000000; //this real measurement is in nanosecs - see man pages
-	sStartTimer.it_value.tv_nsec = (expires_usecs * 1000000) % 1000; //since I'm going from micro to nano
+	sStartTimer.it_value.tv_sec = sec;
+	sStartTimer.it_value.tv_nsec = nsec;
+	//sStartTimer.it_value.tv_nsec = 999000000; //since I'm going from micro to nano
+	fprintf(stdout,"sec in timer = %ld, nsec = %ld, expires_usec = %d\n", sStartTimer.it_value.tv_sec, sStartTimer.it_value.tv_nsec, expires_usecs);
 	//timer_settime(*timerID, 0, &its, NULL);
 
 	return(0);
@@ -237,8 +243,9 @@ void qOCC_Hop_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 	//***Do something here ***//
 	vTimerIsSet = 0;
 	record_activity();
-//	write(STDERR_FILENO, SIGALRM_MSG, sizeof(SIGALRM_MSG));
-//	exit(0);
+	fflush(tunLogPtr);
+	
+	return;
 }
 
 #if 0
@@ -277,6 +284,8 @@ void * fDoRunBpfCollectionPerfEventArray2(void * vargp)
 		fprintf(tunLogPtr, "%s %s: Problem creating timer.\n", ctime_buf, phase2str(current_phase));
 		return ((char *)1);
 	}
+	else
+		fprintf(tunLogPtr, "%s %s: timer created.\n", ctime_buf, phase2str(current_phase));
 
 open_maps: {
 	gettime(&clk, ctime_buf);
@@ -390,7 +399,7 @@ void EvaluateQOcc_and_HopDelay(__u32 hop_key_hop_index)
 	if (!vTimerIsSet)
 	{
 		//vRetTimer = setitimer(ITIMER_REAL, &sStartTimer, (struct itimerval *)NULL);	
-		vRetTimer = timer_settime(&qOCC_Hop_TimerID, 0, &sStartTimer, (struct itimerspec *)NULL);
+		vRetTimer = timer_settime(qOCC_Hop_TimerID, 0, &sStartTimer, (struct itimerspec *)NULL);
 		if (!vRetTimer)
 		{
 			 //timer_settime(*timerID, 0, &its, NULL);
@@ -402,6 +411,9 @@ void EvaluateQOcc_and_HopDelay(__u32 hop_key_hop_index)
 				printf("%s %s: ***Timer set to %d microseconds for Queue Occupancy and HopDelay over threshholds***\n",ctime_buf, phase2str(current_phase), gInterval); 
 			}
 		}
+		else
+			printf("%s %s: ***could not set Timer, vRetTimer = %d,  errno = to %d***\n",ctime_buf, phase2str(current_phase), vRetTimer, errno); 
+
 	}
 
 	return;
@@ -494,7 +506,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 				if (vTimerIsSet)
 				{
 					//setitimer(ITIMER_REAL, &sDisableTimer, (struct itimerval *)NULL);	
-					timer_settime(&qOCC_Hop_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
+					timer_settime(qOCC_Hop_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
 					vTimerIsSet = 0;
 				}
 
@@ -977,6 +989,22 @@ void check_req(http_s *h, char aResp[])
         		Pthread_cond_signal(&dtn_cond);
         		Pthread_mutex_unlock(&dtn_mutex);
 		}
+
+		if (vDebugLevel > 1 && vDebugLevel < 3)
+		{
+			EvaluateQOcc_and_HopDelay(2);
+		}
+
+		
+		if (vDebugLevel > 3)
+		{
+			timer_settime(qOCC_Hop_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
+			vTimerIsSet = 0;
+			fprintf(tunLogPtr,"%s %s: ***Timer disabled****\n", ctime_buf, phase2str(current_phase));
+			fflush(tunLogPtr);
+		}
+
+
 		fprintf(tunLogPtr,"%s %s: ***New debug level is %d***\n", ctime_buf, phase2str(current_phase), vDebugLevel);
 		goto after_check;
 	}
