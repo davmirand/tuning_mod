@@ -49,6 +49,8 @@ void gettime(time_t *clk, char *ctime_buf)
 }
 
 timer_t qOCC_Hop_TimerID;
+struct itimerspec sStartTimer;
+struct itimerspec sDisableTimer;
 
 static void timerHandler( int sig, siginfo_t *si, void *uc )
 {
@@ -61,10 +63,9 @@ static void timerHandler( int sig, siginfo_t *si, void *uc )
 	return;
 }
 
-static int makeTimer( char *name, timer_t *timerID, int expireMS, int intervalMS )
+static int makeTimer( char *name, timer_t *timerID, int expires_usecs)
 {
 	struct sigevent         te;
-	struct itimerspec       its;
 	struct sigaction        sa;
 	int                     sigNo = SIGRTMIN;
 
@@ -84,10 +85,8 @@ static int makeTimer( char *name, timer_t *timerID, int expireMS, int intervalMS
 	te.sigev_value.sival_ptr = timerID;
 	timer_create(CLOCK_REALTIME, &te, timerID);
 
-	its.it_interval.tv_sec = 0;
-	its.it_interval.tv_nsec = intervalMS * 1000000;
-	its.it_value.tv_sec = 0;
-	its.it_value.tv_nsec = expireMS * 1000000;
+	sStartTimer.it_value.tv_sec = expires_usecs / 1000000; //this real measurement is in nanosecs - see man pages
+	sStartTimer.it_value.tv_nsec = (expires_usecs * 1000000) % 1000; //since I'm going from micro to nano
 	//timer_settime(*timerID, 0, &its, NULL);
 
 	return(0);
@@ -227,11 +226,7 @@ void print_hop_key(struct hop_key *key);
 void record_activity(void); 
 
 #define SIGALRM_MSG "SIGALRM received.\n"
-#if 0
-struct itimerval sStartTimer;
-struct itimerval sDisableTimer;
 int vTimerIsSet = 0;
-#endif
 
 void qOCC_Hop_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 {
@@ -246,6 +241,7 @@ void qOCC_Hop_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 //	exit(0);
 }
 
+#if 0
 void catch_sigalrm()
 {
 	static struct sigaction _sigact;
@@ -256,7 +252,8 @@ void catch_sigalrm()
 
 	sigaction(SIGALRM, &_sigact, NULL);
 }
-	
+#endif
+
 void * fDoRunBpfCollectionPerfEventArray2(void * vargp)
 {
 	time_t clk;
@@ -267,16 +264,15 @@ void * fDoRunBpfCollectionPerfEventArray2(void * vargp)
 	struct perf_buffer *pb;
 	struct threshold_maps maps = {};
 
-//	memset (&sStartTimer,0,sizeof(struct itimerval));
-//	memset (&sDisableTimer,0,sizeof(struct itimerval));
+	memset (&sStartTimer,0,sizeof(struct itimerspec));
+	memset (&sDisableTimer,0,sizeof(struct itimerspec));
 
-	//sStartTimer.it_value.tv_sec = gInterval; //global evaluation timer
+//	sStartTimer.it_value.tv_sec = gInterval; //global evaluation timer
 //	sStartTimer.it_value.tv_usec = gInterval; //global evaluation timer
-//
 
 	//catch_sigalrm(); //set up SIGALRM catcher
-	timerRc = makeTimer("qOCC_Hop_TimerID", &qOCC_Hop_TimerID, 40, 40);
-	if (timerRC)
+	timerRc = makeTimer("qOCC_Hop_TimerID", &qOCC_Hop_TimerID, gInterval);
+	if (timerRc)
 	{
 		fprintf(tunLogPtr, "%s %s: Problem creating timer.\n", ctime_buf, phase2str(current_phase));
 		return ((char *)1);
@@ -393,7 +389,8 @@ void EvaluateQOcc_and_HopDelay(__u32 hop_key_hop_index)
 
 	if (!vTimerIsSet)
 	{
-		vRetTimer = setitimer(ITIMER_REAL, &sStartTimer, (struct itimerval *)NULL);	
+		//vRetTimer = setitimer(ITIMER_REAL, &sStartTimer, (struct itimerval *)NULL);	
+		vRetTimer = timer_settime(&qOCC_Hop_TimerID, 0, &sStartTimer, (struct itimerspec *)NULL);
 		if (!vRetTimer)
 		{
 			 //timer_settime(*timerID, 0, &its, NULL);
@@ -496,7 +493,8 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 			{
 				if (vTimerIsSet)
 				{
-					setitimer(ITIMER_REAL, &sDisableTimer, (struct itimerval *)NULL);	
+					//setitimer(ITIMER_REAL, &sDisableTimer, (struct itimerval *)NULL);	
+					timer_settime(&qOCC_Hop_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
 					vTimerIsSet = 0;
 				}
 
