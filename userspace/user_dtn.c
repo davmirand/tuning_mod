@@ -49,6 +49,8 @@ void gettime(time_t *clk, char *ctime_buf)
 }
 
 timer_t qOCC_Hop_TimerID;
+timer_t rTT_TimerID;
+
 struct itimerspec sStartTimer;
 struct itimerspec sDisableTimer;
 
@@ -91,9 +93,7 @@ static int makeTimer( char *name, timer_t *timerID, int expires_usecs)
 
 	sStartTimer.it_value.tv_sec = sec;
 	sStartTimer.it_value.tv_nsec = nsec;
-	//sStartTimer.it_value.tv_nsec = 999000000; //since I'm going from micro to nano
 	fprintf(stdout,"sec in timer = %ld, nsec = %ld, expires_usec = %d\n", sStartTimer.it_value.tv_sec, sStartTimer.it_value.tv_nsec, expires_usecs);
-	//timer_settime(*timerID, 0, &its, NULL);
 
 	return(0);
 }
@@ -248,19 +248,6 @@ void qOCC_Hop_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 	return;
 }
 
-#if 0
-void catch_sigalrm()
-{
-	static struct sigaction _sigact;
-
-	memset(&_sigact, 0, sizeof(_sigact));
-	_sigact.sa_sigaction = sig_alrm_handler;
-	_sigact.sa_flags = SA_SIGINFO;
-
-	sigaction(SIGALRM, &_sigact, NULL);
-}
-#endif
-
 void * fDoRunBpfCollectionPerfEventArray2(void * vargp)
 {
 	time_t clk;
@@ -274,14 +261,10 @@ void * fDoRunBpfCollectionPerfEventArray2(void * vargp)
 	memset (&sStartTimer,0,sizeof(struct itimerspec));
 	memset (&sDisableTimer,0,sizeof(struct itimerspec));
 
-//	sStartTimer.it_value.tv_sec = gInterval; //global evaluation timer
-//	sStartTimer.it_value.tv_usec = gInterval; //global evaluation timer
-
-	//catch_sigalrm(); //set up SIGALRM catcher
 	timerRc = makeTimer("qOCC_Hop_TimerID", &qOCC_Hop_TimerID, gInterval);
 	if (timerRc)
 	{
-		fprintf(tunLogPtr, "%s %s: Problem creating timer.\n", ctime_buf, phase2str(current_phase));
+		fprintf(tunLogPtr, "%s %s: Problem creating timer *qOCC_Hop_TimerID*.\n", ctime_buf, phase2str(current_phase));
 		return ((char *)1);
 	}
 	else
@@ -364,7 +347,6 @@ exit_program: {
 static int gFlowCountUsed = 0;
 static __u32 curr_hop_key_hop_index = 0;
 
-#if 0
 void EvaluateQOcc_and_HopDelay(__u32 hop_key_hop_index)
 {
 	time_t clk;
@@ -373,36 +355,9 @@ void EvaluateQOcc_and_HopDelay(__u32 hop_key_hop_index)
 
 	if (!vTimerIsSet)
 	{
-		vRetTimer = setitimer(ITIMER_REAL, &sStartTimer, (struct itimerval *)NULL);	
-		if (!vRetTimer)
-		{
-			vTimerIsSet = 1;
-			curr_hop_key_hop_index = hop_key_hop_index;
-			if (vDebugLevel > 0)
-			{
-				gettime(&clk, ctime_buf);
-				printf("%s %s: ***Timer set to %d microseconds for Queue Occupancy and HopDelay over threshholds***\n",ctime_buf, phase2str(current_phase), gInterval); 
-			}
-		}
-	}
-
-	return;
-}
-#endif
-
-void EvaluateQOcc_and_HopDelay(__u32 hop_key_hop_index)
-{
-	time_t clk;
-	char ctime_buf[27];
-	int vRetTimer;
-
-	if (!vTimerIsSet)
-	{
-		//vRetTimer = setitimer(ITIMER_REAL, &sStartTimer, (struct itimerval *)NULL);	
 		vRetTimer = timer_settime(qOCC_Hop_TimerID, 0, &sStartTimer, (struct itimerspec *)NULL);
 		if (!vRetTimer)
 		{
-			 //timer_settime(*timerID, 0, &its, NULL);
 			vTimerIsSet = 1;
 			curr_hop_key_hop_index = hop_key_hop_index;
 			if (vDebugLevel > 0)
@@ -905,7 +860,6 @@ void * fDoRunTalkToKernel(void * vargp)
 
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Starting communication with kernel module...***\n", ctime_buf, phase2str(current_phase));
-	//catch_sigint();
 	while(1) 
 	{	
 		strcpy(aMessage,"This is a message...");
@@ -1241,7 +1195,6 @@ void * fDoRunHttpServer(void * vargp)
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Starting Http Server ...***\n", ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
-	//catch_sigint();
 	initialize_http_service();
 	/* start facil */
 	fio_start(.threads = 1, .workers = 0);
