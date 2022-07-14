@@ -79,7 +79,6 @@ In order to compile and work with the Tuning Module, do the following:
 		*	```git submodule init```
 		*	```git submodule update```
 
--	Run ```make``` in ```testing/``` and use loader to load the bpf file into the kernel
 -	Run ```make``` in ```userspace/``` and start the Tuning Module eg. ```sudo ./user_dtn -d enp6s0```
 	* 	```/tmp/tuningLog``` will contain all the relevant output 
 -	Run ```make``` in ```cli/```. This will create a directory call ```tmp``` which contains the binary ```tuncli```.
