@@ -1,5 +1,3 @@
-#define USING_PERF_EVENT_ARRAY2
-
 #include <stdio.h>
 #include <errno.h>
 #include <sys/types.h>
@@ -176,7 +174,6 @@ typedef struct {
 	char ** argv;
 } sArgv_t;
 
-#ifdef USING_PERF_EVENT_ARRAY2
 #include "../../c++-int-sink/int-sink/src/shared/int_defs.h"
 #include "../../c++-int-sink/int-sink/src/shared/filter_defs.h"
 
@@ -574,8 +571,6 @@ void print_hop_key(struct hop_key *key)
 		fprintf(stdout, "\thop_index: %X\n", key->hop_index);
 	}
 }
-
-#endif
 /* End of bpf stuff ****/
 
 /***** HTTP *************/
