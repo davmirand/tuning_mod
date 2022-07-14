@@ -943,21 +943,6 @@ void check_req(http_s *h, char aResp[])
         		Pthread_mutex_unlock(&dtn_mutex);
 		}
 
-		if (vDebugLevel > 1 && vDebugLevel < 3)
-		{
-			EvaluateQOcc_and_HopDelay(2);
-		}
-
-		
-		if (vDebugLevel > 3)
-		{
-			timer_settime(qOCC_Hop_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
-			vTimerIsSet = 0;
-			fprintf(tunLogPtr,"%s %s: ***Timer disabled****\n", ctime_buf, phase2str(current_phase));
-			fflush(tunLogPtr);
-		}
-
-
 		fprintf(tunLogPtr,"%s %s: ***New debug level is %d***\n", ctime_buf, phase2str(current_phase), vDebugLevel);
 		goto after_check;
 	}
