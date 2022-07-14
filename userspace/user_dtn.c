@@ -460,7 +460,6 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 			{
 				if (vTimerIsSet)
 				{
-					//setitimer(ITIMER_REAL, &sDisableTimer, (struct itimerval *)NULL);	
 					timer_settime(qOCC_Hop_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
 					vTimerIsSet = 0;
 				}
