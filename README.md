@@ -64,10 +64,6 @@ There are a few relevant directories here:
 ```userspace```
 -	Contains the source that will eventually run as the Tuning Module
 
-```testing```
--	Contains source for a loader and bpf kernel file that can be used for testing the Tuning Module
--	Also contains source for a LKM (Loadable Kernel Module) that could be integrated with the Tuning Module if ever needed.
-
 ```cli```
 -	Contains source for a HTTP client that is used as a CLI for sending instructions to
 	or receiving information from the Tuning Module
