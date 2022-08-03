@@ -22,6 +22,8 @@
 #include "unp.h"
 #include "user_dtn.h"
 
+static char vIamDest = 0;
+
 pthread_mutex_t dtn_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t dtn_cond = PTHREAD_COND_INITIALIZER;
 static int cdone = 0;
@@ -312,6 +314,7 @@ perf_event_loop: {
 	do {
 	//err = perf_buffer__poll(pb, 500);
 	err = perf_buffer__poll(pb, 250);
+	vIamDest = 0;
 	}
 	while(err >= 0);
 	fprintf(tunLogPtr,"%s %s: Exited perf event loop with err %d..\n", ctime_buf, phase2str(current_phase), -err);
@@ -398,6 +401,8 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 	long long flow_hop_latency_threshold = 0;
 	time_t clk;
 	char ctime_buf[27];
+
+	vIamDest = 1;
 
 	if(data + data_offset + sizeof(hop_key) > data_end) return;
 
@@ -994,7 +999,8 @@ start:
 
 			if (vDebugLevel > 2)
 			{
-				printf("DEV %s: TX : %lu kb/s RX : %lu kb/s, RX_MISD_ERRS/s : %lu, secs_passed %lu\n", netDevice, tx_bits_per_sec, rx_bits_per_sec, rx_missed_errs_tot/secs_passed, secs_passed);
+				//printf("DEV %s: TX : %lu kb/s RX : %lu kb/s, RX_MISD_ERRS/s : %lu, secs_passed %lu\n", netDevice, tx_bits_per_sec, rx_bits_per_sec, rx_missed_errs_tot/secs_passed, secs_passed);
+				printf("DEV %s: TX : %lu kb/s RX : %lu kb/s, IamDest : %c, secs_passed %lu\n", netDevice, tx_bits_per_sec, rx_bits_per_sec, vIamDest, secs_passed);
 			}
 			break;
 		}
