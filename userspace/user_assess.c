@@ -909,7 +909,7 @@ void fDoIrqBalance()
 	{
 		int save_errno = errno;
 		gettime(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: Could not open file /tmp/BIOS.cfgfile to work out CPU speed, errno = %d...\n", ctime_buf, phase2str(current_phase), save_errno);
+		fprintf(tunLogPtr,"%s %s: Could not open file /tmp/BIOS.cfgfile to see irqbalance, errno = %d...\n", ctime_buf, phase2str(current_phase), save_errno);
 	}
 	else
 		{

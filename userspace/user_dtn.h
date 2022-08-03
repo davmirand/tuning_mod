@@ -18,6 +18,7 @@ extern int gAPI_listen_port;
 extern int gSource_Dtn_Port;
 extern char gTuningMode;
 extern char netDevice[];
+extern int netDeviceSpeed;
 
 
 

@@ -22,12 +22,11 @@
 #include "unp.h"
 #include "user_dtn.h"
 
-static char vIamDest = 0;
-
 pthread_mutex_t dtn_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t dtn_cond = PTHREAD_COND_INITIALIZER;
 static int cdone = 0;
 static unsigned int sleep_count = 5;
+static double vGoodBitrateValue = 0.0;
 struct args test;
 char aSrc_Ip[32];
 union uIP {
@@ -314,7 +313,6 @@ perf_event_loop: {
 	do {
 	//err = perf_buffer__poll(pb, 500);
 	err = perf_buffer__poll(pb, 250);
-	vIamDest = 0;
 	}
 	while(err >= 0);
 	fprintf(tunLogPtr,"%s %s: Exited perf event loop with err %d..\n", ctime_buf, phase2str(current_phase), -err);
@@ -401,8 +399,6 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 	long long flow_hop_latency_threshold = 0;
 	time_t clk;
 	char ctime_buf[27];
-
-	vIamDest = 1;
 
 	if(data + data_offset + sizeof(hop_key) > data_end) return;
 
@@ -891,6 +887,99 @@ void * fDoRunHttpServer(void * vargp)
 	return ((char *)0);
 }
 
+#define BITRATE_INTERVAL 5
+void check_if_bitrate_too_low(double average_tx_Gbits_per_sec);
+void check_if_bitrate_too_low(double average_tx_Gbits_per_sec)
+{
+	time_t clk;
+	char ctime_buf[27];
+	char buffer[128];
+	FILE *pipe;
+	int before = 0;
+	time_t secs_passed = 1;
+	unsigned long rx_missed_errs_before;
+	unsigned long rx_before;
+	unsigned long tx_before;
+	char try[1024];
+	int stage = 0;
+
+        gettime(&clk, ctime_buf);
+	if (average_tx_Gbits_per_sec < vGoodBitrateValue)
+	{
+
+		if (current_phase == TUNING)
+		{
+			fprintf(tunLogPtr, "%s %s: Trying to tune wmem, but already TUNING something else.  Will retry later if still need TUNING***\n",ctime_buf, phase2str(current_phase));
+
+		}
+		else
+			{
+start_check_bit:
+				secs_passed = 0;
+				//before = time((time_t *)0);
+				pipe = popen(try,"r");
+				if (!pipe)
+				{
+					printf("popen failed!\n");
+					return ;
+				}
+				// read for 2 lines of process:
+				while (!feof(pipe))
+				{
+					// use buffer to read and add to result
+					if (fgets(buffer, 128, pipe) != NULL);
+					else
+						{
+							printf("Not working****\n");
+							return ;
+						}
+
+ 					if (fgets(buffer, 128, pipe) != NULL)
+					{
+						sscanf(buffer,"%lu %lu %lu", &tx_before, &rx_before, &rx_missed_errs_before);
+						fgets(buffer, 128, pipe);
+						sscanf(buffer,"%d", &before);
+						pclose(pipe);
+
+						//sleep(1);
+						pipe = popen(try,"r");
+						if (!pipe)
+						{
+							printf("popen failed!\n");
+							return ;
+						}
+						//now = time((time_t *)0);
+						stage = 1;
+						break;
+					}
+					else
+						{
+							printf("Not working****\n");
+							return ;
+						}
+				}
+
+				if (gTuningMode && current_phase == LEARNING)
+				{
+					current_phase = TUNING;
+					//do something
+					current_phase = LEARNING;
+				}
+				else
+					if (current_phase == LEARNING)
+					{
+						if (vDebugLevel > 1)
+						{
+							//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
+						}
+					}
+			}
+	}
+        
+	fflush(tunLogPtr);
+	return;
+}
+
 void * fDoRunGetThresholds(void * vargp)
 {
 	//int * fd = (int *) vargp;
@@ -904,12 +993,17 @@ void * fDoRunGetThresholds(void * vargp)
 	FILE *pipe;
 	int before = 0;
 	int now = 0;
+	int check_bitrate_interval = 0;
 	time_t secs_passed = 1;
 	unsigned long rx_missed_errs_before, rx_missed_errs_now, rx_missed_errs_tot;
 	unsigned long rx_before, rx_now, rx_bytes_tot;
 	unsigned long tx_before, tx_now, tx_bytes_tot;
+	double average_tx_bits_per_sec = 0.0;
+	double average_tx_Gbits_per_sec = 0.0;
 	char try[1024];
 	int stage = 0;
+
+	if (netDeviceSpeed > 10000 && netDeviceSpeed < 100000);
 
 	rx_missed_errs_before = rx_missed_errs_now = rx_missed_errs_tot = 0;
 	rx_before =  rx_now = rx_bytes_tot = rx_bits_per_sec = 0;
@@ -993,15 +1087,44 @@ start:
 			if (!secs_passed) 
 				secs_passed = 1;
 #if 1
-			tx_bits_per_sec = ((8 * tx_bytes_tot) / 1024) / secs_passed;
-			rx_bits_per_sec = ((8 * rx_bytes_tot) / 1024) / secs_passed;;
+			//tx_bits_per_sec = ((8 * tx_bytes_tot) / 1024) / secs_passed;
+			//rx_bits_per_sec = ((8 * rx_bytes_tot) / 1024) / secs_passed;;
+			tx_bits_per_sec = ((8 * tx_bytes_tot) / 1000) / secs_passed;
+			rx_bits_per_sec = ((8 * rx_bytes_tot) / 1000) / secs_passed;;
 			pclose(pipe);
+		
+			average_tx_bits_per_sec += tx_bits_per_sec;	
+			check_bitrate_interval++;
+			if (check_bitrate_interval == BITRATE_INTERVAL) 
+			{
+				check_bitrate_interval = 0;
+				average_tx_bits_per_sec = average_tx_bits_per_sec/BITRATE_INTERVAL;
+				average_tx_Gbits_per_sec = average_tx_bits_per_sec/(double)(1000000);
+			}
 
 			if (vDebugLevel > 2)
 			{
 				//printf("DEV %s: TX : %lu kb/s RX : %lu kb/s, RX_MISD_ERRS/s : %lu, secs_passed %lu\n", netDevice, tx_bits_per_sec, rx_bits_per_sec, rx_missed_errs_tot/secs_passed, secs_passed);
-				printf("DEV %s: TX : %lu kb/s RX : %lu kb/s, IamDest : %c, secs_passed %lu\n", netDevice, tx_bits_per_sec, rx_bits_per_sec, vIamDest, secs_passed);
+				printf("DEV %s: TX : %.2f Gb/s RX : %.2f Gb/s, RX_MISD_ERRS/s : %lu, secs_passed %lu\n", netDevice, tx_bits_per_sec/(double)(1000000), rx_bits_per_sec/(double)(1000000), rx_missed_errs_tot/secs_passed, secs_passed);
+				if (!check_bitrate_interval)
+					printf("average_tx_Gbits_per_sec = %.1f Gb/s \n\n",average_tx_Gbits_per_sec);
 			}
+
+			if (!check_bitrate_interval)
+			{
+				if (average_tx_Gbits_per_sec >= 1) //must be at least a Gig to check
+					check_if_bitrate_too_low(average_tx_Gbits_per_sec);
+
+				average_tx_Gbits_per_sec = 0.0;
+				average_tx_bits_per_sec = 0.0;
+				if (vDebugLevel > 2)
+				{
+					printf("***Sleeping for %d microseconds before resuming Bitrate checking...\n", gInterval);
+				}
+
+				msleep(gInterval/1000); //msleep sleeps in milliseconds
+			}
+
 			break;
 		}
 #else
@@ -1436,6 +1559,8 @@ int main(int argc, char **argv)
 	memset(aSrc_Ip,0,sizeof(aSrc_Ip));
 	src_ip_addr.y = 0;
 
+	vGoodBitrateValue = ((95/(double)100) * netDeviceSpeed); //from empirical testing, 95% of NIC speed is a good bitrate
+	fprintf(tunLogPtr, "%s %s: ***vGoodBitrateValue = %.1f***\n", ctime_buf, phase2str(current_phase), vGoodBitrateValue);
 	fflush(tunLogPtr);
 
 	//Start Collector Thread - collect from int-sink
