@@ -282,13 +282,6 @@ void fDoGetUserCfgValues(void)
 #define getvalue	5
 char *aStringval[] ={"bbr", "fq", "htcp", "reno", "cubic", "getvalue"};
 
-typedef struct {
-	char * setting;
-	uint32_t  minimum;
-	int xDefault; //if default is -1, then default and max are nops
-	uint32_t maximum;
-}host_tuning_vals_t;
-
 /* 
  * Suggestion for net.ipv4.tcp_mem...
  *
@@ -308,8 +301,7 @@ char aApplyKernelDefTun2DArray[NUM_SYSTEM_SETTINGS][MAX_SIZE_SYSTEM_SETTING_STRI
 char aApplyNicDefTun2DArray[NUM_SYSTEM_SETTINGS][MAX_SIZE_SYSTEM_SETTING_STRING];
 char aApplyBiosDefTun2DArray[NUM_SYSTEM_SETTINGS][MAX_SIZE_SYSTEM_SETTING_STRING];
 
-#define TUNING_NUMS_10GandUnder	9
-/* Must change TUNING_NUMS_10GandUnder if adding more to the array below */
+/* Must change TUNING_NUMS_10GandUnder if adding more to the array below in user_dtn.h*/
 host_tuning_vals_t aTuningNumsToUse10GandUnder[TUNING_NUMS_10GandUnder] = {
 	{"net.core.rmem_max",				67108864,          -1,      	0},
 	{"net.core.wmem_max",				67108864,          -1,      	0},
@@ -322,7 +314,6 @@ host_tuning_vals_t aTuningNumsToUse10GandUnder[TUNING_NUMS_10GandUnder] = {
 	{"MTU",						       0, 	   84, 		0} //Will leave here but not using for now
 };
 
-#define TUNING_NUMS_Over10GtoUnder100G	9
 /* Must change TUNING_NUMS_Over10GtoUnder100G if adding more to the array below */
 host_tuning_vals_t aTuningNumsToUse_Over10GtoUnder100G[TUNING_NUMS_Over10GtoUnder100G] = {
 	{"net.core.rmem_max",				134217728,         -1,      	0},
@@ -336,7 +327,6 @@ host_tuning_vals_t aTuningNumsToUse_Over10GtoUnder100G[TUNING_NUMS_Over10GtoUnde
 	{"MTU",						       0, 	   84, 		0} //Will leave here but not using for now
 };
 
-#define TUNING_NUMS_100G	11
 /* Must change TUNING_NUMS_100G if adding more to the array below */
 host_tuning_vals_t aTuningNumsToUse100Gb[TUNING_NUMS_100G] = {
 	{"net.core.rmem_max",				2147483647,          -1,      		0},

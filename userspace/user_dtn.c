@@ -888,20 +888,19 @@ void * fDoRunHttpServer(void * vargp)
 }
 
 #define BITRATE_INTERVAL 5
-void check_if_bitrate_too_low(double average_tx_Gbits_per_sec);
-void check_if_bitrate_too_low(double average_tx_Gbits_per_sec)
+void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested);
+void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested)
 {
 	time_t clk;
 	char ctime_buf[27];
-	char buffer[128];
+	char buffer[256];
 	FILE *pipe;
-	int before = 0;
-	time_t secs_passed = 1;
-	unsigned long rx_missed_errs_before;
-	unsigned long rx_before;
-	unsigned long tx_before;
-	char try[1024];
-	int stage = 0;
+	char kernel_parameter[128];
+	char equal_sign;
+	unsigned int  kminimum;
+	int kdefault;
+	unsigned int kmaximum, my_tune_max;
+	int x, found = 0, TUNING_NUMS;
 
         gettime(&clk, ctime_buf);
 	if (average_tx_Gbits_per_sec < vGoodBitrateValue)
@@ -909,69 +908,92 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec)
 
 		if (current_phase == TUNING)
 		{
-			fprintf(tunLogPtr, "%s %s: Trying to tune wmem, but already TUNING something else.  Will retry later if still need TUNING***\n",ctime_buf, phase2str(current_phase));
+			fprintf(tunLogPtr, "%s %s: Trying to tune net.ipv4.tcp_wmem, but already TUNING something else.  Will retry later if still need TUNING***\n",ctime_buf, phase2str(current_phase));
 
 		}
 		else
 			{
-start_check_bit:
-				secs_passed = 0;
-				//before = time((time_t *)0);
-				pipe = popen(try,"r");
+				pipe = popen("sysctl net.ipv4.tcp_wmem","r");
 				if (!pipe)
 				{
 					printf("popen failed!\n");
 					return ;
 				}
-				// read for 2 lines of process:
+				
 				while (!feof(pipe))
 				{
-					// use buffer to read and add to result
-					if (fgets(buffer, 128, pipe) != NULL);
-					else
-						{
-							printf("Not working****\n");
-							return ;
-						}
-
- 					if (fgets(buffer, 128, pipe) != NULL)
+ 					if (fgets(buffer, 256, pipe) != NULL)
 					{
-						sscanf(buffer,"%lu %lu %lu", &tx_before, &rx_before, &rx_missed_errs_before);
-						fgets(buffer, 128, pipe);
-						sscanf(buffer,"%d", &before);
-						pclose(pipe);
-
-						//sleep(1);
-						pipe = popen(try,"r");
-						if (!pipe)
-						{
-							printf("popen failed!\n");
-							return ;
-						}
-						//now = time((time_t *)0);
-						stage = 1;
+						sscanf(buffer,"%s %c %u %d %u", kernel_parameter, &equal_sign, &kminimum, &kdefault, &kmaximum);
+						printf("%s %c %u %d %u\n",kernel_parameter, equal_sign, kminimum, kdefault, kmaximum);
 						break;
 					}
 					else
 						{
-							printf("Not working****\n");
+							printf("***ERROR: problem getting buffer from popen, returning!!!***\n");
+							pclose(pipe);
 							return ;
 						}
+				}
+				pclose(pipe);
+
+
+				/******/
+				my_tune_max = 0;
+				found = 0;
+				if ((netDeviceSpeed > 10000) && (netDeviceSpeed < 100000)) //less than 100 Gb/s and greater than 10 Gb/s
+				{
+					TUNING_NUMS = TUNING_NUMS_Over10GtoUnder100G;
+
+					for (x = 0; x < TUNING_NUMS; x++)
+					{
+						if (strcmp(aTuningNumsToUse_Over10GtoUnder100G[x].setting, "net.ipv4.tcp_wmem") == 0) //found
+						{
+							found = 1;
+							my_tune_max = aTuningNumsToUse_Over10GtoUnder100G[x].maximum;
+							break;
+						}
+					}
+				}
+				/*****/
+
+				if (!found)
+				{
+					printf("***ERROR: Strange error. Could not find net.ipv4.tcp_wmem in local database!!!***\n");
+					return ;
 				}
 
 				if (gTuningMode && current_phase == LEARNING)
 				{
 					current_phase = TUNING;
+					fprintf(tunLogPtr, "%s %s: Changed current phase***\n",ctime_buf, phase2str(current_phase));
 					//do something
+					*applied = 1;
 					current_phase = LEARNING;
 				}
 				else
 					if (current_phase == LEARNING)
 					{
-						if (vDebugLevel > 1)
+						if (my_tune_max < kmaximum) //already high
 						{
-							//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
+							*suggested = 1;
+							if (vDebugLevel > 1)
+							{
+								//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
+								fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: *%s*\n",ctime_buf, phase2str(current_phase), buffer);
+								fprintf(tunLogPtr, "%s %s: ***SUGGESTED TUNING***: *sudo sysctl -w net.ipv4.tcp_wmem=\"%u, %d, %u\"\n",ctime_buf, phase2str(current_phase), kminimum, kdefault, my_tune_max);
+							}
 						}
+						else
+						{
+							if (vDebugLevel > 1)
+							{
+								//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
+								fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: *%s*\n",ctime_buf, phase2str(current_phase), buffer);
+								fprintf(tunLogPtr, "%s %s: ***SUGGESTED TUNING***: *sudo sysctl -w net.ipv4.tcp_wmem=\"%u, %d, %u\"\n",ctime_buf, phase2str(current_phase), kminimum, kdefault, kmaximum+200000);
+							}
+						}
+							
 					}
 			}
 	}
@@ -1002,6 +1024,7 @@ void * fDoRunGetThresholds(void * vargp)
 	double average_tx_Gbits_per_sec = 0.0;
 	char try[1024];
 	int stage = 0;
+	int applied = 0, suggested = 0;
 
 	if (netDeviceSpeed > 10000 && netDeviceSpeed < 100000);
 
@@ -1112,8 +1135,10 @@ start:
 
 			if (!check_bitrate_interval)
 			{
+				applied = 0;
+				suggested = 0;
 				if (average_tx_Gbits_per_sec >= 1) //must be at least a Gig to check
-					check_if_bitrate_too_low(average_tx_Gbits_per_sec);
+					check_if_bitrate_too_low(average_tx_Gbits_per_sec, &applied, &suggested);
 
 				average_tx_Gbits_per_sec = 0.0;
 				average_tx_bits_per_sec = 0.0;
