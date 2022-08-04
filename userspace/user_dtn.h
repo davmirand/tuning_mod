@@ -14,6 +14,7 @@ enum workflow_phases {
 #define TUNING_NUMS_10GandUnder 9
 #define TUNING_NUMS_Over10GtoUnder100G  9
 #define TUNING_NUMS_100G        11
+#define MAX_SIZE_SYSTEM_SETTING_STRING  768
 typedef struct {
         char * setting;
         unsigned int  minimum;

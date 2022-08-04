@@ -292,7 +292,6 @@ char *aStringval[] ={"bbr", "fq", "htcp", "reno", "cubic", "getvalue"};
  * A minimum value of "getvalue" means that I'm just intereste in the value.
  */
 #define NUM_SYSTEM_SETTINGS	100
-#define MAX_SIZE_SYSTEM_SETTING_STRING	768
 int aApplyKernelDefTunCount = 0;
 int aApplyNicDefTunCount = 0;
 int aApplyBiosDefTunCount = 0;
