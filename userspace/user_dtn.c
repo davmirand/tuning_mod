@@ -1246,6 +1246,8 @@ start:
 				if (average_tx_Gbits_per_sec >= 1) //must be at least a Gig to check
 					check_if_bitrate_too_low(average_tx_Gbits_per_sec, &applied, &suggested, &nothing_done, tune);
 
+				tune = 0;
+
 				average_tx_Gbits_per_sec = 0.0;
 				average_tx_bits_per_sec = 0.0;
 				if (vDebugLevel > 2)
