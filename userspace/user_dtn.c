@@ -888,8 +888,8 @@ void * fDoRunHttpServer(void * vargp)
 }
 
 #define BITRATE_INTERVAL 5
-void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done);
-void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done)
+void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done, int tune);
+void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done, int tune)
 {
 	time_t clk;
 	char ctime_buf[27];
@@ -981,17 +981,40 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 					else
 						{
 							char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING];
-							if (vDebugLevel > 1)
-							{
-								//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
-								fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ctime_buf, phase2str(current_phase), buffer);
-								sprintf(aApplyDefTun,"sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"", kminimum, kdefault, kmaximum+200000);
 
-								//printf(aApplyDefTun,"sysctl -w %s=\"%s %s %s\"",setting, strValmin, strValdef, strValmax);
-								system(aApplyDefTun);
-								fprintf(tunLogPtr, "%s %s: ***APPLIED TUNING***: %s\n",ctime_buf, phase2str(current_phase), aApplyDefTun);
-							}
+							if (tune == 1) //apply up
+								sprintf(aApplyDefTun,"sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"", kminimum, kdefault, kmaximum+200000);
+							else
+								if (tune == 2)
+								{
+									if ((kmaximum - 200000) > 0)
+										sprintf(aApplyDefTun,"sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"", kminimum, kdefault, kmaximum - 200000);
+									else
+										{
+								
+											fprintf(tunLogPtr, "%s %s: ***Could not apply tuning since the maximum value of wmem would be zero or less...***\n",ctime_buf, phase2str(current_phase));
+											current_phase = LEARNING; //change back phase to LEARNING
+											*nothing_done = 1;
+											return;	
+										}
+								}
+								else
+									{
+							
+										fprintf(tunLogPtr, "%s %s: ***Could not apply tuning*** invalid value for tune %d***\n",ctime_buf, phase2str(current_phase), tune);
+										current_phase = LEARNING; //change back phase to LEARNING
+										*nothing_done = 1;
+										return;	
+									}
+
+							if (vDebugLevel > 1)
+								fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ctime_buf, phase2str(current_phase), buffer);
 						
+							system(aApplyDefTun);
+							
+							if (vDebugLevel > 1)
+								fprintf(tunLogPtr, "%s %s: ***APPLIED TUNING***: %s\n",ctime_buf, phase2str(current_phase), aApplyDefTun);
+
 							*applied = 1;
 						}
 
@@ -1054,7 +1077,7 @@ void * fDoRunGetThresholds(void * vargp)
 	char try[1024];
 	int stage = 0;
 	int applied = 0, suggested = 0, nothing_done = 0;
-	int tuneup = 0, tunedown = 0, applied_count = 0, more_tuning = 0;
+	int tune = 1; //1 = up, 2 = down - tune up initially
 
 	rx_missed_errs_before = rx_missed_errs_now = rx_missed_errs_tot = 0;
 	rx_before =  rx_now = rx_bytes_tot = rx_bits_per_sec = 0;
@@ -1180,25 +1203,15 @@ start:
 				else
 					if (applied) //tuning applied
 					{
-						if (applied_count == 1)
-						{
-							applied_count = 2;
-							if (highest_average_tx_Gbits_per_sec <= average_tx_Gbits_per_sec)
+						if (highest_average_tx_Gbits_per_sec <= average_tx_Gbits_per_sec)
 								highest_average_tx_Gbits_per_sec = average_tx_Gbits_per_sec;
+						
+						if (previous_average_tx_Gbits_per_sec < highest_average_tx_Gbits_per_sec)
+						{
+							tune = 1; //up
 						}
 						else
-							if (previous_average_tx_Gbits_per_sec <= average_tx_Gbits_per_sec)
-							{
-								more_tuning = 1;
-								tuneup = 1;
-								tunedown = 0;
-							}
-							else
-							{
-								more_tuning = 1;
-								tunedown = 1;
-								tuneup = 0;
-							}
+							tune = 2; //down
 
 						previous_average_tx_Gbits_per_sec = average_tx_Gbits_per_sec;
 
@@ -1231,7 +1244,7 @@ start:
 						}
 
 				if (average_tx_Gbits_per_sec >= 1) //must be at least a Gig to check
-					check_if_bitrate_too_low(average_tx_Gbits_per_sec, &applied, &suggested, &nothing_done);
+					check_if_bitrate_too_low(average_tx_Gbits_per_sec, &applied, &suggested, &nothing_done, tune);
 
 				average_tx_Gbits_per_sec = 0.0;
 				average_tx_bits_per_sec = 0.0;
