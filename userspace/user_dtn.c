@@ -261,7 +261,7 @@ void * fDoRunBpfCollectionPerfEventArray2(void * vargp)
 		return ((char *)1);
 	}
 	else
-		fprintf(tunLogPtr, "%s %s: timer created.\n", ctime_buf, phase2str(current_phase));
+		fprintf(tunLogPtr, "%s %s: *qOCC_Hop_TimerID* timer created.\n", ctime_buf, phase2str(current_phase));
 
 open_maps: {
 	gettime(&clk, ctime_buf);
@@ -353,7 +353,7 @@ void EvaluateQOcc_and_HopDelay(__u32 hop_key_hop_index)
 		{
 			vTimerIsSet = 1;
 			curr_hop_key_hop_index = hop_key_hop_index;
-			if (vDebugLevel > 0)
+			if (vDebugLevel > 2)
 			{
 				gettime(&clk, ctime_buf);
 				printf("%s %s: ***Timer set to %d microseconds for Queue Occupancy and HopDelay over threshholds***\n",ctime_buf, phase2str(current_phase), gInterval); 
@@ -445,7 +445,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		if ((hop_hop_latency_threshold > vHOP_LATENCY_DELTA) && (Qinfo > vQUEUE_OCCUPANCY_DELTA))
 		{
 			EvaluateQOcc_and_HopDelay(hop_key.hop_index);
-			if (vDebugLevel > 1)
+			if (vDebugLevel > 2)
 			{
 				gettime(&clk, ctime_buf);
 				fprintf(tunLogPtr, "%s %s: ***hop_hop_latency_threshold = %u\n", ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
@@ -462,7 +462,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 
 				if ((hop_hop_latency_threshold > vHOP_LATENCY_DELTA) || (Qinfo > vQUEUE_OCCUPANCY_DELTA))
 				{
-					if (vDebugLevel > 1)
+					if (vDebugLevel > 2)
 					{
 						gettime(&clk, ctime_buf);
 						if (hop_hop_latency_threshold > vHOP_LATENCY_DELTA)
@@ -518,7 +518,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 	if (vDebugLevel > 2)
 		fprintf(stdout, "flow_hop_latency_threshold = %lld\n", flow_hop_latency_threshold);
 	
-	if (vDebugLevel > 1)
+	if (vDebugLevel > 2)
 	{
 		if (flow_hop_latency_threshold > vFLOW_LATENCY_DELTA)
 		{
@@ -635,7 +635,7 @@ void check_req(http_s *h, char aResp[])
 		gettime(&clk, ctime_buf);
 		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change debug level of Tuning Module from %d to %d***\n", ctime_buf, phase2str(current_phase), vDebugLevel, vNewDebugLevel);
 		vDebugLevel = vNewDebugLevel;
-		if (vDebugLevel > 1 && src_ip_addr.y)
+		if (vDebugLevel > 2 && src_ip_addr.y)
 		{
 			Pthread_mutex_lock(&dtn_mutex);
         		strcpy(test.msg, "Hello there!!!\n");
@@ -888,8 +888,8 @@ void * fDoRunHttpServer(void * vargp)
 }
 
 #define BITRATE_INTERVAL 5
-void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done, int tune);
-void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done, int tune)
+void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done, int tune, char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING]);
+void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done, int tune, char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING])
 {
 	time_t clk;
 	char ctime_buf[27];
@@ -902,7 +902,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 	unsigned int kmaximum, my_tune_max;
 	int x, found = 0, TUNING_NUMS;
 
-        gettime(&clk, ctime_buf);
+	gettime(&clk, ctime_buf);
 	if (average_tx_Gbits_per_sec < vGoodBitrateValue)
 	{
 
@@ -969,7 +969,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 					//do something
 					if (my_tune_max < kmaximum) //already high
 					{
-						if (vDebugLevel > 1)
+						if (vDebugLevel > 0)
 						{
 							//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
 							fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s*",ctime_buf, phase2str(current_phase), buffer);
@@ -980,7 +980,8 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 					}
 					else
 						{
-							char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING];
+							//char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING];
+							char aApplyDefTunNoStdOut[MAX_SIZE_SYSTEM_SETTING_STRING+32];
 
 							if (tune == 1) //apply up
 								sprintf(aApplyDefTun,"sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"", kminimum, kdefault, kmaximum+200000);
@@ -1007,15 +1008,15 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 										return;	
 									}
 
-							if (vDebugLevel > 1)
-								fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ctime_buf, phase2str(current_phase), buffer);
-						
-							system(aApplyDefTun);
-							
-							if (vDebugLevel > 1)
-								fprintf(tunLogPtr, "%s %s: ***APPLIED TUNING***: %s\n",ctime_buf, phase2str(current_phase), aApplyDefTun);
-
+							fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ctime_buf, phase2str(current_phase), buffer);
+							strcpy(aApplyDefTunNoStdOut,aApplyDefTun);
+							strcat(aApplyDefTunNoStdOut," >/dev/null"); //so it won't print to stderr on console
+							system(aApplyDefTunNoStdOut);
+							fprintf(tunLogPtr, "%s %s: ***APPLIED TUNING***: %s\n",ctime_buf, phase2str(current_phase), aApplyDefTun);
 							*applied = 1;
+					
+							current_phase = LEARNING;
+							fprintf(tunLogPtr, "%s %s: Changed current phase***\n",ctime_buf, phase2str(current_phase));
 						}
 
 					current_phase = LEARNING; //change back phase to LEARNING
@@ -1026,21 +1027,21 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 						if (my_tune_max < kmaximum) //already high
 						{
 							*nothing_done = 1;
-							if (vDebugLevel > 1)
+							if (vDebugLevel > 0)
 							{
 								//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
 								fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s*",ctime_buf, phase2str(current_phase), buffer);
-								//fprintf(tunLogPtr, "%s %s: ***SUGGESTED TUNING***: *sudo sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"\n",ctime_buf, phase2str(current_phase), kminimum, kdefault, my_tune_max);
+								fprintf(tunLogPtr, "%s %s: ***SUGGESTED TUNING***: *sudo sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"\n",ctime_buf, phase2str(current_phase), kminimum, kdefault, my_tune_max);
 								fprintf(tunLogPtr, "%s %s: *** Current Tuning of net.ipv4.tcp_wmem appears sufficient***\n", ctime_buf, phase2str(current_phase));
 							}
 						}
 						else
 							{
 								*suggested = 1;
-								if (vDebugLevel > 1)
+								if (vDebugLevel > 0)
 								{
 									//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
-									fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: *%s*",ctime_buf, phase2str(current_phase), buffer);
+									fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: *%s",ctime_buf, phase2str(current_phase), buffer);
 									fprintf(tunLogPtr, "%s %s: ***SUGGESTED TUNING***: *sudo sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"\n\n",ctime_buf, phase2str(current_phase), kminimum, kdefault, kmaximum+200000);
 								}
 							}
@@ -1062,6 +1063,8 @@ void * fDoRunGetThresholds(void * vargp)
 	fprintf(tunLogPtr,"%s %s: ***Starting Check Threshold thread ...***\n", ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
 	char buffer[128];
+	char aApplyDefTunBest[MAX_SIZE_SYSTEM_SETTING_STRING];
+	char best_wmem_val[MAX_SIZE_SYSTEM_SETTING_STRING];
 	FILE *pipe;
 	int before = 0;
 	int now = 0;
@@ -1168,15 +1171,18 @@ start:
 			pclose(pipe);
 		
 			average_tx_bits_per_sec += tx_bits_per_sec;	
-			check_bitrate_interval++;
-			if (check_bitrate_interval == BITRATE_INTERVAL) 
+			//check_bitrate_interval++;
+			check_bitrate_interval += secs_passed;
+			if (check_bitrate_interval >= BITRATE_INTERVAL) 
 			{
-				check_bitrate_interval = 0;
-				average_tx_bits_per_sec = average_tx_bits_per_sec/BITRATE_INTERVAL;
+				//check_bitrate_interval = 0;
+				//average_tx_bits_per_sec = average_tx_bits_per_sec/BITRATE_INTERVAL;
+				average_tx_bits_per_sec = average_tx_bits_per_sec/(double)check_bitrate_interval;
 				average_tx_Gbits_per_sec = average_tx_bits_per_sec/(double)(1000000);
+				check_bitrate_interval = 0;
 			}
 
-			if (vDebugLevel > 2)
+			if (vDebugLevel > 1)
 			{
 				//printf("DEV %s: TX : %lu kb/s RX : %lu kb/s, RX_MISD_ERRS/s : %lu, secs_passed %lu\n", netDevice, tx_bits_per_sec, rx_bits_per_sec, rx_missed_errs_tot/secs_passed, secs_passed);
 				printf("DEV %s: TX : %.2f Gb/s RX : %.2f Gb/s, RX_MISD_ERRS/s : %lu, secs_passed %lu\n", netDevice, tx_bits_per_sec/(double)(1000000), rx_bits_per_sec/(double)(1000000), rx_missed_errs_tot/secs_passed, secs_passed);
@@ -1186,15 +1192,42 @@ start:
 
 			if (!check_bitrate_interval)
 			{
+				if (highest_average_tx_Gbits_per_sec <= average_tx_Gbits_per_sec)
+					highest_average_tx_Gbits_per_sec = average_tx_Gbits_per_sec;
+						
+				if (previous_average_tx_Gbits_per_sec < highest_average_tx_Gbits_per_sec)
+				{
+					tune = 1; //up
+				}
+				else
+					tune = 2; //down
+
+				
+				fprintf(tunLogPtr,"%s %s: ***applied = %d, previous = %.2f, highest = %.2f***\n", ctime_buf, phase2str(current_phase), applied, previous_average_tx_Gbits_per_sec, highest_average_tx_Gbits_per_sec);
+				if (applied && previous_average_tx_Gbits_per_sec >= highest_average_tx_Gbits_per_sec)
+				{
+					strcpy(best_wmem_val,aApplyDefTunBest);
+					fprintf(tunLogPtr,"%s %s: ***Best wmem val***%s***\n\n", ctime_buf, phase2str(current_phase), best_wmem_val);
+				}
+
+				fflush(tunLogPtr);
+
+				previous_average_tx_Gbits_per_sec = average_tx_Gbits_per_sec;
+
+
+				//tune = 1; //always tune up as default
 				if (suggested)
 				{
 					if (suggested++ > 3)
 						suggested = 0;
 					else
 					{
-						gettime(&clk, ctime_buf);
-						fprintf(tunLogPtr,"%s %s: ***Tuning was suggested but not applied, will skip suggesting for now ...***\n", ctime_buf, phase2str(current_phase));
-						fflush(tunLogPtr);
+						if ((suggested == 2) && (vDebugLevel > 0))
+						{
+							gettime(&clk, ctime_buf);
+							fprintf(tunLogPtr,"%s %s: ***Tuning was suggested but not applied, will skip suggesting for now ...***\n", ctime_buf, phase2str(current_phase));
+							fflush(tunLogPtr);
+						}
 						average_tx_Gbits_per_sec = 0.0;
 						average_tx_bits_per_sec = 0.0;
 						break;
@@ -1203,9 +1236,9 @@ start:
 				else
 					if (applied) //tuning applied
 					{
-						if (highest_average_tx_Gbits_per_sec <= average_tx_Gbits_per_sec)
-								highest_average_tx_Gbits_per_sec = average_tx_Gbits_per_sec;
-						
+				//		if (highest_average_tx_Gbits_per_sec <= average_tx_Gbits_per_sec)
+				//				highest_average_tx_Gbits_per_sec = average_tx_Gbits_per_sec;
+#if 0			
 						if (previous_average_tx_Gbits_per_sec < highest_average_tx_Gbits_per_sec)
 						{
 							tune = 1; //up
@@ -1214,18 +1247,23 @@ start:
 							tune = 2; //down
 
 						previous_average_tx_Gbits_per_sec = average_tx_Gbits_per_sec;
-
-						if (applied++ > 1)
+#endif
+				//		if (applied++ > 1)
 							applied = 0;
-						else
-						{
-							gettime(&clk, ctime_buf);
-							fprintf(tunLogPtr,"%s %s: ***Tuning just applied, will skip applying for a couple seconds ...***\n\n", ctime_buf, phase2str(current_phase));
-							fflush(tunLogPtr);
+				//		else
+				//		{
+#if 0
+							if (vDebugLevel > 0)
+							{
+								gettime(&clk, ctime_buf);
+								fprintf(tunLogPtr,"%s %s: ***Tuning just applied, will skip applying for a couple seconds ...***\n\n", ctime_buf, phase2str(current_phase));
+								fflush(tunLogPtr);
+							}
 							average_tx_Gbits_per_sec = 0.0;
 							average_tx_bits_per_sec = 0.0;
 							break;
-						}
+#endif
+				//		}
 					}
 					else
 						if (nothing_done) //no change to tuning
@@ -1234,9 +1272,12 @@ start:
 								nothing_done = 0;
 							else
 							{
-								gettime(&clk, ctime_buf);
-								fprintf(tunLogPtr,"%s %s: ***Tuning appears sufficient, will skip suggesting for now ...***\n", ctime_buf, phase2str(current_phase));
-								fflush(tunLogPtr);
+								if ((nothing_done == 2) && (vDebugLevel > 0))
+								{
+									gettime(&clk, ctime_buf);
+									fprintf(tunLogPtr,"%s %s: ***Tuning appears sufficient, will skip suggesting for now ...***\n", ctime_buf, phase2str(current_phase));
+									fflush(tunLogPtr);
+								}
 								average_tx_Gbits_per_sec = 0.0;
 								average_tx_bits_per_sec = 0.0;
 							break;
@@ -1244,13 +1285,11 @@ start:
 						}
 
 				if (average_tx_Gbits_per_sec >= 1) //must be at least a Gig to check
-					check_if_bitrate_too_low(average_tx_Gbits_per_sec, &applied, &suggested, &nothing_done, tune);
-
-				tune = 0;
+					check_if_bitrate_too_low(average_tx_Gbits_per_sec, &applied, &suggested, &nothing_done, tune, aApplyDefTunBest);
 
 				average_tx_Gbits_per_sec = 0.0;
 				average_tx_bits_per_sec = 0.0;
-				if (vDebugLevel > 2)
+				if (vDebugLevel > 1)
 				{
 					printf("***Sleeping for %d microseconds before resuming Bitrate checking...\n", gInterval);
 				}
@@ -1343,7 +1382,7 @@ finish_up:
 
 	if (highest_rtt)
 	{
-		if (vDebugLevel > 2)
+		if (vDebugLevel > 1)
 			printf("***highest rtt is %.3fms\n", highest_rtt/(double)1000);
 	}
 
@@ -1522,7 +1561,7 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 	struct sockaddr_in cliaddr, servaddr;
 	
 	gettime(&clk, ctime_buf);
-	fprintf(tunLogPtr,"%s %s: ***Starting Listener for receiving messages destination DTN...***\n", ctime_buf, phase2str(current_phase));
+	fprintf(tunLogPtr,"%s %s: ***Starting Listener for receiving messages from destination DTN...***\n", ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
 	
 	listenfd = Socket(AF_INET, SOCK_STREAM, 0);
@@ -1692,7 +1731,7 @@ int main(int argc, char **argv)
 	memset(aSrc_Ip,0,sizeof(aSrc_Ip));
 	src_ip_addr.y = 0;
 
-	vGoodBitrateValue = ((95/(double)100) * netDeviceSpeed); //from empirical testing, 95% of NIC speed is a good bitrate
+	vGoodBitrateValue = ((99/(double)100) * netDeviceSpeed); //99% of NIC speed must be a good bitrate
 	fprintf(tunLogPtr, "%s %s: ***vGoodBitrateValue = %.1f***\n", ctime_buf, phase2str(current_phase), vGoodBitrateValue);
 	fflush(tunLogPtr);
 
