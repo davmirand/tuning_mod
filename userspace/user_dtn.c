@@ -648,6 +648,46 @@ void check_req(http_s *h, char aResp[])
 		fprintf(tunLogPtr,"%s %s: ***New debug level is %d***\n", ctime_buf, phase2str(current_phase), vDebugLevel);
 		goto after_check;
 	}
+	
+	if (strstr(pReqData,"GET /-l#on"))
+	{
+		/* Put Tuning Module in learning mode */
+		char aMode[8];
+
+		if (gTuningMode)
+			strcpy(aMode,"off");
+		else
+			strcpy(aMode,"on");
+
+		sprintf(aResp,"Tuning Module is in learning mode!!!\n");
+		
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change Tuning Module learning mode from %s to on***\n", ctime_buf, phase2str(current_phase), aMode);
+		
+		gTuningMode = 0;
+		fprintf(tunLogPtr,"%s %s: ***Tuning Module is now in learning mode***\n", ctime_buf, phase2str(current_phase));
+		goto after_check;
+	}
+
+	if (strstr(pReqData,"GET /-l#off"))
+	{
+		/* Put Tuning Module in tuning mode */
+		char aMode[8];
+
+		if (gTuningMode)
+			strcpy(aMode,"off");
+		else
+			strcpy(aMode,"on");
+
+		sprintf(aResp,"Tuning Module has turned off learning mode!!!\n");
+		
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change Tuning Module learning mode from %s to off***\n", ctime_buf, phase2str(current_phase), aMode);
+		
+		gTuningMode = 1;
+		fprintf(tunLogPtr,"%s %s: ***Tuning Module is now *not* in learning mode***\n", ctime_buf, phase2str(current_phase));
+		goto after_check;
+	}
 
 	if (strstr(pReqData,"GET /-ct#flow_sink#"))
 	{
@@ -1169,7 +1209,7 @@ start:
 
 			if (!secs_passed) 
 				secs_passed = 1;
-#if 1
+			
 			//tx_bits_per_sec = ((8 * tx_bytes_tot) / 1024) / secs_passed;
 			//rx_bits_per_sec = ((8 * rx_bytes_tot) / 1024) / secs_passed;;
 			tx_bits_per_sec = ((8 * tx_bytes_tot) / 1000) / secs_passed;
@@ -1245,6 +1285,7 @@ start:
 						{
 							strcpy(best_wmem_val,aApplyDefTunBest);
 							fprintf(tunLogPtr,"%s %s: ***Best wmem val***%s***\n\n", ctime_buf, phase2str(current_phase), best_wmem_val);
+							max_apply = 0;
 						}
 
 						if (applied)
@@ -1321,14 +1362,6 @@ start:
 
 			break;
 		}
-#else
-			tx_bits_per_sec = ((tx_bytes_tot) / 1024) / secs_passed; //really bytes per sec
-			rx_bits_per_sec = ((rx_bytes_tot) / 1024) / secs_passed; //really bytes per sec
-			pclose(pipe);
-			printf("RX eno2: %lu KB/s TX eno2: %lu KB/s\n", rx_bits_per_sec, tx_bits_per_sec);
-//			stage = 0;
-			break;
-#endif
 		else
 			{
 				printf("Not working****\n");
