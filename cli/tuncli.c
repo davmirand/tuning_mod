@@ -56,7 +56,8 @@ int main(int argc, const char *argv[])
 			{
 				if (strcmp(argv[1],"-d") == 0)
 				{
-					if ((strcmp(argv[2],"0") == 0) || (strcmp(argv[2],"1") == 0) || (strcmp(argv[2],"2") == 0) || (strcmp(argv[2],"3") == 0) || (strcmp(argv[2],"4") == 0))
+					if (isdigit(*argv[2]))
+			//		if ((strcmp(argv[2],"0") == 0) || (strcmp(argv[2],"1") == 0) || (strcmp(argv[2],"2") == 0) || (strcmp(argv[2],"3") == 0) || (strcmp(argv[2],"4") == 0))
 					{
 						sprintf(aSecondPart,"%s#%s",argv[1], argv[2]);
 						goto carry_on;
