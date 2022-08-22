@@ -1259,7 +1259,13 @@ start:
 						gettime(&clk, ctime_buf);
 						if (previous_average_tx_Gbits_per_sec)
 						{
-							fprintf(tunLogPtr,"%s %s: ***applied = %d, previous = %.2f, highest = %.2f***\n", ctime_buf, phase2str(current_phase), applied, previous_average_tx_Gbits_per_sec, highest_average_tx_Gbits_per_sec);
+							if (vDebugLevel > 1 &&  highest_average_tx_Gbits_per_sec)
+							{
+								fprintf(tunLogPtr,"%s %s: ***applied = %d, previous = %.2f, highest = %.2f***\n", 
+										ctime_buf, phase2str(current_phase), applied, 
+											previous_average_tx_Gbits_per_sec, highest_average_tx_Gbits_per_sec);
+							}
+
 							if (previous_average_tx_Gbits_per_sec*2 < highest_average_tx_Gbits_per_sec)
 								something_wrong_check++;
 							else
@@ -1267,8 +1273,13 @@ start:
 
 							if (something_wrong_check > 2)
 							{
-								fprintf(tunLogPtr,"%s %s: previous value %.2f, is way too smaller than highest = %.2f***\n", 
-										ctime_buf, phase2str(current_phase), previous_average_tx_Gbits_per_sec, highest_average_tx_Gbits_per_sec);
+								if (vDebugLevel > 1)
+								{
+									fprintf(tunLogPtr,"%s %s: previous value %.2f, is way too smaller than highest = %.2f***\n",
+										ctime_buf, phase2str(current_phase), previous_average_tx_Gbits_per_sec, 
+											highest_average_tx_Gbits_per_sec);
+								}
+
 								fprintf(tunLogPtr,"%s %s: Will need to adjust***\n", ctime_buf, phase2str(current_phase));
 								highest_average_tx_Gbits_per_sec = previous_average_tx_Gbits_per_sec/2;
 								something_wrong_check = 0;
@@ -1284,7 +1295,13 @@ start:
 						if (applied && previous_average_tx_Gbits_per_sec >= highest_average_tx_Gbits_per_sec)
 						{
 							strcpy(best_wmem_val,aApplyDefTunBest);
-							fprintf(tunLogPtr,"%s %s: ***Best wmem val***%s***\n\n", ctime_buf, phase2str(current_phase), best_wmem_val);
+
+							if (vDebugLevel > 1)
+							{
+								fprintf(tunLogPtr,"%s %s: ***Best wmem val***%s***\n\n", ctime_buf, 
+											phase2str(current_phase), best_wmem_val);
+							}
+
 							max_apply = 0;
 						}
 
@@ -1297,7 +1314,12 @@ start:
 						{
 							tune = 3;
 							strcpy(aApplyDefTunBest,best_wmem_val);
-							fprintf(tunLogPtr,"%s %s: ***Going to apply Best wmem val***%s***\n\n", ctime_buf, phase2str(current_phase), best_wmem_val);
+							
+							if (vDebugLevel > 1)
+							{
+								fprintf(tunLogPtr,"%s %s: ***Going to apply Best wmem val***%s***\n\n", ctime_buf, 
+											phase2str(current_phase), best_wmem_val);
+							}
 							max_apply = 0;
 						}
 
@@ -1312,10 +1334,13 @@ start:
 						suggested = 0;
 					else
 						{
-							if ((suggested == 2) && (vDebugLevel > 0))
+							if ((suggested == 2) && (vDebugLevel > 1))
 							{
 								gettime(&clk, ctime_buf);
-								fprintf(tunLogPtr,"%s %s: ***Tuning was suggested but not applied, will skip suggesting for now ...***\n", ctime_buf, phase2str(current_phase));
+								fprintf(tunLogPtr,
+									"%s %s: ***Tuning was suggested but not applied, will skip suggesting for now ...***\n", 
+										ctime_buf, phase2str(current_phase));
+
 								fflush(tunLogPtr);
 							}
 							average_tx_Gbits_per_sec = 0.0;
@@ -1335,10 +1360,14 @@ start:
 								nothing_done = 0;
 							else
 							{
-								if ((nothing_done == 2) && (vDebugLevel > 0))
+								if ((nothing_done == 2) && (vDebugLevel > 1))
 								{
 									gettime(&clk, ctime_buf);
-									fprintf(tunLogPtr,"%s %s: ***Tuning appears sufficient, will skip suggesting or applying for now ...***\n", ctime_buf, phase2str(current_phase));
+
+									fprintf(tunLogPtr,
+									"%s %s: ***Tuning appears sufficient, will skip suggesting or applying for now ...***\n", 
+											ctime_buf, phase2str(current_phase));
+
 									fflush(tunLogPtr);
 								}
 								average_tx_Gbits_per_sec = 0.0;
