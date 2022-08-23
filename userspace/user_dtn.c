@@ -1006,7 +1006,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 				{
 					gettime(&clk, ctime_buf);
 					current_phase = TUNING;
-					fprintf(tunLogPtr, "%s %s: Changed current phase***\n",ctime_buf, phase2str(current_phase));
+					//fprintf(tunLogPtr, "%s %s: Changed current phase***\n",ctime_buf, phase2str(current_phase));
 					//do something
 					if (my_tune_max < kmaximum) //already high
 					{
@@ -1061,7 +1061,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 							*applied = 1;
 					
 							current_phase = LEARNING;
-							fprintf(tunLogPtr, "%s %s: Changed current phase***\n",ctime_buf, phase2str(current_phase));
+							//fprintf(tunLogPtr, "%s %s: Changed current phase***\n",ctime_buf, phase2str(current_phase));
 						}
 
 					current_phase = LEARNING; //change back phase to LEARNING
@@ -1228,12 +1228,18 @@ start:
 				check_bitrate_interval = 0;
 			}
 
+			gettime(&clk, ctime_buf);
+			
 			if (vDebugLevel > 1)
 			{
 				//printf("DEV %s: TX : %lu kb/s RX : %lu kb/s, RX_MISD_ERRS/s : %lu, secs_passed %lu\n", netDevice, tx_bits_per_sec, rx_bits_per_sec, rx_missed_errs_tot/secs_passed, secs_passed);
 				printf("DEV %s: TX : %.2f Gb/s RX : %.2f Gb/s, RX_MISD_ERRS/s : %lu, secs_passed %lu\n", netDevice, tx_bits_per_sec/(double)(1000000), rx_bits_per_sec/(double)(1000000), rx_missed_errs_tot/secs_passed, secs_passed);
+			}
+
+			if (vDebugLevel > 0 && average_tx_Gbits_per_sec)
+			{
 				if (!check_bitrate_interval)
-					printf("average_tx_Gbits_per_sec = %.1f Gb/s \n\n",average_tx_Gbits_per_sec);
+					fprintf(tunLogPtr,"%s %s: average_tx_Gbits_per_sec = %.1f Gb/s \n\n",ctime_buf, phase2str(current_phase),average_tx_Gbits_per_sec);
 			}
 
 			if (!check_bitrate_interval)
@@ -1259,7 +1265,7 @@ start:
 						gettime(&clk, ctime_buf);
 						if (previous_average_tx_Gbits_per_sec)
 						{
-							if (vDebugLevel > 1 &&  highest_average_tx_Gbits_per_sec)
+							if ((vDebugLevel > 0) &&  (highest_average_tx_Gbits_per_sec >= 1))
 							{
 								fprintf(tunLogPtr,"%s %s: ***applied = %d, previous = %.2f, highest = %.2f***\n", 
 										ctime_buf, phase2str(current_phase), applied, 
@@ -1273,14 +1279,15 @@ start:
 
 							if (something_wrong_check > 2)
 							{
-								if (vDebugLevel > 1)
+								if ((vDebugLevel > 0) &&  (highest_average_tx_Gbits_per_sec >= 1))
 								{
 									fprintf(tunLogPtr,"%s %s: previous value %.2f, is way too smaller than highest = %.2f***\n",
 										ctime_buf, phase2str(current_phase), previous_average_tx_Gbits_per_sec, 
 											highest_average_tx_Gbits_per_sec);
+
+									fprintf(tunLogPtr,"%s %s: Will need to adjust***\n", ctime_buf, phase2str(current_phase));
 								}
 
-								fprintf(tunLogPtr,"%s %s: Will need to adjust***\n", ctime_buf, phase2str(current_phase));
 								highest_average_tx_Gbits_per_sec = previous_average_tx_Gbits_per_sec/2;
 								something_wrong_check = 0;
 								tune = 0;
@@ -1296,7 +1303,7 @@ start:
 						{
 							strcpy(best_wmem_val,aApplyDefTunBest);
 
-							if (vDebugLevel > 1)
+							if (vDebugLevel > 0)
 							{
 								fprintf(tunLogPtr,"%s %s: ***Best wmem val***%s***\n\n", ctime_buf, 
 											phase2str(current_phase), best_wmem_val);
@@ -1315,7 +1322,7 @@ start:
 							tune = 3;
 							strcpy(aApplyDefTunBest,best_wmem_val);
 							
-							if (vDebugLevel > 1)
+							if (vDebugLevel > 0)
 							{
 								fprintf(tunLogPtr,"%s %s: ***Going to apply Best wmem val***%s***\n\n", ctime_buf, 
 											phase2str(current_phase), best_wmem_val);
@@ -1334,7 +1341,7 @@ start:
 						suggested = 0;
 					else
 						{
-							if ((suggested == 2) && (vDebugLevel > 1))
+							if ((suggested == 2) && (vDebugLevel > 0))
 							{
 								gettime(&clk, ctime_buf);
 								fprintf(tunLogPtr,
@@ -1360,7 +1367,7 @@ start:
 								nothing_done = 0;
 							else
 							{
-								if ((nothing_done == 2) && (vDebugLevel > 1))
+								if ((nothing_done == 2) && (vDebugLevel > 0))
 								{
 									gettime(&clk, ctime_buf);
 
@@ -1466,8 +1473,8 @@ finish_up:
 
 	if (highest_rtt)
 	{
-		if (vDebugLevel > 1)
-			printf("***highest rtt is %.3fms\n", highest_rtt/(double)1000);
+		if (vDebugLevel > 0)
+			printf("***Highest RTT is %.3fms\n", highest_rtt/(double)1000);
 	}
 
 	sleep(3); //check again in 3 secs
