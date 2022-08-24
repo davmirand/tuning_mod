@@ -127,7 +127,7 @@ int msleep(long msec)
 
 char netDevice[128];
 static unsigned long rx_bits_per_sec = 0, tx_bits_per_sec = 0;
-//vDebugLevel 
+//vDebugLevel (Default = 1)
 //= 0 - only applied tuning, error and important messages get written to log file unconditionally
 //= 1 - include suggested tuning
 //= 2 - include additional learning messages which provide window into decision making
