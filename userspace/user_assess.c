@@ -64,7 +64,7 @@ typedef struct {
 	char cfg_value[32];
 } sUserValues_t[NUMUSERVALUES];
 
-sUserValues_t userValues = {{"evaluation_timer", "2000", "-1"},
+sUserValues_t userValues = {{"evaluation_timer", "500000", "-1"},
 			{"learning_mode_only","y","-1"},
 			{"API_listen_port","5523","-1"},
 			{"apply_default_system_tuning","n","-1"},
