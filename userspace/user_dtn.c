@@ -424,7 +424,10 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 	hop_key.hop_index = 0;
 
 	if (vDebugLevel > 3)
-		fprintf(stdout,"\n******************************************************************\n");
+	{
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr, "\n%s %s: ******************************************\n", ctime_buf, phase2str(current_phase));
+	}
 
 	while (data + data_offset + sizeof(struct int_hop_metadata) <= data_end)
 	{
@@ -442,10 +445,10 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 //			fprintf(stdout, "ingress_port_id = %d\n",ntohs(hop_metadata_ptr->ingress_port_id));
 //			fprintf(stdout, "egress_port_id = %d\n",ntohs(hop_metadata_ptr->egress_port_id));
 //			fprintf(stdout, "hop_latency = %u\n",ntohl(hop_metadata_ptr->hop_latency));
-			fprintf(stdout, "Qinfo = %u\n",Qinfo);
-			fprintf(stdout, "ingress_time = %u\n",ingress_time);
-			fprintf(stdout, "egress_time = %u\n",egress_time);
-			fprintf(stdout, "hop_hop_latency_threshold = %u\n",hop_hop_latency_threshold);
+			fprintf(tunLogPtr, "%s %s: Qinfo = %u\n",ctime_buf, phase2str(current_phase), Qinfo);
+			fprintf(tunLogPtr, "%s %s: ingress_time = %u\n",ctime_buf, phase2str(current_phase), ingress_time);
+			fprintf(tunLogPtr, "%s %s: egress_time = %u\n",ctime_buf, phase2str(current_phase), egress_time);
+			fprintf(tunLogPtr, "%s %s: hop_hop_latency_threshold = %u\n",ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
 //			fprintf(stdout, "sizeof struct int_hop-metadata = %lu\n",sizeof(struct int_hop_metadata));
 //			fprintf(stdout, "sizeof struct hop_key = %lu\n",sizeof(struct hop_key));
 		}
@@ -1468,7 +1471,7 @@ rttstart:
 		if (rtt > highest_rtt)
 			highest_rtt = rtt;
 
-		if (vDebugLevel > 4)
+		if (vDebugLevel > 5)
 			printf("**rtt = %luus, highest rtt = %luus\n",rtt, highest_rtt);
 	}
 
