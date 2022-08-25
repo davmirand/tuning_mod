@@ -1431,9 +1431,10 @@ void * fDoRunFindHighestRtt(void * vargp)
 	fprintf(tunLogPtr,"%s %s: ***Starting Finding Highest RTT thread ...***\n", ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
         
-	sprintf(try,"sudo bpftrace -e \'BEGIN { @ca_rtt_us;} kprobe:tcp_ack_update_rtt { @ca_rtt_us = arg4; } kretprobe:tcp_ack_update_rtt /pid != 0/ { printf(\"%s\\n\", @ca_rtt_us); } interval:s:5 {  exit(); } END { clear(@ca_rtt_us); }\'", "%ld");
+	sprintf(try,"sudo bpftrace -e \'BEGIN { @ca_rtt_us;} kprobe:tcp_ack_update_rtt { @ca_rtt_us = arg4; } kretprobe:tcp_ack_update_rtt /pid != 0/ { printf(\"%s\\n\", @ca_rtt_us); } interval:ms:125 {  exit(); } END { clear(@ca_rtt_us); }\'", "%ld");
 
 rttstart:
+	rtt = 0;
 	highest_rtt = 0;
 	pipe = popen(try,"r");
 	if (!pipe)
@@ -1465,8 +1466,8 @@ rttstart:
 		if (rtt > highest_rtt)
 			highest_rtt = rtt;
 
-#if 0
-		if (vDebugLevel > 6 && previous_average_tx_Gbits_per_sec) 
+#if 1
+		if (vDebugLevel > 5 && previous_average_tx_Gbits_per_sec) 
 			fprintf(tunLogPtr,"%s %s: **rtt = %luus, highest rtt = %luus\n", ctime_buf, phase2str(current_phase), rtt, highest_rtt);
 #endif
 	}
@@ -1483,8 +1484,17 @@ finish_up:
 			fflush(tunLogPtr);
 		}
 	}
-	
-	sleep(3); //check again in 3 secs
+
+	if (vDebugLevel > 5 && previous_average_tx_Gbits_per_sec)
+	{
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr, "%s %s: ***Sleeping for %d microseconds before resuming RTT checking...\n", ctime_buf, phase2str(current_phase), gInterval);
+	//	fprintf(tunLogPtr, "%s %s: ***Sleeping for 3 seconds before resuming RTT checking...\n", ctime_buf, phase2str(current_phase));
+		fflush(tunLogPtr);
+	}
+
+	msleep(gInterval/1000); //msleep sleeps in milliseconds	
+	//sleep(3); //check again in 3 secs
 	goto rttstart;
 
 return ((char *) 0);
