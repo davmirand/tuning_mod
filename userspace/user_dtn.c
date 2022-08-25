@@ -133,8 +133,9 @@ static unsigned long rx_bits_per_sec = 0, tx_bits_per_sec = 0;
 //= 2 - include additional learning messages which provide window into decision making
 //= 3 - include still more learning messages which provide window into decision making
 //= 4 - include data from INT sink
-//= 5 - include additional sink data logging and other debug information
-//>=6 - include everything else
+//= 5 - include additional sink data logging
+//= 6 - include additional information about the link
+//>=7 - include everything else
 static int vDebugLevel = 1;
 
 #define SIGINT_MSG "SIGINT received.\n"
@@ -498,7 +499,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 			__u32 ingress_time = ntohl(hop_metadata_ptr->ingress_time);
 			flow_threshold_update.sink_time_threshold = ingress_time;; 
 
-			if (vDebugLevel > 5)
+			if (vDebugLevel > 6)
 			{
 				if ((ingress_time - flow_sink_time_threshold) > vFLOW_SINK_TIME_DELTA)
 				{
@@ -553,26 +554,36 @@ void lost_func(struct threshold_maps *ctx, int cpu, __u64 cnt)
 	fflush(tunLogPtr);
 }
 	
-void print_flow_key(struct flow_key *key)
+void print_flow_key(struct flow_key *key, char ctime_buf[])
 {
-	fprintf(stdout, "Flow Key:\n");
+	//fprintf(stdout, "Flow Key:\n");
+	fprintf(tunLogPtr,"%s %s: Flow Key:\n", ctime_buf, phase2str(current_phase));
 #if 1
-	fprintf(stdout, "\tegress_switch:%X\n", key->switch_id);
-	fprintf(stdout, "\tegress_port:%hu\n", key->egress_port);
-	fprintf(stdout, "\tvlan_id:%hu\n", key->vlan_id);
+	fprintf(tunLogPtr,"%s %s: \tegress_switch:%X\n", ctime_buf, phase2str(current_phase), key->switch_id);
+	fprintf(tunLogPtr,"%s %s: \tegress_port:%hu\n", ctime_buf, phase2str(current_phase), key->egress_port);
+	fprintf(tunLogPtr,"%s %s: \tvlan_id:%hu\n", ctime_buf, phase2str(current_phase), key->vlan_id);
+	//fprintf(stdout, "\tegress_switch:%X\n", key->switch_id);
+	//fprintf(stdout, "\tegress_port:%hu\n", key->egress_port);
+	//fprintf(stdout, "\tvlan_id:%hu\n", key->vlan_id);
 
 	if (src_ip_addr.y)
-		fprintf(stdout,"%u.%u.%u.%u", src_ip_addr.a[0], src_ip_addr.a[1], src_ip_addr.a[2], src_ip_addr.a[3]);
+		fprintf(tunLogPtr,"%s %s: \tsrc_ip:%u.%u.%u.%u", ctime_buf, phase2str(current_phase), src_ip_addr.a[0],src_ip_addr.a[1],src_ip_addr.a[2],src_ip_addr.a[3]);
+	//	fprintf(stdout,"%u.%u.%u.%u", src_ip_addr.a[0], src_ip_addr.a[1], src_ip_addr.a[2], src_ip_addr.a[3]);
 #endif
 }
 
 void print_hop_key(struct hop_key *key)
 {
+	time_t clk;
+	char ctime_buf[27];
 	if (vDebugLevel > 4 )
 	{
-		fprintf(stdout, "Hop Key:\n");
-		print_flow_key(&(key->flow_key));
-		fprintf(stdout, "\thop_index: %X\n", key->hop_index);
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: Hop Key:\n", ctime_buf, phase2str(current_phase));
+		//fprintf(stdout, "Hop Key:\n");
+		print_flow_key(&(key->flow_key), ctime_buf);
+		fprintf(tunLogPtr,"  ***hop_index: %X\n", key->hop_index);
+		//fprintf(stdout, "\thop_index: %X\n", key->hop_index);
 	}
 }
 /* End of bpf stuff ****/
@@ -1236,10 +1247,12 @@ start:
 
 			gettime(&clk, ctime_buf);
 			
-			if (vDebugLevel > 4)
+			if (vDebugLevel > 5 && tx_bits_per_sec)
 			{
 				//printf("DEV %s: TX : %lu kb/s RX : %lu kb/s, RX_MISD_ERRS/s : %lu, secs_passed %lu\n", netDevice, tx_bits_per_sec, rx_bits_per_sec, rx_missed_errs_tot/secs_passed, secs_passed);
-				printf("DEV %s: TX : %.2f Gb/s RX : %.2f Gb/s, RX_MISD_ERRS/s : %lu, secs_passed %lu\n", netDevice, tx_bits_per_sec/(double)(1000000), rx_bits_per_sec/(double)(1000000), rx_missed_errs_tot/secs_passed, secs_passed);
+				fprintf(tunLogPtr,"%s %s: DEV %s: TX : %.2f Gb/s RX : %.2f Gb/s, RX_MISD_ERRS/s : %lu, secs_passed %lu\n", 
+						ctime_buf, phase2str(current_phase), netDevice, tx_bits_per_sec/(double)(1000000), rx_bits_per_sec/(double)(1000000), rx_missed_errs_tot/secs_passed, secs_passed);
+	//			printf("DEV %s: TX : %.2f Gb/s RX : %.2f Gb/s, RX_MISD_ERRS/s : %lu, secs_passed %lu\n", netDevice, tx_bits_per_sec/(double)(1000000), rx_bits_per_sec/(double)(1000000), rx_missed_errs_tot/secs_passed, secs_passed);
 			}
 
 			if (vDebugLevel > 1 && average_tx_Gbits_per_sec)
@@ -1273,7 +1286,7 @@ start:
 						{
 							if ((vDebugLevel > 2) &&  (highest_average_tx_Gbits_per_sec >= 1))
 							{
-								fprintf(tunLogPtr,"%s %s: ***applied = %d, previous = %.2f, highest = %.2f***\n", 
+								fprintf(tunLogPtr,"%s %s: ***applied = %d, previous avg bitrate %.2f, highest avg bitrate= %.2f***\n", 
 										ctime_buf, phase2str(current_phase), applied, 
 											previous_average_tx_Gbits_per_sec, highest_average_tx_Gbits_per_sec);
 							}
@@ -1393,12 +1406,14 @@ start:
 				if (average_tx_Gbits_per_sec >= 1) //must be at least a Gig to check
 					check_if_bitrate_too_low(average_tx_Gbits_per_sec, &applied, &suggested, &nothing_done, &tune, aApplyDefTunBest);
 
+				if (vDebugLevel > 5 && (tx_bits_per_sec || rx_bits_per_sec))
+				{
+					fprintf(tunLogPtr, "%s %s: ***Sleeping for %d microseconds before resuming Bitrate checking...\n", ctime_buf, phase2str(current_phase), gInterval);
+					fflush(tunLogPtr);
+				}
+				
 				average_tx_Gbits_per_sec = 0.0;
 				average_tx_bits_per_sec = 0.0;
-				if (vDebugLevel > 4)
-				{
-					printf("***Sleeping for %d microseconds before resuming Bitrate checking...\n", gInterval);
-				}
 
 				msleep(gInterval/1000); //msleep sleeps in milliseconds
 			}
@@ -1471,8 +1486,10 @@ rttstart:
 		if (rtt > highest_rtt)
 			highest_rtt = rtt;
 
-		if (vDebugLevel > 5)
-			printf("**rtt = %luus, highest rtt = %luus\n",rtt, highest_rtt);
+#if 0
+		if (vDebugLevel > 6 && previous_average_tx_Gbits_per_sec) 
+			fprintf(tunLogPtr,"%s %s: **rtt = %luus, highest rtt = %luus\n", ctime_buf, phase2str(current_phase), rtt, highest_rtt);
+#endif
 	}
 
 finish_up:
