@@ -127,7 +127,7 @@ int msleep(long msec)
 
 char netDevice[128];
 static unsigned long rx_bits_per_sec = 0, tx_bits_per_sec = 0;
-//vDebugLevel (Default = 1)
+//vDebugLevel (Default = 0)
 //= 0 - only applied tuning, error and important messages get written to log file unconditionally
 //= 1 - include suggested tuning
 //= 2 - include additional learning messages which provide window into decision making
@@ -136,7 +136,7 @@ static unsigned long rx_bits_per_sec = 0, tx_bits_per_sec = 0;
 //= 5 - include additional sink data logging
 //= 6 - include additional information about the link
 //>=7 - include everything else
-static int vDebugLevel = 1;
+static int vDebugLevel = 0;
 
 #define SIGINT_MSG "SIGINT received.\n"
 void sig_int_handler(int signum, siginfo_t *info, void *ptr)
@@ -1024,7 +1024,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 					current_phase = TUNING;
 					//fprintf(tunLogPtr, "%s %s: Changed current phase***\n",ctime_buf, phase2str(current_phase));
 					//do something
-					if (my_tune_max < kmaximum) //already high
+					if (my_tune_max <= kmaximum) //already high
 					{
 						if (vDebugLevel > 0)
 						{
@@ -1085,14 +1085,13 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 				else
 					if (current_phase == LEARNING)
 					{
-						if (my_tune_max < kmaximum) //already high
+						if (my_tune_max <= kmaximum) //already high
 						{
 							*nothing_done = 1;
 							if (vDebugLevel > 0)
 							{
 								//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
 								fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s*",ctime_buf, phase2str(current_phase), buffer);
-								fprintf(tunLogPtr, "%s %s: ***SUGGESTED TUNING***: *sudo sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"\n",ctime_buf, phase2str(current_phase), kminimum, kdefault, my_tune_max);
 								fprintf(tunLogPtr, "%s %s: *** Current Tuning of net.ipv4.tcp_wmem appears sufficient***\n", ctime_buf, phase2str(current_phase));
 							}
 						}
@@ -1850,7 +1849,7 @@ int main(int argc, char **argv)
 	memset(aSrc_Ip,0,sizeof(aSrc_Ip));
 	src_ip_addr.y = 0;
 
-	vGoodBitrateValue = ((99/(double)100) * netDeviceSpeed); //99% of NIC speed must be a good bitrate
+	vGoodBitrateValue = ((95/(double)100) * netDeviceSpeed); //99% of NIC speed must be a good bitrate
 	fprintf(tunLogPtr, "%s %s: ***vGoodBitrateValue = %.1f***\n", ctime_buf, phase2str(current_phase), vGoodBitrateValue);
 	fflush(tunLogPtr);
 
