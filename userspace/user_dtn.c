@@ -944,6 +944,7 @@ void * fDoRunHttpServer(void * vargp)
 }
 
 #define BITRATE_INTERVAL 5
+extern int my_tune_max;
 void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done, int * tune, char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING]);
 void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done, int * tune, char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING])
 {
@@ -955,8 +956,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 	char equal_sign;
 	unsigned int  kminimum;
 	int kdefault;
-	unsigned int kmaximum, my_tune_max;
-	int x, found = 0, TUNING_NUMS;
+	unsigned int kmaximum;
 
 	gettime(&clk, ctime_buf);
 	if (average_tx_Gbits_per_sec < vGoodBitrateValue)
@@ -992,27 +992,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 				}
 				pclose(pipe);
 
-
-				/******/
-				my_tune_max = 0;
-				found = 0;
-				if ((netDeviceSpeed > 10000) && (netDeviceSpeed < 100000)) //less than 100 Gb/s and greater than 10 Gb/s
-				{
-					TUNING_NUMS = TUNING_NUMS_Over10GtoUnder100G;
-
-					for (x = 0; x < TUNING_NUMS; x++)
-					{
-						if (strcmp(aTuningNumsToUse_Over10GtoUnder100G[x].setting, "net.ipv4.tcp_wmem") == 0) //found
-						{
-							found = 1;
-							my_tune_max = aTuningNumsToUse_Over10GtoUnder100G[x].maximum;
-							break;
-						}
-					}
-				}
-				/*****/
-
-				if (!found)
+				if (!my_tune_max)
 				{
 					printf("***ERROR: Strange error. Could not find net.ipv4.tcp_wmem in local database!!!***\n");
 					return ;

@@ -300,6 +300,8 @@ char aApplyKernelDefTun2DArray[NUM_SYSTEM_SETTINGS][MAX_SIZE_SYSTEM_SETTING_STRI
 char aApplyNicDefTun2DArray[NUM_SYSTEM_SETTINGS][MAX_SIZE_SYSTEM_SETTING_STRING];
 char aApplyBiosDefTun2DArray[NUM_SYSTEM_SETTINGS][MAX_SIZE_SYSTEM_SETTING_STRING];
 
+int my_tune_max = 0;
+
 /* Must change TUNING_NUMS_10GandUnder if adding more to the array below in user_dtn.h*/
 host_tuning_vals_t aTuningNumsToUse10GandUnder[TUNING_NUMS_10GandUnder] = {
 	{"net.core.rmem_max",				67108864,          -1,      	0},
@@ -340,6 +342,7 @@ host_tuning_vals_t aTuningNumsToUse100Gb[TUNING_NUMS_100G] = {
 	{"net.ipv4.tcp_no_metrics_save",			 1,	     -1,		0},
 	{"MTU",							 0,	     84, 		0} //leave here not use for now
 };
+
 void fDoSystemTuning(void)
 {
 
@@ -538,6 +541,10 @@ void fDoSystemTuning(void)
 									y = sprintf(strValdef,"%d",aTuningNumsToUse[count].xDefault);
 									total += y;
 									y = sprintf(strValmax,"%d",aTuningNumsToUse[count].maximum);
+
+									if (strcmp("net.ipv4.tcp_wmem",setting) == 0)
+										my_tune_max = atoi(strValmax);
+
 									total += y;
 									vPad = SETTINGS_PAD_MAX3-total;
 									if (aTuningNumsToUse[count].maximum > currmax)
