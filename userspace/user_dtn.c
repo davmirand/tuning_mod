@@ -944,6 +944,7 @@ void * fDoRunHttpServer(void * vargp)
 }
 
 #define BITRATE_INTERVAL 5
+#define KTUNING_DELTA	200000
 extern int my_tune_max;
 void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done, int * tune, char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING]);
 void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done, int * tune, char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING])
@@ -1021,16 +1022,16 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 							char aApplyDefTunNoStdOut[MAX_SIZE_SYSTEM_SETTING_STRING+32];
 
 							if (*tune == 1) //apply up
-								sprintf(aApplyDefTun,"sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"", kminimum, kdefault, kmaximum+200000);
+								sprintf(aApplyDefTun,"sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"", kminimum, kdefault, kmaximum+KTUNING_DELTA);
 							else
 								if (*tune == 2)
 								{
-									if ((kmaximum - 200000) > 0)
-										sprintf(aApplyDefTun,"sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"", kminimum, kdefault, kmaximum - 200000);
+									if (kmaximum > 600000)
+										sprintf(aApplyDefTun,"sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"", kminimum, kdefault, kmaximum - KTUNING_DELTA);
 									else
 										{
 								
-											fprintf(tunLogPtr, "%s %s: ***Could not apply tuning since the maximum value of wmem would be zero or less...***\n",ctime_buf, phase2str(current_phase));
+											fprintf(tunLogPtr, "%s %s: ***Could not apply tuning since the maximum value of wmem would be less than %d...***\n",ctime_buf, phase2str(current_phase), 600000 - KTUNING_DELTA);
 											current_phase = LEARNING; //change back phase to LEARNING
 											*nothing_done = 1;
 											return;	
@@ -1082,7 +1083,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 								{
 									//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
 									fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: *%s",ctime_buf, phase2str(current_phase), buffer);
-									fprintf(tunLogPtr, "%s %s: ***SUGGESTED TUNING***: *sudo sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"\n\n",ctime_buf, phase2str(current_phase), kminimum, kdefault, kmaximum+200000);
+									fprintf(tunLogPtr, "%s %s: ***SUGGESTED TUNING***: *sudo sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"\n\n",ctime_buf, phase2str(current_phase), kminimum, kdefault, kmaximum+KTUNING_DELTA);
 								}
 							}
 					}
@@ -1467,7 +1468,7 @@ rttstart:
 			highest_rtt = rtt;
 
 #if 1
-		if (vDebugLevel > 5 && previous_average_tx_Gbits_per_sec) 
+		if (vDebugLevel > 6 && previous_average_tx_Gbits_per_sec) 
 			fprintf(tunLogPtr,"%s %s: **rtt = %luus, highest rtt = %luus\n", ctime_buf, phase2str(current_phase), rtt, highest_rtt);
 #endif
 	}
