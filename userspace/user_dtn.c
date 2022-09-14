@@ -1418,6 +1418,15 @@ start:
 return ((char *) 0);
 }
 
+#define RTT_THRESHOLD	50
+void fDoManageRtt(void)
+{
+
+
+
+return;
+}
+
 void * fDoRunFindHighestRtt(void * vargp)
 {
 	//int * fd = (int *) vargp;
@@ -1482,8 +1491,12 @@ finish_up:
 		{
 			gettime(&clk, ctime_buf);
 			fprintf(tunLogPtr,"%s %s: ***Highest RTT is %.3fms\n", ctime_buf, phase2str(current_phase), highest_rtt/(double)1000);
+			fprintf(tunLogPtr,"%s %s: ***Highest ***RTT2*** is %ld ms\n", ctime_buf, phase2str(current_phase), highest_rtt/1000);
 			fflush(tunLogPtr);
 		}
+
+		if (highest_rtt/1000 >= RTT_THRESHOLD)
+			fDoManageRtt();
 	}
 
 	if (vDebugLevel > 5 && previous_average_tx_Gbits_per_sec)
