@@ -125,6 +125,30 @@ int msleep(long msec)
 	return res;
 }
 
+/* my_usleep(): Sleep for the requested number of microseconds. */
+int my_usleep(long usec)
+{
+        struct timespec ts;
+        int res;
+        long sec = usec / 1000000;
+	long nsec = (usec % 1000000) * 1000;
+
+        if (usec < 0)
+        {
+                errno = EINVAL;
+                return -1;
+        }
+
+        ts.tv_sec = sec;
+        ts.tv_nsec = nsec;
+
+        do {
+                res = nanosleep(&ts, &ts);
+        } while (res && errno == EINTR);
+
+        return res;
+}
+
 char netDevice[128];
 static unsigned long rx_bits_per_sec = 0, tx_bits_per_sec = 0;
 //vDebugLevel (Default = 0)
@@ -1434,6 +1458,9 @@ void fDoManageRtt(double average_tx_Gbits_per_sec, int * applied, int * suggeste
 	unsigned int kmaximum;
 
 	gettime(&clk, ctime_buf);
+
+	return;
+
 	if (average_tx_Gbits_per_sec < vGoodBitrateValue)
 	{
 		if (current_phase == TUNING)
