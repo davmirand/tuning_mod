@@ -1418,12 +1418,149 @@ start:
 return ((char *) 0);
 }
 
-#define RTT_THRESHOLD	50
-void fDoManageRtt(void)
+//Measured in milliseconds
+#define RTT_THRESHOLD	50 
+void fDoManageRtt(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done, int * tune, char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING]);
+void fDoManageRtt(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done, int * tune, char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING])
 {
+	time_t clk;
+	char ctime_buf[27];
+	char buffer[256];
+	FILE *pipe;
+	char kernel_parameter[128];
+	char equal_sign;
+	unsigned int  kminimum;
+	int kdefault;
+	unsigned int kmaximum;
 
+	gettime(&clk, ctime_buf);
+	if (average_tx_Gbits_per_sec < vGoodBitrateValue)
+	{
+		if (current_phase == TUNING)
+		{
+			fprintf(tunLogPtr, "%s %s: Trying to tune net.ipv4.tcp_wmem, but already TUNING something else.  Will retry later if still need TUNING***\n",ctime_buf, phase2str(current_phase));
+		}
+		else
+			{
+				pipe = popen("sysctl net.ipv4.tcp_wmem","r");
+				if (!pipe)
+				{
+					printf("popen failed!\n");
+					return ;
+				}
 
+				while (!feof(pipe))
+				{
+					if (fgets(buffer, 256, pipe) != NULL)
+					{
+						sscanf(buffer,"%s %c %u %d %u", kernel_parameter, &equal_sign, &kminimum, &kdefault, &kmaximum);
+						break;
+					}
+					else
+						{
+							printf("***ERROR: problem getting buffer from popen, returning!!!***\n");
+							pclose(pipe);
+							return ;
+						}
+				}
+				pclose(pipe);
 
+				if (!my_tune_max)
+				{
+					printf("***ERROR: Strange error. Could not find net.ipv4.tcp_wmem in local database!!!***\n");
+					return ;
+				}
+
+				if (gTuningMode && current_phase == LEARNING)
+				{
+					gettime(&clk, ctime_buf);
+					current_phase = TUNING;
+					//fprintf(tunLogPtr, "%s %s: Changed current phase***\n",ctime_buf, phase2str(current_phase));
+					//do something
+					if (my_tune_max <= kmaximum) //already high
+					{
+						if (vDebugLevel > 0)
+						{
+							//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
+							fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s*",ctime_buf, phase2str(current_phase), buffer);
+							fprintf(tunLogPtr, "%s %s: *** Current Tuning of net.ipv4.tcp_wmem appears sufficient***\n", ctime_buf, phase2str(current_phase));
+						}
+						
+						*nothing_done = 1;
+					}
+					else
+						{
+							//char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING];
+							char aApplyDefTunNoStdOut[MAX_SIZE_SYSTEM_SETTING_STRING+32];
+
+							if (*tune == 1) //apply up
+								sprintf(aApplyDefTun,"sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"", kminimum, kdefault, kmaximum+KTUNING_DELTA);
+							else
+								if (*tune == 2)
+								{
+									if (kmaximum > 600000)
+										sprintf(aApplyDefTun,"sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"", kminimum, kdefault, kmaximum - KTUNING_DELTA);
+									else
+										{
+
+											fprintf(tunLogPtr, "%s %s: ***Could not apply tuning since the maximum value of wmem would be less than %d...***\n",ctime_buf, phase2str(current_phase), 600000 - KTUNING_DELTA);
+											current_phase = LEARNING; //change back phase to LEARNING
+											*nothing_done = 1;
+											return;
+										}
+								}
+								else
+									if (*tune == 3)
+									{
+										fprintf(tunLogPtr,"%s %s: ***No better change found. Using ***%s***\n\n", ctime_buf, phase2str(current_phase), aApplyDefTun);
+									}
+									else
+										{
+											fprintf(tunLogPtr, "%s %s: ***Could not apply tuning*** invalid value for tune %d***\n",ctime_buf, phase2str(current_phase), *tune);
+											current_phase = LEARNING; //change back phase to LEARNING
+											*nothing_done = 1;
+											return;
+										}
+
+										fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ctime_buf, phase2str(current_phase), buffer);
+										strcpy(aApplyDefTunNoStdOut,aApplyDefTun);
+										strcat(aApplyDefTunNoStdOut," >/dev/null"); //so it won't print to stderr on console
+										system(aApplyDefTunNoStdOut);
+										fprintf(tunLogPtr, "%s %s: ***APPLIED TUNING***: %s\n\n",ctime_buf, phase2str(current_phase), aApplyDefTun);
+										*applied = 1;
+
+										current_phase = LEARNING;
+										//fprintf(tunLogPtr, "%s %s: Changed current phase***\n",ctime_buf, phase2str(current_phase));
+						}
+
+						current_phase = LEARNING; //change back phase to LEARNING
+				}
+				else
+					if (current_phase == LEARNING)
+					{
+						if (my_tune_max <= kmaximum) //already high
+						{
+							*nothing_done = 1;
+							if (vDebugLevel > 0)
+							{
+								//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
+							}
+						}
+						else
+							{
+								*suggested = 1;
+								if (vDebugLevel > 0)
+								{
+									//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
+									fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: *%s",ctime_buf, phase2str(current_phase), buffer);
+									fprintf(tunLogPtr, "%s %s: ***SUGGESTED TUNING***: *sudo sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"\n\n",ctime_buf, phase2str(current_phase), kminimum, kdefault, kmaximum+KTUNING_DELTA);
+								}
+							}
+					}
+			}
+	}
+
+	fflush(tunLogPtr);
 return;
 }
 
@@ -1435,7 +1572,10 @@ void * fDoRunFindHighestRtt(void * vargp)
 	char buffer[128];
 	FILE *pipe;
 	char try[1024];
+	char aApplyDefTunBest[MAX_SIZE_SYSTEM_SETTING_STRING];
 	long rtt = 0, highest_rtt = 0;
+	int applied = 0, suggested = 0, nothing_done = 0;
+	int tune = 1; //1 = up, 2 = down - tune up initially
 
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Starting Finding Highest RTT thread ...***\n", ctime_buf, phase2str(current_phase));
@@ -1496,7 +1636,7 @@ finish_up:
 		}
 
 		if (highest_rtt/1000 >= RTT_THRESHOLD)
-			fDoManageRtt();
+			fDoManageRtt(highest_rtt/1000, &applied, &suggested, &nothing_done, &tune, aApplyDefTunBest);
 	}
 
 	if (vDebugLevel > 5 && previous_average_tx_Gbits_per_sec)
