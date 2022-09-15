@@ -1419,7 +1419,8 @@ start:
 				average_tx_Gbits_per_sec = 0.0;
 				average_tx_bits_per_sec = 0.0;
 
-				msleep(gInterval/1000); //msleep sleeps in milliseconds
+				//msleep(gInterval/1000); //msleep sleeps in milliseconds
+				my_usleep(gInterval); //sleeps in microseconds
 			}
 
 			break;
@@ -1674,7 +1675,8 @@ finish_up:
 		fflush(tunLogPtr);
 	}
 
-	msleep(gInterval/1000); //msleep sleeps in milliseconds	
+	//msleep(gInterval/1000); //msleep sleeps in milliseconds	
+	my_usleep(gInterval); //sleeps in microseconds	
 	//sleep(3); //check again in 3 secs
 	goto rttstart;
 
