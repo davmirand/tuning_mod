@@ -1459,6 +1459,7 @@ void fDoManageRtt(double average_tx_Gbits_per_sec, int * applied, int * suggeste
 	unsigned int kmaximum;
 
 	gettime(&clk, ctime_buf);
+	fprintf(tunLogPtr, "%s %s: *** In fDoManageRtt(). Must have hit some RTT threshold. Returning for now...***\n", ctime_buf, phase2str(current_phase));
 
 	return;
 
