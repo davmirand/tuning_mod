@@ -1660,7 +1660,6 @@ finish_up:
 		{
 			gettime(&clk, ctime_buf);
 			fprintf(tunLogPtr,"%s %s: ***Highest RTT is %.3fms\n", ctime_buf, phase2str(current_phase), highest_rtt/(double)1000);
-			fprintf(tunLogPtr,"%s %s: ***Highest ***RTT2*** is %ld ms\n", ctime_buf, phase2str(current_phase), highest_rtt/1000);
 			fflush(tunLogPtr);
 		}
 
