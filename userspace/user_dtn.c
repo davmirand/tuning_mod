@@ -220,10 +220,11 @@ struct threshold_maps
 };
 
 #define MAX_TUNING_ACTIVITIES_PER_FLOW	10
-#define MAX_SIZE_TUNING_STRING		1001
+#define MAX_SIZE_TUNING_STRING		1500
 #define NUM_OF_FLOWS_TO_KEEP_TRACK_OF	4
 typedef struct {
         int num_tuning_activities;
+	int gFlowCountUsed;
 	char what_was_done[MAX_TUNING_ACTIVITIES_PER_FLOW][MAX_SIZE_TUNING_STRING];
 } sFlowCounters_t;
 
@@ -232,6 +233,7 @@ static __u32 Qinfo = 0;
 static __u32 ingress_time = 0;
 static __u32 egress_time = 0;
 static __u32 hop_hop_latency_threshold = 0;
+static __u32 curr_hop_key_hop_index = 0;
 static int vFlowCount = 0;
 static sFlowCounters_t sFlowCounters[NUM_OF_FLOWS_TO_KEEP_TRACK_OF];
 #define MAP_DIR "/sys/fs/bpf/test_maps"
@@ -255,7 +257,7 @@ static __u32 vFLOW_SINK_TIME_DELTA = 4000000000;
 void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size);
 void lost_func(struct threshold_maps *ctx, int cpu, __u64 cnt);
 void print_hop_key(struct hop_key *key);
-void record_activity(void); 
+void record_activity(char * pActivity); 
 
 #define SIGALRM_MSG "SIGALRM received.\n"
 int vTimerIsSet = 0;
@@ -264,11 +266,13 @@ void qOCC_Hop_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 {
 	time_t clk;
 	char ctime_buf[27];
+	char activity[MAX_SIZE_TUNING_STRING];
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr, "%s %s: ***Timer Alarm went off*** still having problems with Queue Occupancy and HopDelays. Time to do something***\n",ctime_buf, phase2str(current_phase)); 
 	//***Do something here ***//
 	vTimerIsSet = 0;
-	record_activity();
+	sprintf(activity,"%s %s: ***hop_key.hop_index %X, Doing Something",ctime_buf, phase2str(current_phase), curr_hop_key_hop_index);
+	record_activity(activity); //make sure activity big enough to concatenate additional data -- see record_activity()
 	fflush(tunLogPtr);
 	
 	return;
@@ -370,9 +374,6 @@ exit_program: {
 	}
 }
 
-static int gFlowCountUsed = 0;
-static __u32 curr_hop_key_hop_index = 0;
-
 void EvaluateQOcc_and_HopDelay(__u32 hop_key_hop_index)
 {
 	time_t clk;
@@ -400,26 +401,28 @@ void EvaluateQOcc_and_HopDelay(__u32 hop_key_hop_index)
 	return;
 }
 
-void record_activity(void)
+void record_activity(char *pActivity)
 {
-	char activity[1000];
+	char add_to_activity[512];
 	time_t clk;
 	char ctime_buf[27];
 
 	static __u32 myCount = 0;
 	gettime(&clk, ctime_buf);
-	sprintf(activity,"%s %s: ***hop_key.hop_index %X, Doing Something***vFlowcount = %d, num_tuning_activty = %d, myCount = %u", ctime_buf, phase2str(current_phase), curr_hop_key_hop_index, vFlowCount, sFlowCounters[vFlowCount].num_tuning_activities + 1, myCount++);
+	sprintf(add_to_activity,"***vFlowcount = %d, num_tuning_activty = %d, myCount = %u",vFlowCount, sFlowCounters[vFlowCount].num_tuning_activities + 1, myCount++);
+	strcat(pActivity,add_to_activity);
+	//sprintf(activity,"%s %s: ***hop_key.hop_index %X, Doing Something***vFlowcount = %d, num_tuning_activty = %d, myCount = %u", ctime_buf, phase2str(current_phase), curr_hop_key_hop_index, vFlowCount, sFlowCounters[vFlowCount].num_tuning_activities + 1, myCount++);
 
-	fprintf(tunLogPtr,"%s\n",activity); //special case for testing
+	fprintf(tunLogPtr,"%s\n",pActivity); //special case for testing
 
-	strcpy(sFlowCounters[vFlowCount].what_was_done[sFlowCounters[vFlowCount].num_tuning_activities], activity);
+	strcpy(sFlowCounters[vFlowCount].what_was_done[sFlowCounters[vFlowCount].num_tuning_activities], pActivity);
 	(sFlowCounters[vFlowCount].num_tuning_activities)++;
 	if (sFlowCounters[vFlowCount].num_tuning_activities == MAX_TUNING_ACTIVITIES_PER_FLOW)
 	{
 		sFlowCounters[vFlowCount].num_tuning_activities = 0;
 	}
 
-	gFlowCountUsed = 1;	
+	sFlowCounters[vFlowCount].gFlowCountUsed = 1;	
 
 	return;
 }
@@ -646,13 +649,41 @@ void check_req(http_s *h, char aResp[])
 	if (strstr(pReqData,"GET /-pc"))
 	{
 		//Get counters
-		if (sFlowCounters[vFlowCount].num_tuning_activities == 0 && gFlowCountUsed)
-			strcpy(aResp,sFlowCounters[vFlowCount].what_was_done[MAX_TUNING_ACTIVITIES_PER_FLOW - 1]);
-		else
-			if (sFlowCounters[vFlowCount].num_tuning_activities == 0)
-				strcpy(aResp,"***No tuning activity has happened so far***\n");
+		int i, g, start = 0;
+		for (g = 0; g <= vFlowCount; g++)
+		{
+			if (g == MAX_TUNING_ACTIVITIES_PER_FLOW) break; //use this untile we can figure out when a new flow starts
+
+			if (sFlowCounters[g].num_tuning_activities == 0 && sFlowCounters[g].gFlowCountUsed)
+				strcpy(aResp,sFlowCounters[g].what_was_done[MAX_TUNING_ACTIVITIES_PER_FLOW - 1]);
 			else
-				strcpy(aResp, sFlowCounters[vFlowCount].what_was_done[sFlowCounters[vFlowCount].num_tuning_activities - 1]);
+				if (sFlowCounters[g].num_tuning_activities == 0 && !g) //vFlowCount == 0
+				{
+					strcpy(aResp,"***No tuning activity has happened so far***\n");
+					break;
+				}
+				else
+					if (sFlowCounters[g].num_tuning_activities == 0)  //vFlowCount > 0
+						break;
+					else
+						{
+							int num_activities = sFlowCounters[g].num_tuning_activities; //for now as a simple aid with critical sections
+							fprintf(stdout,"FlowCount = %d, num_activities = %d\n",g, num_activities);
+							for (i = 0; i < num_activities; i++)
+							{
+								memcpy(aResp+start, sFlowCounters[g].what_was_done[i], strlen(sFlowCounters[g].what_was_done[i]));
+								start = start + strlen(sFlowCounters[g].what_was_done[i]);
+								aResp[start] = '\n';
+								start++;
+								fprintf(stdout,"start = %d\n",start);
+							}
+							aResp[start-1] = 0;
+						}
+		}
+
+		fprintf(stdout,"%s",aResp);	
+		fprintf(stdout,"\n***\n");
+		fflush(stdout);
 
 		gettime(&clk, ctime_buf);
 		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to provide counters of tuning activities throughout data transfer***\n", ctime_buf, phase2str(current_phase));
@@ -911,10 +942,12 @@ after_check:
 return;
 }
 
+#define MAX_SIZE_OF_THE_RESPONSE  ((MAX_TUNING_ACTIVITIES_PER_FLOW * MAX_SIZE_TUNING_STRING * NUM_OF_FLOWS_TO_KEEP_TRACK_OF) + (2 * sizeof(int) * NUM_OF_FLOWS_TO_KEEP_TRACK_OF))
 /* TODO: edit this function to handle HTTP data and answer Websocket requests.*/
 static void on_http_request(http_s *h) 
 {
-	char aTheResp[512];	
+	char aTheResp[MAX_SIZE_OF_THE_RESPONSE];	
+	//char aTheResp[4096];	
   	check_req(h, aTheResp);
 	/* set the response and send it (finnish vs. destroy). */
   	http_send_body(h, aTheResp, strlen(aTheResp));
@@ -1044,6 +1077,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 						{
 							//char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING];
 							char aApplyDefTunNoStdOut[MAX_SIZE_SYSTEM_SETTING_STRING+32];
+							char activity[MAX_SIZE_TUNING_STRING];
 
 							if (*tune == 1) //apply up
 								sprintf(aApplyDefTun,"sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"", kminimum, kdefault, kmaximum+KTUNING_DELTA);
@@ -1079,6 +1113,10 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 							strcat(aApplyDefTunNoStdOut," >/dev/null"); //so it won't print to stderr on console
 							system(aApplyDefTunNoStdOut);
 							fprintf(tunLogPtr, "%s %s: ***APPLIED TUNING***: %s\n\n",ctime_buf, phase2str(current_phase), aApplyDefTun);
+
+							sprintf(activity,"%s %s: ***ACTIVITY=APPLIED=TUNING***: %s\n",ctime_buf, phase2str(current_phase), aApplyDefTun);
+							record_activity(activity); //make sure activity big enough to concatenate additional data -- see record_activity()
+
 							*applied = 1;
 					
 							current_phase = LEARNING;
