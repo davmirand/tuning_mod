@@ -1173,7 +1173,11 @@ void * fDoRunGetThresholds(void * vargp)
 	FILE *pipe;
 	int before = 0;
 	int now = 0;
-	int check_bitrate_interval = 0;
+#if 1
+	unsigned long keep_tx_bytes_tot = 0;
+	int acount = 0;
+#endif
+	int check_bitrate_interval = 0, keep_bitrate_interval = 0;
 	time_t secs_passed = 1;
 	unsigned long rx_missed_errs_before, rx_missed_errs_now, rx_missed_errs_tot;
 	unsigned long rx_before, rx_now, rx_bytes_tot;
@@ -1197,6 +1201,13 @@ void * fDoRunGetThresholds(void * vargp)
 
 start:
 	secs_passed = 0;
+#if 1
+	rx_missed_errs_before = rx_missed_errs_now = rx_missed_errs_tot = 0;
+	rx_before =  rx_now = rx_bytes_tot = rx_bits_per_sec = 0;
+	tx_before =  tx_now =  tx_bytes_tot = tx_bits_per_sec = 0;
+	now = before = 0;
+	keep_tx_bytes_tot = 0;
+#endif
 	//before = time((time_t *)0);
 	pipe = popen(try,"r");
 	if (!pipe)
@@ -1265,25 +1276,48 @@ start:
 			}
 			else
 				secs_passed = now - before;
+#if 1
+			keep_tx_bytes_tot = tx_bytes_tot;
+#endif
+			
+			if (secs_passed > 1)
+			{
+				//bpftrace and the figures don't line up with the iperf, but lets make it higher than lower
+				//we see this by observation
+				tx_bytes_tot = tx_bytes_tot + (tx_bytes_tot / secs_passed );
+			}
 
 			if (!secs_passed) 
+			{
 				secs_passed = 1;
+				acount = 1;
+				tx_bytes_tot = tx_bytes_tot + (tx_bytes_tot / 2 );
+			}
 			
-			//tx_bits_per_sec = ((8 * tx_bytes_tot) / 1024) / secs_passed;
-			//rx_bits_per_sec = ((8 * rx_bytes_tot) / 1024) / secs_passed;;
-			tx_bits_per_sec = ((8 * tx_bytes_tot) / 1000) / secs_passed;
-			rx_bits_per_sec = ((8 * rx_bytes_tot) / 1000) / secs_passed;;
+			if (vDebugLevel > 1)
+			{
+				fprintf(tunLogPtr,"%s %s: ***secs_passed*** = %ld, acount = %d, keep_bytes_tot  = %ld, bytes_before  %ld, bytes_now %ld, bytes_total = %ld\n",ctime_buf, phase2str(current_phase), secs_passed, acount, keep_tx_bytes_tot, tx_before, tx_now, tx_bytes_tot);
+			}
+
+			acount = 0;
+
+			tx_bits_per_sec = ((8 * tx_bytes_tot) / 1024) / secs_passed;
+			rx_bits_per_sec = ((8 * rx_bytes_tot) / 1024) / secs_passed;;
+			//tx_bits_per_sec = ((8 * tx_bytes_tot) / 1000) / secs_passed;
+			//rx_bits_per_sec = ((8 * rx_bytes_tot) / 1000) / secs_passed;;
 			pclose(pipe);
 		
 			average_tx_bits_per_sec += tx_bits_per_sec;	
 			//check_bitrate_interval++;
 			check_bitrate_interval += secs_passed;
+			keep_bitrate_interval = check_bitrate_interval;
 			if (check_bitrate_interval >= BITRATE_INTERVAL) 
 			{
 				//check_bitrate_interval = 0;
 				//average_tx_bits_per_sec = average_tx_bits_per_sec/BITRATE_INTERVAL;
 				average_tx_bits_per_sec = average_tx_bits_per_sec/(double)check_bitrate_interval;
 				average_tx_Gbits_per_sec = average_tx_bits_per_sec/(double)(1000000);
+				//average_tx_Gbits_per_sec = average_tx_bits_per_sec/(double)(1048576);
 				check_bitrate_interval = 0;
 			}
 
@@ -1291,16 +1325,17 @@ start:
 			
 			if (vDebugLevel > 5 && tx_bits_per_sec)
 			{
-				//printf("DEV %s: TX : %lu kb/s RX : %lu kb/s, RX_MISD_ERRS/s : %lu, secs_passed %lu\n", netDevice, tx_bits_per_sec, rx_bits_per_sec, rx_missed_errs_tot/secs_passed, secs_passed);
 				fprintf(tunLogPtr,"%s %s: DEV %s: TX : %.2f Gb/s RX : %.2f Gb/s, RX_MISD_ERRS/s : %lu, secs_passed %lu\n", 
 						ctime_buf, phase2str(current_phase), netDevice, tx_bits_per_sec/(double)(1000000), rx_bits_per_sec/(double)(1000000), rx_missed_errs_tot/secs_passed, secs_passed);
-	//			printf("DEV %s: TX : %.2f Gb/s RX : %.2f Gb/s, RX_MISD_ERRS/s : %lu, secs_passed %lu\n", netDevice, tx_bits_per_sec/(double)(1000000), rx_bits_per_sec/(double)(1000000), rx_missed_errs_tot/secs_passed, secs_passed);
+				//		ctime_buf, phase2str(current_phase), netDevice, tx_bits_per_sec/(double)(1048576), rx_bits_per_sec/(double)(1048576), rx_missed_errs_tot/secs_passed, secs_passed);
 			}
 
 			if (vDebugLevel > 1 && average_tx_Gbits_per_sec)
 			{
 				if (!check_bitrate_interval)
-					fprintf(tunLogPtr,"%s %s: average_tx_Gbits_per_sec = %.2f Gb/s \n",ctime_buf, phase2str(current_phase), average_tx_Gbits_per_sec);
+				{
+					fprintf(tunLogPtr,"%s %s: average_tx_Gbits_per_sec = %.2f Gb/s, bitrate_interval = %d \n",ctime_buf, phase2str(current_phase), average_tx_Gbits_per_sec, keep_bitrate_interval);
+				}
 			}
 
 			if (!check_bitrate_interval)
