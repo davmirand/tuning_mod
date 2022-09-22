@@ -1671,13 +1671,10 @@ finish_up:
 	{
 		gettime(&clk, ctime_buf);
 		fprintf(tunLogPtr, "%s %s: ***Sleeping for %d microseconds before resuming RTT checking...\n", ctime_buf, phase2str(current_phase), gInterval);
-	//	fprintf(tunLogPtr, "%s %s: ***Sleeping for 3 seconds before resuming RTT checking...\n", ctime_buf, phase2str(current_phase));
 		fflush(tunLogPtr);
 	}
 
-	//msleep(gInterval/1000); //msleep sleeps in milliseconds	
 	my_usleep(gInterval); //sleeps in microseconds	
-	//sleep(3); //check again in 3 secs
 	goto rttstart;
 
 return ((char *) 0);
