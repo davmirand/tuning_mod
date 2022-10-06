@@ -1210,6 +1210,7 @@ start:
 	{
 		// use buffer to read and add to result
 		if (fgets(buffer, 128, pipe) != NULL);
+			//printf("buffer0 is %s",buffer);		
 		else
 			{
 				printf("Not working****\n");
@@ -1221,16 +1222,10 @@ start:
 	{	
  		if (fgets(buffer, 128, pipe) != NULL)
 		{
+			//printf("buffer1 is %s",buffer);		
 			sscanf(buffer,"%lu %lu", &tx_before, &rx_before);
-			
+			//printf("tx_bytes = %lu, rx_bytes = %lu\n",tx_before,rx_before);
 			check_bitrate_interval++;
-			pipe = popen(try,"r");
-			if (!pipe)
-			{
-				printf("popen failed!\n");
-				return ((char *) 0);
-			}
-			
 			stage = 1;
 		}
 		else
@@ -1244,8 +1239,8 @@ start:
 	{
 		if (fgets(buffer, 128, pipe) != NULL)
 		{
+			//printf("buffer2 is %s",buffer);		
 			sscanf(buffer,"%lu %lu", &tx_now, &rx_now);
-
 			if(tx_now != 0)
 			{
 				last_tx_bytes = tx_now;
@@ -1442,7 +1437,7 @@ start:
 			my_usleep(gInterval); //sleeps in microseconds
 	}
 
-	msleep(1000);
+	msleep(1000); //give it another second to quiesce
 
 ck_stage:
 	if (stage)
