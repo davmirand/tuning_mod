@@ -48,7 +48,7 @@ void open_csv_file(void)
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr, "%s %s: CSV Log file /tmp/csvTuningLog also opened***\n", ctime_buf, phase2str(current_phase));
 
-	fprintf(csvLogPtr,"delta,name,value\n");
+	fprintf(csvLogPtr,"Number,delta,name,value\n");
 	fflush(csvLogPtr);
 
 	return;
@@ -1050,6 +1050,7 @@ void * fDoRunHttpServer(void * vargp)
 #define BITRATE_INTERVAL 5
 #define KTUNING_DELTA	200000
 extern int my_tune_max;
+static __u64 csv_count = 0;
 void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done, int * tune, char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING]);
 void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done, int * tune, char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING])
 {
@@ -1171,7 +1172,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 							system(aApplyDefTunNoStdOut);
 
 							delta = calculate_delta_for_csv();
-							fprintf(csvLogPtr,"%lu,%s,%s\n",delta,aName,aValue);
+							fprintf(csvLogPtr,"%llu, %lu,%s,%s\n",csv_count++,delta,aName,aValue);
 							fflush(csvLogPtr);
 
 							fprintf(tunLogPtr, "%s %s: ***APPLIED TUNING***: %s\n\n",ctime_buf, phase2str(current_phase), aApplyDefTun);
