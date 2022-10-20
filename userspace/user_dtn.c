@@ -54,8 +54,8 @@ void open_csv_file(void)
 	return;
 }
 
-static int now_time = 0;
-static int last_time = 0;
+static time_t now_time = 0;
+static time_t last_time = 0;
 time_t calculate_delta_for_csv(void);
 time_t calculate_delta_for_csv(void)
 {
