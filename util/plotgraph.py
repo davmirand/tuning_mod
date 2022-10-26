@@ -6,7 +6,6 @@ dictionary = json.load(open('qfactor.json', 'r'))
 xAxis = []
 yAxis = []
 
-
 for elem in range(len(dictionary)):
     xAxis.extend([int(dictionary[elem]['delta'])])
     mystr = dictionary[elem]['value']
