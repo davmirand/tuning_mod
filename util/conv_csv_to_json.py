@@ -20,6 +20,5 @@ def convert_write_json(data, json_file):
 #        f.write(json.dumps(data, sort_keys=False, indent=4, separators=(',', ': '))) #for pretty
         f.write(json.dumps(data, indent=4, separators=(',', ': '))) #for pretty
 
-
 read_CSV(file,json_file)
 
