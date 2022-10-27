@@ -1513,6 +1513,7 @@ ck_stage:
 return ((char *) 0);
 }
 
+
 //Measured in milliseconds
 #define RTT_THRESHOLD	50 
 void fDoManageRtt(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done, int * tune, char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING]);
