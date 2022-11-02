@@ -4,18 +4,24 @@ cp ../assess-tuning/dtn_tune .
 cp ../assess-tuning/dtnmenu .
 cp ../assess-tuning/dtn_menu.sh .
 cp ../assess-tuning/gdv.sh .
+cp ../assess-tuning/gdv_100.sh .
 cp ../assess-tuning/user_config.txt .
 cp ../assess-tuning/common_irq_affinity.sh .
 cp ../assess-tuning/set_irq_affinity.sh .
-zip ASSESSdtntune.zip dtn_tune gdv.sh user_config.txt dtn_menu.sh dtnmenu readme.txt common_irq_affinity.sh set_irq_affinity.sh
-
+cp ../assess-tuning/readme.txt .
+zip ASSESSdtntune.zip dtn_tune gdv_100.sh gdv.sh readme.txt user_config.txt dtn_menu.sh dtnmenu common_irq_affinity.sh set_irq_affinity.sh
+#
 rm dtn_tune 
 rm dtnmenu 
 rm dtn_menu.sh 
 rm gdv.sh 
+rm gdv_100.sh 
 rm user_config.txt 
 rm common_irq_affinity.sh 
 rm set_irq_affinity.sh 
+rm readme.txt 
+echo "Finished Creating Tuning Module Assessment package..."
+
 
 echo " "
 echo "Creating Tuning Module StandAlone package..."
@@ -31,9 +37,8 @@ cp ../userspace/gdv.sh .
 cp ../userspace/readme.txt .
 cp ../util/plotgraph.py .
 cp ../util/conv_csv_to_json.py .
-zip SAdtntune.zip help_dtn.sh user_config.txt user_menu.sh gdv_100.sh gdv.sh readme.txt common_irq_affinity.sh set_irq_affinity.sh plotgraph.py conv_csv_to_json.py
-
-
+zip SAdtntune.zip tuncli user_dtn help_dtn.sh user_config.txt user_menu.sh gdv_100.sh gdv.sh readme.txt common_irq_affinity.sh set_irq_affinity.sh plotgraph.py conv_csv_to_json.py
+#
 rm tuncli 
 rm user_dtn 
 rm common_irq_affinity.sh 
@@ -46,4 +51,5 @@ rm gdv.sh
 rm readme.txt 
 rm plotgraph.py 
 rm conv_csv_to_json.py 
+echo "Finished Creating Tuning Module StandAlone package..."
 
