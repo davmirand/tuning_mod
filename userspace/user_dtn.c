@@ -460,7 +460,8 @@ void record_activity(char *pActivity)
 	strcat(pActivity,add_to_activity);
 	//sprintf(activity,"%s %s: ***hop_key.hop_index %X, Doing Something***vFlowcount = %d, num_tuning_activty = %d, myCount = %u", ctime_buf, phase2str(current_phase), curr_hop_key_hop_index, vFlowCount, sFlowCounters[vFlowCount].num_tuning_activities + 1, myCount++);
 
-	fprintf(tunLogPtr,"%s\n",pActivity); //special case for testing
+	if (vDebugLevel > 4)
+		fprintf(tunLogPtr,"%s\n",pActivity); //special case for testing - making sure activity is recorded to use with tuncli
 
 	strcpy(sFlowCounters[vFlowCount].what_was_done[sFlowCounters[vFlowCount].num_tuning_activities], pActivity);
 	(sFlowCounters[vFlowCount].num_tuning_activities)++;
@@ -1358,8 +1359,31 @@ start:
 		}
 		else
 			{
+#if 0 
+				if ((vDebugLevel > 2) &&  (highest_average_tx_Gbits_per_sec >= 1))
+				{
+					fprintf(tunLogPtr,"%s %s: ***applied = %d, highest avg tx bitrate= %.2f***\n", 
+						ctime_buf, phase2str(current_phase), applied, highest_average_tx_Gbits_per_sec);
+				}
+#endif
 				if (highest_average_tx_Gbits_per_sec <= average_tx_Gbits_per_sec)
+				{
 					highest_average_tx_Gbits_per_sec = average_tx_Gbits_per_sec;
+#if 1
+					if (applied)
+					{
+						strcpy(best_wmem_val,aApplyDefTunBest);
+	
+						if (vDebugLevel > 1)
+						{
+							fprintf(tunLogPtr,"%s %s: ***Best wmem val***%s***\n\n", ctime_buf, 
+										phase2str(current_phase), best_wmem_val);
+						}
+
+						max_apply = 0;
+					}
+#endif
+				}
 				
 				if (previous_average_tx_Gbits_per_sec < highest_average_tx_Gbits_per_sec)
 				{
@@ -1404,20 +1428,7 @@ start:
 						goto ck_stage;
 					}
 				}
-
-				if (applied && previous_average_tx_Gbits_per_sec >= highest_average_tx_Gbits_per_sec)
-				{
-					strcpy(best_wmem_val,aApplyDefTunBest);
-
-					if (vDebugLevel > 1)
-					{
-						fprintf(tunLogPtr,"%s %s: ***Best wmem val***%s***\n\n", ctime_buf, 
-									phase2str(current_phase), best_wmem_val);
-					}
-
-					max_apply = 0;
-				}
-
+				
 				if (applied)
 					max_apply++;
 				else
@@ -1427,7 +1438,7 @@ start:
 				{
 					tune = 3;
 					strcpy(aApplyDefTunBest,best_wmem_val);
-#if 0	
+#if 1	
 					if (vDebugLevel > 1)
 					{
 						fprintf(tunLogPtr,"%s %s: ***Going to apply Best wmem val***%s***\n\n", ctime_buf, 
@@ -1484,6 +1495,8 @@ start:
 						}
 					}
 
+			applied = 0;
+
 			if (average_tx_Gbits_per_sec >= 1) //must be at least a Gig to check
 				check_if_bitrate_too_low(average_tx_Gbits_per_sec, &applied, &suggested, &nothing_done, &tune, aApplyDefTunBest);
 
@@ -1495,7 +1508,6 @@ start:
 				
 			average_tx_Gbits_per_sec = 0.0;
 			average_tx_kbits_per_sec = 0.0;
-
 			my_usleep(gInterval); //sleeps in microseconds
 	}
 
@@ -1508,7 +1520,8 @@ ck_stage:
 		goto start;
 	}
 
-	printf("Problems*** stage not set...\n");
+	fprintf(tunLogPtr, "%s %s: ***Problems*** stage not set...\n", ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
 
 return ((char *) 0);
 }
