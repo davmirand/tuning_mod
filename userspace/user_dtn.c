@@ -11,6 +11,7 @@
 #include <ctype.h>
 #include <getopt.h>
 #include <pthread.h>
+#include <sys/prctl.h>
 #include <signal.h>
 #include <sys/wait.h>
 
@@ -1779,18 +1780,30 @@ void * fDoRunHelperDtn(void * vargp)
 	if (sb.st_size == 0); //good - no runaway process
 	else //kill it
 	{
-		printf("Killing runaway help_dtn.sh process\n");
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Killing runaway help_dtn.sh process\n", ctime_buf, phase2str(current_phase));
 		system("pkill -9 help_dtn.sh");
 	}
 
 	system("rm -f /tmp/help_dtn_alive.out");
 	sleep(1); //relax
 
-restart_vfork:
-	printf("About to fork new help_dtn.sh process\n");
-	pid_t pid = vfork();
+restart_fork:
+	gettime(&clk, ctime_buf);
+	fprintf(tunLogPtr, "%s %s: ***About to fork new help_dtn.sh process\n", ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
+
+	pid_t ppid_before_fork = getpid();
+	pid_t pid = fork();
 	if (pid == 0)
 	{ 
+		int r = prctl(PR_SET_PDEATHSIG, SIGTERM); //tell me if my parent went away
+		if (r == -1) { perror(0); exit(1); }
+		// test in case the original parent exited just
+		// before the prctl() call
+		if (getppid() != ppid_before_fork)
+			exit(1);
+		// continue child execution ...
 		if (execlp("./help_dtn.sh", "help_dtn.sh", netDevice, (char*) NULL) == -1)
 		{
 			perror("Could not execlp");
@@ -1815,7 +1828,7 @@ restart_vfork:
 			int status;
 			system("rm -f /tmp/help_dtn_alive.out");
 			wait(&status);
-			goto restart_vfork;
+			goto restart_fork;
 		}
 
 		system("rm -f /tmp/help_dtn_alive.out");

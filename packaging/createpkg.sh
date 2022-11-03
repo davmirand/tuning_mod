@@ -9,8 +9,11 @@ cp ../assess-tuning/user_config.txt .
 cp ../assess-tuning/common_irq_affinity.sh .
 cp ../assess-tuning/set_irq_affinity.sh .
 cp ../assess-tuning/readme.txt .
+
+rm -f ASSESSdtntune.zip
 zip ASSESSdtntune.zip dtn_tune gdv_100.sh gdv.sh readme.txt user_config.txt dtn_menu.sh dtnmenu common_irq_affinity.sh set_irq_affinity.sh
 #
+
 rm dtn_tune 
 rm dtnmenu 
 rm dtn_menu.sh 
@@ -37,6 +40,8 @@ cp ../userspace/gdv.sh .
 cp ../userspace/readme.txt .
 cp ../util/plotgraph.py .
 cp ../util/conv_csv_to_json.py .
+
+rm -f SAdtntune.zip
 zip SAdtntune.zip tuncli user_dtn help_dtn.sh user_config.txt user_menu.sh gdv_100.sh gdv.sh readme.txt common_irq_affinity.sh set_irq_affinity.sh plotgraph.py conv_csv_to_json.py
 #
 rm tuncli 
