@@ -221,11 +221,20 @@ apply_all_recommended_settings()
 	return 0
 }
 
-run_dtntune()
+install_tm()
 {
 logcount=
 	clear_screen
-	printf '\n###%s\n\n' "Running Tuning Assessment..."
+	printf '\n%s' "Welcome to the Tuning Module installation procedure"
+	printf '\n%s' "Please see the readme.txt file for important information "
+	printf '\n%s\n' "prior to installing this package..."
+	printf '\n%s' "Also, the user_config.txt file contains default behavior for"
+	printf '\n%s' "the Tuning module. You may wish to configure it first before"
+	printf '\n%s\n' "installing the package..."
+	sleep 3
+	printf '\n###%s\n\n' "Installing Tuning Module..."
+	sleep 5
+	return 0
 	if [ -f /tmp/tuningLog ]
 	then
 		logcount=`cat /tmp/tuningLog.count`
@@ -235,6 +244,7 @@ logcount=
 	else
 		echo 0 > /tmp/tuningLog.count
 	fi
+
 	./dtn_tune $1
 
 	if [ $? = 0 ]
@@ -261,7 +271,7 @@ if [ `id -u` = 0 ]
 then
 	echo "hello"
 else
-	printf '\n***%s\n' "You must be superuser to run dtnmenu..."
+	printf '\n***%s\n' "You must be superuser to install the Tuning Module..."
 	printf '***%s\n\n' "Exiting..."
 	exit 1
 fi
@@ -271,8 +281,8 @@ fi
 	do
 		clear_screen
 		printf '\n\n\t%s\n\n\t%s\n\t%s\n\t%s\n\t%s\n\t%s\n\t%s\n\t%s\n\t%s\n\t%s' \
-			"DTN Tuning Utility" \
-			"1) Run DTN Tune Assessment" \
+			"Tuning Module Installation" \
+			"1) Install Tuning Module package" \
 			"2) Apply Recommended Kernel Tuning Values Only" \
 			"3) Apply Recommended BIOS Tuning Values Only" \
 			"4) Apply Recommended NIC Tuning Values Only" \
@@ -285,7 +295,7 @@ fi
 		read answer
 		case "$answer" in
 			1)
-				run_dtntune "$1"
+				install_tm "$1"
 				;;
 			2)
 				apply_recommended_kernel_settings
