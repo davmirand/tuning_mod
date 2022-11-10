@@ -2078,6 +2078,7 @@ int main(int argc, char **argv)
 	sArgv_t sArgv;
 	time_t clk;
 	char ctime_buf[27];
+	int vExitValue = 0;
 	 
 	ignore_sigchld(); //won't leave zombie processes
 
@@ -2097,29 +2098,78 @@ int main(int argc, char **argv)
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr, "%s %s: tuning Log opened***\n", ctime_buf, phase2str(current_phase));
 
+	fDoGetUserCfgValues();
 	if (argc == 3)
+	{
+		int vRet;
 		strcpy(netDevice,argv[2]);
+		fprintf(tunLogPtr, "%s %s: using Device name %s supplied from command line***\n", ctime_buf, phase2str(current_phase), netDevice);
+		vRet = fCheckInterfaceExist();
+		if (!vRet)
+		{
+			int vSpeedInGb;
+			fprintf(tunLogPtr, "%s %s: Found Device %s***\n", ctime_buf, phase2str(current_phase), argv[2]);
+			fDoGetDeviceCap(); //Will set netDeviceSpeed if device is UP
+			vSpeedInGb = netDeviceSpeed/1000; //Should become zero if invalid speed (0 or -1)
+			if (!vSpeedInGb)
+			{
+				fprintf(tunLogPtr, "%s %s: Device *%s* link is probably DOWN as its speed in invalid.***\n", ctime_buf, phase2str(current_phase), argv[2]);
+				fprintf(tunLogPtr, "%s %s: Please use a device whose link is UP. Exiting...***\n", ctime_buf, phase2str(current_phase));
+				fflush(tunLogPtr);
+				vExitValue = -3;
+				goto leave;
+			}
+		}
+		else
+			{
+				gettime(&clk, ctime_buf);
+				fprintf(tunLogPtr, "%s %s: Device not found, Invalid device name *%s*, Exiting...***\n", ctime_buf, phase2str(current_phase), argv[2]);
+				vExitValue = -1;
+				goto leave;
+			}
+	}
 	else
 		{
 			gettime(&clk, ctime_buf);
-
 			if (gNic_to_use)
 			{
+				int vRet;
 				strcpy(netDevice,gNic_to_use);
-				gNic_to_use = netDevice;
-				fprintf(tunLogPtr, "%s %s: using Device name %s supplied from file *user_config.txt*\n", ctime_buf, phase2str(current_phase));
+				fprintf(tunLogPtr, "%s %s: using Device name %s supplied from file *user_config.txt*\n", ctime_buf, phase2str(current_phase), netDevice);
+				vRet = fCheckInterfaceExist();
+				if (!vRet)
+				{
+					int vSpeedInGb;
+					fprintf(tunLogPtr, "%s %s: Found Device %s***\n", ctime_buf, phase2str(current_phase), netDevice);
+					fDoGetDeviceCap(); //Will set netDeviceSpeed if device is UP
+					vSpeedInGb = netDeviceSpeed/1000; //Should become zero if invalid speed (0 or -1)
+					if (!vSpeedInGb)
+					{
+						fprintf(tunLogPtr, "%s %s: Device *%s* link is probably DOWN as its speed in invalid.***\n", ctime_buf, phase2str(current_phase), netDevice);
+						fprintf(tunLogPtr, "%s %s: Please use a device whose link is UP. Exiting...***\n", ctime_buf, phase2str(current_phase));
+						fflush(tunLogPtr);
+						vExitValue = -4;
+						goto leave;
+					}
+				}
+				else
+					{
+						gettime(&clk, ctime_buf);
+						fprintf(tunLogPtr, "%s %s: Device not found, Invalid device name *%s*, Exiting...***\n", ctime_buf, phase2str(current_phase), netDevice);
+						vExitValue = -5;
+						goto leave;
+					}
 			}
 			else //shouldn't happen
-			{
-				fprintf(tunLogPtr, "%s %s: Device name not supplied, exiting***\n", ctime_buf, phase2str(current_phase));
-				exit(-3);
-			}
+				{
+					fprintf(tunLogPtr, "%s %s: Device name not supplied, exiting***\n", ctime_buf, phase2str(current_phase));
+					exit(-3);
+				}
 		}
 
 	fflush(tunLogPtr);
 
 	open_csv_file();	
-
 	user_assess(argc, argv);
 	fCheck_log_limit();
 	
@@ -2170,10 +2220,11 @@ int main(int argc, char **argv)
 	if (vRetFromRunSendMessageToPeerThread == 0)
     		vRetFromRunSendMessageToPeerJoin = pthread_join(doRunSendMessageToPeerThread_id, NULL);
 
+leave:
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr, "%s %s: Closing tuning Log***\n", ctime_buf, phase2str(current_phase));
 	fclose(tunLogPtr);
 
-return 0;
+return vExitValue;
 }
 

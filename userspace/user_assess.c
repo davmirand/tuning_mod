@@ -17,7 +17,7 @@ typedef unsigned int uint32_t;
 #endif
 
 void fDoGetUserCfgValues(void);
-int fCheckInterfaceExists();
+int fCheckInterfaceExist();
 void fDoGetDeviceCap(void);
 void fDoBiosTuning(void);
 void fDoNicTuning(void);
@@ -75,7 +75,7 @@ sUserValues_t userValues = {{"evaluation_timer", "500000", "-1"},
 			{"make_default_system_tuning_perm","n","-1"},
 			{"maxnum_tuning_logs","10","-1"},
 			{"source_dtn_port","5524","-1"},
-			{"nic_to_use","default0","-1"}
+			{"nic_to_use","na","-1"}
 			};
 
 void fCheck_log_limit(void)
@@ -142,6 +142,7 @@ void fDoGetUserCfgValues(void)
 	ssize_t nread;
 	char *p = 0;
 	char setting[256];
+	char key[256];
 	int count = 0;
 	time_t clk;
 	char ctime_buf[27];
@@ -174,6 +175,8 @@ void fDoGetUserCfgValues(void)
 			if (strcmp(userValues[count].aUserValues, setting) == 0) //found
 			{
 				int y = 0;
+				memset(key,0,sizeof(key));
+				strcpy(key,setting);
 				memset(setting,0,sizeof(setting));
 
 				while (isblank((int)p[ind])) //get past blanks etc
@@ -184,6 +187,14 @@ void fDoGetUserCfgValues(void)
 				while (isalnum((int)p[ind])) 
 				{
 					setting[y++] = p[ind++];
+				}
+
+				if (strcmp(key,"nic_to_use") == 0) //the value could be a hyphen
+				{
+					while (!isspace((int)p[ind])) 
+					{
+						setting[y++] = p[ind++];
+					}
 				}
 				
 				strcpy(userValues[count].cfg_value, setting);
@@ -280,7 +291,9 @@ void fDoGetUserCfgValues(void)
 											{
 												if (strcmp(userValues[count].cfg_value, "-1") == 0); //no value in text file - don't use default val
 												else
+												{
 													gNic_to_use = userValues[count].cfg_value;
+												}
 											}
 	}
 
@@ -2004,13 +2017,11 @@ int user_assess(int argc, char **argv)
 	current_phase = ASSESSMENT;
 	gettime(&clk, ctime_buf);
 
-	fprintf(tunLogPtr, "%s %s: Found Device %s***\n", ctime_buf, phase2str(current_phase), netDevice);
-
 	gettime(&clk, ctime_buf);
 
-	fDoGetUserCfgValues();
+	//fDoGetUserCfgValues();
 
-	fDoGetDeviceCap();
+	//fDoGetDeviceCap();
 	numaNode = fDoGetNuma();
 
 	fDoSystemTuning();
