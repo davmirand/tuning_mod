@@ -13,19 +13,19 @@ select_choice='Enter option : '
 
 Get_OS_Type()
 {
-    OS="`uname -s`"
-    case  $OS in
-        "Linux")
-            OS_TYPE="linux"
-            MAJOR_OS_REL="`uname -r | cut -f1 -d'.'`"
-            MINOR_OS_REL="`uname -r | cut -f2 -d'.'`"
-            break;;
-        *)
-            OS_TYPE="XXX"
-            MAJOR_OS_REL="YYY"
-            MINOR_OS_REL="ZZZ"
-            break;;
-    esac
+	OS="`uname -s`"
+	case  $OS in
+		"Linux")
+			OS_TYPE="linux"
+			MAJOR_OS_REL="`uname -r | cut -f1 -d'.'`"
+			MINOR_OS_REL="`uname -r | cut -f2 -d'.'`"
+			break;;
+		*)
+			OS_TYPE="XXX"
+			MAJOR_OS_REL="YYY"
+			MINOR_OS_REL="ZZZ"
+			break;;
+	esac
 }
 
 Get_OS_Type
@@ -36,13 +36,85 @@ Get_OS_Type
 
 Check_OS_Type()
 {
-    case  $OS_TYPE in
-        "linux")
-            break;;
-        *)
-echo "Only the Linux operating system is supported."
-            exit 1 ;;
+	case  $OS_TYPE in
+		"linux")
+			break;;
+		*)
+			echo "Only the Linux operating system is supported."
+			exit 1 ;;
+	esac
+}
+
+Check_And_Remove_Earlier_Versions()
+{
+    if [ $# -ge 1 ]
+    then
+        Rel2Check=$1
+        CheckSupplied=YES
+    else
+        Rel2Check=
+        CheckSupplied=NO
+    fi
+
+    case $OS_TYPE in
+        linux)
+            rmpkg="rpm -e"
+            lspkg="rpm -q"
+            ;;
     esac
+
+    InstallList=
+    PackagesToRemove=
+        for Pkg in $CheckList
+    do
+        if [ $CheckSupplied = NO ]
+        then
+            Rel2Check=`cat ./$OS_TYPE/$Pkg/info | cut -d',' -f2`
+        fi
+        Get_Installed_Version $Pkg
+        if [ "$CurVers" ]
+        then
+            PackagesToRemove="$PackagesToRemove $Pkg"
+        fi
+        InstallList="$Pkg $InstallList"
+    done
+
+    if [ "$PackagesToRemove" ]
+    then
+        echo "There are earlier/same/newer versions of some of the"
+        echo "packages that your have selected that are already installed:"
+        for Pkg in $PackagesToRemove
+        do
+            Get_Installed_Version $Pkg
+            echo "     $Pkg $CurVers"
+        done
+        echo "These installed packages must be removed prior to installing"
+        echo "version $Rel2Check."
+        echo
+        yorn "Do you wish to remove these packages? (Yes/No)" "N"
+        [ $? -ne 0 ] && exit 1
+        for Pkg in $PackagesToRemove
+        do
+            $rmpkg $Pkg
+            if $lspkg $Pkg > /dev/null 2>&1
+            then
+                echo " Component $Pkg not removed!!."
+                echo " <Enter> to continue: \c"
+                read input
+                exit 1
+            fi
+            if [ $OS_TYPE = solaris ]
+            then
+                PatchesToRemove=`ls -1 /var/sadm/patch | grep -i $Pkg`
+                if [ "$PatchesToRemove.x" != ".x" ]
+                then
+                (
+                    cd /var/sadm/patch; rm -rf $PatchesToRemove
+                )
+                fi
+            fi
+        done
+    fi
 }
 
 clear_screen()
@@ -56,241 +128,34 @@ enter_to_continue()
 	read junk
 }
 
-prune_logs()
-{
-	clear_screen
-	printf '\n\t%s\n\t%s\n' \
-		"This will remove all the old tuningLog log files except the" \
-		"current one."
-	printf '\n\t%s (y/n): ' \
-		"Do you wish to continue? "
-	read answer
-	if [ "$answer" != 'y' -a "$answer" != 'Y' ]
-	then
-		enter_to_continue
-		return 0
-	fi
-	rm -rf /tmp/tuningLogOld.*
-	echo 0 > /tmp/tuningLog.count
-	enter_to_continue
-	return 0
-}
-
-apply_recommended_kernel_settings()
-{
-	clear_screen
-	if [ -f  /tmp/applyKernelDefFile ]
-	then
-		printf '\n\t%s\n' \
-			"You are attempting to apply the Kernel Tuning Recommendations" 
-		printf '\n\t%s (y/n): ' \
-			"Do you wish to continue? "
-		read answer
-		if [ "$answer" != 'y' -a "$answer" != 'Y' ]
-		then
-			enter_to_continue
-			return 0
-		fi
-
-		sysctlmodified=0
-		
-		printf '\n\t%s (y/n): ' \
-			"Do you wish to apply the Kernel Tuning Recommendations permanently? " 
-		read answer
-		if [ "$answer" != 'y' -a "$answer" != 'Y' ]
-		then
-			printf '\n###%s\n\n' "Applying Kernel Tuning Recommendations until a reboot..."
-		else
-			printf '\n###%s\n\n' "Applying Kernel Tuning Recommendations Permanently..."
-			sysctlmodified=1
-		fi
-
-		nlines=`sed -n '1p' /tmp/applyKernelDefFile`	
-		count=2
-
-		if [ ${sysctlmodified} -eq 1 ]
-		then
-			echo "#Start of tuningMod modifications" >> /etc/sysctl.conf	
-		fi
-
-		while [ ${count} -lt ${nlines} ]
-		do
-			linenum=`sed -n "${count}p" /tmp/applyKernelDefFile`
-			echo $linenum > /tmp/tun_app_command
-			sh /tmp/tun_app_command
-		
-			if [ ${sysctlmodified} -eq 1 ]
-			then
-			echo "$linenum >> /etc/sysctl.conf" > /tmp/tun_app_command
-			sh /tmp/tun_app_command
-			fi
-
-			count=`expr $count + 1`
-		done	
-		
-		if [ ${sysctlmodified} -eq 1 ]
-		then
-			echo "#End of tuningMod modifications" >> /etc/sysctl.conf	
-		fi
-
-		rm -f /tmp/tun_app_command
-		rm -f /tmp/applyKernelDefFile
-	else
-		printf '\n###%s\n\n' "Sorry. You do not have any Kernel Tuning Recommendations to apply..."
-
-	fi
-    enter_to_continue
-	return 0
-}
-
-apply_recommended_bios_settings()
-{
-	clear_screen
-	if [ -f  /tmp/applyBiosDefFile ]
-	then
-		printf '\n\t%s\n' \
-			"You are attempting to apply the BIOS Tuning Recommendations" 
-		printf '\n\t%s (y/n): ' \
-			"Do you wish to continue? "
-		read answer
-		if [ "$answer" != 'y' -a "$answer" != 'Y' ]
-		then
-			enter_to_continue
-			return 0
-		fi
-		
-
-		nlines=`sed -n '1p' /tmp/applyBiosDefFile`	
-		count=2
-
-		echo "#Applying BIOS Tuning Recommendations..." 
-
-		while [ ${count} -lt ${nlines} ]
-		do
-			linenum=`sed -n "${count}p" /tmp/applyBiosDefFile`
-			echo $linenum > /tmp/tun_app_command
-			sh /tmp/tun_app_command 1>/dev/null
-			count=`expr $count + 1`
-		done	
-		
-		rm -f /tmp/tun_app_command
-		rm -f /tmp/applyBiosDefFile
-	else
-		printf '\n###%s\n\n' "Sorry. You do not have any BIOS Tuning Recommendations to apply..."
-
-	fi
-    enter_to_continue
-	return 0
-}
-
-apply_recommended_nic_settings()
-{
-	clear_screen
-	if [ -f  /tmp/applyNicDefFile ]
-	then
-		printf '\n\t%s\n' \
-			"You are attempting to apply the NIC Tuning Recommendations" 
-		printf '\n\t%s (y/n): ' \
-			"Do you wish to continue? "
-		read answer
-		if [ "$answer" != 'y' -a "$answer" != 'Y' ]
-		then
-			enter_to_continue
-			return 0
-		fi
-
-		nlines=`sed -n '1p' /tmp/applyNicDefFile`	
-		count=2
-
-		echo "#Applying NIC Tuning Recommendations..." 
-
-		while [ ${count} -lt ${nlines} ]
-		do
-			linenum=`sed -n "${count}p" /tmp/applyNicDefFile`
-			echo $linenum > /tmp/tun_app_command
-			sh /tmp/tun_app_command
-			count=`expr $count + 1`
-		done	
-		
-		echo "#Finished Applying NIC Tuning Recommendations..." 
-
-		rm -f /tmp/tun_app_command
-		rm -f /tmp/applyNicDefFile
-	else
-		printf '\n###%s\n\n' "Sorry. You do not have any NIC Tuning Recommendations to apply..."
-
-	fi
-    enter_to_continue
-	return 0
-}
-
-apply_all_recommended_settings()
-{
-	clear_screen
-	if [ -f  /tmp/applyKernelDefFile -o -f /tmp/applyBiosDefFile -o -f  /tmp/applyNicDefFile ]
-	then
-		printf '\n\t%s\n' \
-			"You are attempting to apply All Tuning Recommendations" 
-		printf '\n\t%s (y/n): ' \
-			"Do you wish to continue? "
-		read answer
-		if [ "$answer" != 'y' -a "$answer" != 'Y' ]
-		then
-			enter_to_continue
-			return 0
-		fi
-
-		echo "#Applying All Tuning Recommendations..." 
-
-		apply_recommended_kernel_settings
-		apply_recommended_bios_settings
-		apply_recommended_nic_settings
-
-		echo "#Finished Applying All Tuning Recommendations..."	
-	else
-		printf '\n###%s\n\n' "Sorry. You do not have any All Tuning Recommendations to apply..."
-
-	fi
-    enter_to_continue
-	return 0
-}
-
 install_tm()
 {
 logcount=
 	clear_screen
 	printf '\n%s' "Welcome to the Tuning Module installation procedure"
 	printf '\n%s' "Please see the readme.txt file for important information "
-	printf '\n%s\n' "prior to installing this package..."
+	printf '\n%s\n' "after installing this package..."
 	printf '\n%s' "Also, the user_config.txt file contains default behavior for"
 	printf '\n%s' "the Tuning module. You may wish to configure it first before"
-	printf '\n%s\n' "installing the package..."
-	sleep 3
-	printf '\n###%s\n\n' "Installing Tuning Module..."
-	sleep 5
-	return 0
-	if [ -f /tmp/tuningLog ]
+	printf '\n%s\n' "starting the Tuning Module..."
+	sleep 2
+	printf '\n###%s\n\n' "Preparing to install the Tuning Module..."
+	sleep 2
+	echo "This product normally installs into the /usr filesystem. If"
+	echo "you would like to install using a different root you can enter"
+	echo "a different pathname now or press <ENTER> to continue."
+	read pathname
+
+	if [ "$pathname" = "" ]
 	then
-		logcount=`cat /tmp/tuningLog.count`
-		cp /tmp/tuningLog /tmp/tuningLogOld.$logcount
-		logcount=`expr $logcount + 1`
-		echo $logcount > /tmp/tuningLog.count
+		if [ ! -f /usr/tuningmod ]
+		then
+			mkdir -p /usr/tuningmod
+		fi
 	else
-		echo 0 > /tmp/tuningLog.count
+	    mkdir -p $pathname
 	fi
-
-	./dtn_tune $1
-
-	if [ $? = 0 ]
-	then	
-		more -d /tmp/tuningLog	
-		printf '\n###%s' "This output has been saved in /tmp/tuningLog"
-	else
-		more -d /tmp/tuningLog	
-		printf '\n###%s' "This output has been saved in /tmp/tuningLog"
-		echo >&2
-    	echo >&2 $UsageString
-	fi
+	
 	enter_to_continue
 	return 0
 }
@@ -311,55 +176,35 @@ else
 fi
 
 Check_OS_Type
+Check_And_Remove_Earlier_Versions
+repeat_main=1
+while  [ $repeat_main = 1 ]
+do
+	clear_screen
+	printf '\n\n\t%s\n\n\t%s\n\t%s\n\t%s\n\t%s' \
+		"Tuning Module Installation" \
+		"1) Install Tuning Module package" \
+		"2) Escape to Linux Shell" \
+		"3) Exit" \
+		"$select_choice"
 
-	repeat_main=1
-	while  [ $repeat_main = 1 ]
-	do
-		clear_screen
-		printf '\n\n\t%s\n\n\t%s\n\t%s\n\t%s\n\t%s\n\t%s\n\t%s\n\t%s\n\t%s\n\t%s' \
-			"Tuning Module Installation" \
-			"1) Install Tuning Module package" \
-			"2) Apply Recommended Kernel Tuning Values Only" \
-			"3) Apply Recommended BIOS Tuning Values Only" \
-			"4) Apply Recommended NIC Tuning Values Only" \
-			"5) Apply All Recommended Tuning Values" \
-			"6) Prune Old Logs" \
-			"7) Escape to Linux Shell" \
-			"8) Exit" \
-			"$select_choice"
-
-		read answer
-		case "$answer" in
-			1)
-				install_tm "$1"
-				;;
-			2)
-				apply_recommended_kernel_settings
-				;;
-			3)
-				apply_recommended_bios_settings
-				;;
-			4)
-				apply_recommended_nic_settings
-				;;
-			5)
-				apply_all_recommended_settings
-				;;
-			6)
-				prune_logs
-				;;
-			7)
-				clear_screen
-				$SHELL
-				clear_screen
-				enter_to_continue
-				;;
-			q|8)
-				clear_screen
-				exit 0
-				;;
-			*)
-				;;
-		esac
-	done
-	echo
+	read answer
+	case "$answer" in
+		1)
+			install_tm "$1"
+			;;
+		2)
+			clear_screen
+			$SHELL
+			clear_screen
+			enter_to_continue
+			;;
+		q|3)
+			clear_screen
+			exit 0
+			;;
+		*)
+			;;
+	esac
+done
+echo
