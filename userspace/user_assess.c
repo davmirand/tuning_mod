@@ -278,8 +278,7 @@ void fDoGetUserCfgValues(void)
 										else 
 											if (strcmp(userValues[count].aUserValues,"nic_to_use") == 0)
 											{
-												if (strcmp(userValues[count].cfg_value, "-1") == 0) //no value in text file
-													gNic_to_use = userValues[count].default_val;
+												if (strcmp(userValues[count].cfg_value, "-1") == 0); //no value in text file - don't use default val
 												else
 													gNic_to_use = userValues[count].cfg_value;
 											}

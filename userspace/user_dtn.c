@@ -2102,9 +2102,21 @@ int main(int argc, char **argv)
 	else
 		{
 			gettime(&clk, ctime_buf);
-			fprintf(tunLogPtr, "%s %s: Device name not supplied, exiting***\n", ctime_buf, phase2str(current_phase));
-			exit(-3);
+
+			if (gNic_to_use)
+			{
+				strcpy(netDevice,gNic_to_use);
+				gNic_to_use = netDevice;
+				fprintf(tunLogPtr, "%s %s: using Device name %s supplied from file *user_config.txt*\n", ctime_buf, phase2str(current_phase));
+			}
+			else //shouldn't happen
+			{
+				fprintf(tunLogPtr, "%s %s: Device name not supplied, exiting***\n", ctime_buf, phase2str(current_phase));
+				exit(-3);
+			}
 		}
+
+	fflush(tunLogPtr);
 
 	open_csv_file();	
 
