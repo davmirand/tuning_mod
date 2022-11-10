@@ -47,7 +47,7 @@ zip SAdtntune.zip tuncli user_dtn userdtn_adm help_dtn.sh user_config.txt user_m
 #
 rm tuncli 
 rm user_dtn 
-rm userdtn _adm
+rm userdtn_adm
 rm common_irq_affinity.sh 
 rm set_irq_affinity.sh 
 rm help_dtn.sh 
