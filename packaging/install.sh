@@ -11,6 +11,40 @@
 return='Return to previous menu'
 select_choice='Enter option : '
 
+Get_OS_Type()
+{
+    OS="`uname -s`"
+    case  $OS in
+        "Linux")
+            OS_TYPE="linux"
+            MAJOR_OS_REL="`uname -r | cut -f1 -d'.'`"
+            MINOR_OS_REL="`uname -r | cut -f2 -d'.'`"
+            break;;
+        *)
+            OS_TYPE="XXX"
+            MAJOR_OS_REL="YYY"
+            MINOR_OS_REL="ZZZ"
+            break;;
+    esac
+}
+
+Get_OS_Type
+#if [ "$OS_TYPE" = "linux" ]
+#then
+#	alias echo='echo -e'
+#fi
+
+Check_OS_Type()
+{
+    case  $OS_TYPE in
+        "linux")
+            break;;
+        *)
+echo "Only the Linux operating system is supported."
+            exit 1 ;;
+    esac
+}
+
 clear_screen()
 {
 	tput clear
@@ -269,13 +303,15 @@ Usage:\\t[sudo ./dtnmenu]\\t\\t- Configure Tunables \\n\
 
 if [ `id -u` = 0 ]
 then
-	echo "hello"
+	:
 else
 	printf '\n***%s\n' "You must be superuser to install the Tuning Module..."
 	printf '***%s\n\n' "Exiting..."
 	exit 1
 fi
-	
+
+Check_OS_Type
+
 	repeat_main=1
 	while  [ $repeat_main = 1 ]
 	do
