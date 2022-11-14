@@ -11,6 +11,41 @@
 return='Return to previous menu'
 select_choice='Enter option : '
 
+#
+# Get a yes or no answer from the user.  Argument 1 is prompt, 2 is default.
+#
+yorn()
+{
+        if [ "$2" = "" ] ; then
+                prompt="$1? "
+        else
+                prompt="$1 [$2]? "
+        fi
+
+        while true ; do
+                echo "$prompt\c"
+                read input
+                parsed=$input
+
+                if [ "$parsed" = "" ] ; then
+                        answer=$2
+                else
+                        answer=$input
+                fi
+
+                case $answer in
+                        [yY]|[yY][eE]|[yY][eE][sS])
+                                yorn_rsp=0
+                                return 0 ; break ;;
+                        [nN]|[nN][oO])
+                                yorn_rsp=1
+                                return 1 ; break ;;
+                        *)
+                                echo "Please answer yes or no."
+                esac
+        done
+}
+
 Get_OS_Type()
 {
 	OS="`uname -s`"
