@@ -151,9 +151,11 @@ logcount=
 		if [ ! -f /usr/tuningmod ]
 		then
 			mkdir -p /usr/tuningmod
+			echo "The Tuning Module product has been installed in /usr/tuningmod"
 		fi
 	else
-	    mkdir -p $pathname
+		mkdir -p $pathname
+		echo "The Tuning Module product has benn installed in ${pathname}"
 	fi
 	
 	enter_to_continue
