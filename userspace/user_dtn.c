@@ -2079,7 +2079,16 @@ int main(int argc, char **argv)
 	time_t clk;
 	char ctime_buf[27];
 	int vExitValue = 0;
-	 
+
+	/*
+	 * Make a daemon process
+	 * - run in the backgound
+	 * - prevent output from process from going to the controlling terminal
+	 */
+
+	if (fork() != 0) /* make daemon process */
+		exit(0);
+
 	ignore_sigchld(); //won't leave zombie processes
 
 	sArgv.argc = argc;

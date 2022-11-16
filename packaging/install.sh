@@ -163,6 +163,24 @@ enter_to_continue()
 	read junk
 }
 
+copy_files()
+{
+	mv tuncli $pathname
+	mv user_dtn $pathname
+	mv userdtn_adm $pathname
+	mv common_irq_affinity.sh $pathname
+	mv set_irq_affinity.sh $pathname
+	mv help_dtn.sh $pathname
+	mv user_config.txt $pathname
+	mv user_menu.sh $pathname
+	mv gdv_100.sh $pathname
+	mv gdv.sh $pathname
+	mv readme.txt $pathname
+	mv plotgraph.py $pathname
+	mv conv_csv_to_json.py $pathname
+}
+
+default_dir="/usr/tuningmod"
 install_tm()
 {
 logcount=
@@ -170,29 +188,44 @@ logcount=
 	printf '\n%s' "Welcome to the Tuning Module installation procedure"
 	printf '\n%s' "Please see the readme.txt file for important information "
 	printf '\n%s\n' "after installing this package..."
-	printf '\n%s' "Also, the user_config.txt file contains default behavior for"
+	printf '\n%s' "NOTE: The user_config.txt file contains default behavior for"
 	printf '\n%s' "the Tuning module. You may wish to configure it first before"
 	printf '\n%s\n' "starting the Tuning Module..."
 	sleep 2
 	printf '\n###%s\n\n' "Preparing to install the Tuning Module..."
 	sleep 2
-	echo "This product normally installs into the /usr filesystem. If"
-	echo "you would like to install using a different root you can enter"
-	echo "a different pathname now or press <ENTER> to continue."
+	echo "This product normally installs into the ${default_dir} directory. If"
+	echo "you would like to install to a different directory you can enter"
+	echo "that directory name now or press <ENTER> to continue."
+	echo ""
 	read pathname
 
 	if [ "$pathname" = "" ]
 	then
-		if [ ! -f /usr/tuningmod ]
-		then
-			mkdir -p /usr/tuningmod
-			echo "The Tuning Module product has been installed in /usr/tuningmod"
-		fi
-	else
-		mkdir -p $pathname
-		echo "The Tuning Module product has benn installed in ${pathname}"
+		pathname=${default_dir}
 	fi
 	
+	if [ ! -d ${pathname} ]
+	then
+		mkdir -p ${pathname}
+		copy_files
+		echo "The Tuning Module product has been installed in ${pathname}"
+	else
+		echo "Directory ${pathname} already exists..."
+		yorn "Are you sure you wish to install in the ${pathname} directory? (Yes/No)" "N"	
+		if [ $? -ne 0 ] 
+		then
+			echo "Installation of the Tuning Module product will not occur."
+		else
+			copy_files
+			echo "The Tuning Module product has been installed in ${pathname}"
+			echo "Press <Enter> to exit installation program."
+			enter_to_continue
+			exit 0
+		fi
+
+	fi
+
 	enter_to_continue
 	return 0
 }
