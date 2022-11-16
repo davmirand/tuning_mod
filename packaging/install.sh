@@ -193,7 +193,7 @@ logcount=
 	printf '\n%s\n' "starting the Tuning Module..."
 	sleep 2
 	printf '\n###%s\n\n' "Preparing to install the Tuning Module..."
-	sleep 2
+	sleep 1
 	echo "This product normally installs into the ${default_dir} directory. If"
 	echo "you would like to install to a different directory you can enter"
 	echo "that directory name now or press <ENTER> to continue."

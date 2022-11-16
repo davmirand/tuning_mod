@@ -48,9 +48,7 @@ fi
 if [ "$1" = start -a "$2" != NO ]; then
 # put up message.
 echo >&2
-echo >&2 "Checking where Im at.
-"
-echo >&2
+#echo >&2 "Checking where Im at.  "
 fi
 
 # Find the "OS", needed especially for AIX
@@ -100,17 +98,16 @@ check_installed()
 KillNamedProcess()
 {
 	PS | egrep " $1( |$)" | sed -e '/egrep/d' -e 's/^ *//' > ps.out
-	cat ps.out | sed -e 's/ [ ]*/   /g' -e '/rlog/d' | \
-	cut -f2 > killpid
+	cat ps.out | awk '{print $2}' > killpid
 	
 	if [ ! -s killpid ]
 	then
 		echo "Process $1 not running"
 	else
 		pid=`cat killpid`
-		# SIGTERM for clean shutdown
-		echo "sending SIGTERM to pid(s) ${pid} ($1)"
-		/bin/kill ${pid}
+		# send SIGTERM since thats's what we are looking for
+		echo "sending SIGINT to pid(s) ${pid} ($1)"
+		kill -INT ${pid}
 	fi
 	rm killpid
 	rm ps.out
@@ -119,8 +116,7 @@ KillNamedProcess()
 CheckNamedProcess()
 {
 	PS | egrep " $1( |$)" | sed -e '/egrep/d' -e 's/^ *//' > ps.out
-	cat ps.out | sed -e 's/ [ ]*/   /g' -e '/rlog/d' | \
-	cut -f2 > killpid
+	cat ps.out | awk '{print $2}' > killpid
 	
 	if [ ! -s killpid ]
 	then
@@ -360,7 +356,7 @@ case "$1" in
                         esac
         fi
 
-        # kill the agent daemon
+        # kill the user_dtn daemon
         KillNamedProcess user_dtn
 
         sleep 2                 # for delay before possible re-start
