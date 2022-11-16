@@ -210,7 +210,7 @@ static int vDebugLevel = 0;
 #define SIGINT_MSG "SIGINT received.\n"
 void sig_int_handler(int signum, siginfo_t *info, void *ptr)
 {
-	write(STDERR_FILENO, SIGINT_MSG, sizeof(SIGINT_MSG));
+	//write(STDERR_FILENO, SIGINT_MSG, sizeof(SIGINT_MSG));
 	fprintf(tunLogPtr,"Caught SIGINT, exiting...\n");
 	fclose(tunLogPtr);
 
