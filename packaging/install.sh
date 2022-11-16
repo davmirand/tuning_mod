@@ -210,16 +210,24 @@ logcount=
 		mkdir -p ${pathname}
 		copy_files
 		echo "The Tuning Module product has been installed in ${pathname}"
+		echo "Press <ENTER> to exit installation program."
+		enter_to_continue
+		exit 0
 	else
 		echo "Directory ${pathname} already exists..."
-		yorn "Are you sure you wish to install in the ${pathname} directory? (Yes/No)" "N"	
+		yorn "Are you sure you wish to install in the ${pathname} directory? (Yes/No)" "Y"	
 		if [ $? -ne 0 ] 
 		then
 			echo "Installation of the Tuning Module product will not occur."
 		else
+			if [ -f ${pathname}/user_config.txt ]	#save off config just in case
+			then
+				echo "Saving ${pathname}/user_config.txt ${pathname}/user_config.txt.$$"
+				cp ${pathname}/user_config.txt ${pathname}/user_config.txt.$$
+			fi
 			copy_files
 			echo "The Tuning Module product has been installed in ${pathname}"
-			echo "Press <Enter> to exit installation program."
+			echo "Press <ENTER> to exit installation program."
 			enter_to_continue
 			exit 0
 		fi
