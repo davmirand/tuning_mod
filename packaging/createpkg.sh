@@ -43,7 +43,7 @@ cp ../util/plotgraph.py .
 cp ../util/conv_csv_to_json.py .
 
 rm -f SAdtntune.zip
-zip SAdtntune.zip tuncli user_dtn userdtn_adm help_dtn.sh user_config.txt user_menu.sh gdv_100.sh gdv.sh readme.txt common_irq_affinity.sh set_irq_affinity.sh plotgraph.py conv_csv_to_json.py install.sh
+zip SAdtntune.zip tuncli user_dtn userdtn_adm help_dtn.sh user_config.txt user_menu.sh gdv_100.sh gdv.sh readme.txt common_irq_affinity.sh set_irq_affinity.sh plotgraph.py conv_csv_to_json.py install.sh tuning_module.service
 #
 rm tuncli 
 rm user_dtn 

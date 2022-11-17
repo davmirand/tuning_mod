@@ -210,6 +210,7 @@ logcount=
 		mkdir -p ${pathname}
 		copy_files
 		echo "The Tuning Module product has been installed in ${pathname}"
+		echo "The Tuning Module product has been installed in ${pathname}" > /tmp/install.tm
 		echo "Press <ENTER> to exit installation program."
 		enter_to_continue
 		exit 0
@@ -225,9 +226,12 @@ logcount=
 				echo "Saving ${pathname}/user_config.txt ${pathname}/user_config.txt.$$"
 				cp ${pathname}/user_config.txt ${pathname}/user_config.txt.$$
 			fi
+			sed -i 's/TM_PKG_DIR/${pathname}/g' tuning_module.service
 			copy_files
 			echo "The Tuning Module product has been installed in ${pathname}"
+			echo "The Tuning Module product has been installed in ${pathname}" > /tmp/install.tm
 			echo "Press <ENTER> to exit installation program."
+			cd $pathname
 			enter_to_continue
 			exit 0
 		fi
