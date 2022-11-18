@@ -208,6 +208,9 @@ logcount=
 	if [ ! -d ${pathname} ]
 	then
 		mkdir -p ${pathname}
+		pathname2=$(echo "$pathname" | sed 's/\//\\\//g')
+		sedstring="s/TM_PKG_DIR/${pathname2}/g"
+		sed -i ${sedstring} tuning_module.service
 		copy_files
 		echo "The Tuning Module product has been installed in ${pathname}"
 		echo "The Tuning Module product has been installed in ${pathname}" > /tmp/install.tm
@@ -226,7 +229,9 @@ logcount=
 				echo "Saving ${pathname}/user_config.txt ${pathname}/user_config.txt.$$"
 				cp ${pathname}/user_config.txt ${pathname}/user_config.txt.$$
 			fi
-			sed -i 's/TM_PKG_DIR/${pathname}/g' tuning_module.service
+			pathname2=$(echo "$pathname" | sed 's/\//\\\//g')
+			sedstring="s/TM_PKG_DIR/${pathname2}/g"
+			sed -i ${sedstring} tuning_module.service
 			copy_files
 			echo "The Tuning Module product has been installed in ${pathname}"
 			echo "The Tuning Module product has been installed in ${pathname}" > /tmp/install.tm
