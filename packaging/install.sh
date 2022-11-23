@@ -178,6 +178,7 @@ copy_files()
 	mv readme.txt $pathname
 	mv plotgraph.py $pathname
 	mv conv_csv_to_json.py $pathname
+	mv int-sink2+filter.bpf.o $pathname
 }
 
 default_dir="/usr/tuningmod"
@@ -191,7 +192,7 @@ logcount=
 	printf '\n%s' "NOTE: The user_config.txt file contains default behavior for"
 	printf '\n%s' "the Tuning module. You may wish to configure it first before"
 	printf '\n%s\n' "starting the Tuning Module..."
-	sleep 2
+	sleep 1
 	printf '\n###%s\n\n' "Preparing to install the Tuning Module..."
 	sleep 1
 	echo "This product normally installs into the ${default_dir} directory."
