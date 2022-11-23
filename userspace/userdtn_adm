@@ -229,6 +229,7 @@ case "$1" in
 	bpftool prog load int-sink2+filter.bpf.o /sys/fs/bpf/test dev $nic pinmaps /sys/fs/bpf/test_maps/
 	bpftool net attach xdpoffload pinned /sys/fs/bpf/test dev $nic
 	sleep 1
+	echo "Starting user_dtn process..."
         user_dtn
 
         sleep 1
