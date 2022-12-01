@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #       userdtn_adm == Start/Stop Daemon Processes for user_dtn
 #
 # Author:       David Miranda
