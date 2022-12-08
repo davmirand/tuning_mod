@@ -185,6 +185,7 @@ finish_up()
 {
 	pathname2=$(echo "$pathname" | sed 's/\//\\\//g')
 	sedstring="s/TM_PKG_DIR/${pathname2}/g"
+	sed -i ${sedstring} userdtn_adm
 	sed -i ${sedstring} tuning_module.service
 	mv tuning_module.service /etc/systemd/system/.
 	chmod 664 /etc/systemd/system/tuning_module.service
