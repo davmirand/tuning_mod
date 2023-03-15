@@ -1900,6 +1900,13 @@ double fDoCpuMonitoring()
 	char buffer[128];
 	FILE *pipe;
 	char try[1024];
+	char * foundstr;
+	int found = 0;
+	int ridtwolines = 0;
+	int static nompstat = 0;
+
+	if (nompstat)
+		return 0;
 
 	sprintf(try,"%s","mpstat -P ALL 1 1 | grep -v all | grep -v 100.00");
 
@@ -1912,24 +1919,41 @@ double fDoCpuMonitoring()
 	}
 
 	gettime(&clk, ctime_buf);
-	fprintf(tunLogPtr,"%s %s: ***Monitoring CPUs that are being utilized***\n", ctime_buf, phase2str(current_phase));
+	fprintf(tunLogPtr,"\n%s %s: ***Monitoring CPUs that are being utilized***\n", ctime_buf, phase2str(current_phase));
 
 	while (!feof(pipe))
 	{
 		// use buffer to read and add to result
 		if (fgets(buffer, 128, pipe) != NULL)
 		{
-			fprintf(tunLogPtr,"%s%s", pLearningSpaces, buffer);					
+			if (++ridtwolines < 3)
+				continue;
+
+			foundstr = strstr(buffer,"Average");
+			if (foundstr)
+			{
+				found = 1;
+				break;
+			}
+			else
+				fprintf(tunLogPtr,"%s%s", pLearningSpaces, buffer);					
+
 		}
 		else
 			break;
 	}
 
 	pclose(pipe);
+
+	if (!found)
+	{
+		nompstat = 1;
+		fprintf(tunLogPtr,"\n%s %s: ***!!!ERROR!!!**** Could not find \"mpstat\" to monitor CPUs***\n", ctime_buf, phase2str(current_phase));
+	}
 		
 	fflush(tunLogPtr);
 
-return 0;
+return found;
 }
 
 double fFindRttUsingPing()
@@ -1976,7 +2000,7 @@ double fFindRttUsingPing()
                 if (foundstr)
                 {
 			gettime(&clk, ctime_buf);
-			fprintf(tunLogPtr,"\n%s %s: ***using \"%s\" returns *%s", ctime_buf, phase2str(current_phase),try, buffer);
+			fprintf(tunLogPtr,"%s %s: ***using \"%s\" returns *%s", ctime_buf, phase2str(current_phase),try, buffer);
 			foundstr = strchr(foundstr,'=');
 			if (foundstr)
 			{
@@ -2096,7 +2120,7 @@ finish_up:
 		if (vDebugLevel > 1 && previous_average_tx_Gbits_per_sec)
 		{
 			gettime(&clk, ctime_buf);
-			fprintf(tunLogPtr,"%s %s: ***Highest RTT using bpftrace is %.3fms\n", ctime_buf, phase2str(current_phase), highest_rtt_from_bpftrace);
+			fprintf(tunLogPtr,"\n%s %s: ***Highest RTT using bpftrace is %.3fms\n", ctime_buf, phase2str(current_phase), highest_rtt_from_bpftrace);
 		}
 
 		if (((highest_rtt_from_ping > rtt_threshold) || (highest_rtt_from_bpftrace > rtt_threshold)) &&
