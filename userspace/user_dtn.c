@@ -1404,6 +1404,77 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 
 #define MAX_TUNING_APPLY	10
 static double previous_average_tx_Gbits_per_sec = 0.0;
+
+double fGetAppBandWidth()
+{
+
+	time_t clk;
+	char ctime_buf[27];
+	char buffer[256];
+	FILE *pipe;
+	char try[1024];
+	int found = 0;
+	static int nolsof = 0;
+
+	if (nolsof)
+		return 0;
+
+	if (aDest_Ip2[0] == 0)
+	{
+		return 0; //didn't get  a message from the peer yet
+	}
+
+	gettime(&clk, ctime_buf);
+
+	sprintf(try,"lsof | grep %s:",aDest_Ip2);
+
+	pipe = popen(try,"r");
+	if (!pipe)
+	{
+		printf("popen failed!\n");
+		printf("here17***\n");
+		return 0;
+	}
+
+	found = 1;
+
+	gettime(&clk, ctime_buf);
+	fprintf(tunLogPtr,"\n%s %s: ***Working on apps that are using bandwidth***\n", ctime_buf, phase2str(current_phase));
+
+	while (!feof(pipe))
+	{
+		// use buffer to read and add to result
+		if (fgets(buffer, 256, pipe) != NULL)
+		{
+			char * q = 0;
+                        char value[256];
+                        memset(value,0,256);
+                        q = strchr(buffer,' ');
+                        if (q)
+				strncpy(value,buffer,q-buffer);
+
+			if (q)
+			{
+				fprintf(tunLogPtr,"%s***App using bandwidth is ***%s\n", pLearningSpaces, value);
+			}
+		}
+		else
+			break;
+	}
+
+	pclose(pipe);
+
+	if (!found)
+	{
+		nolsof = 1;
+		fprintf(tunLogPtr,"\n%s %s: ***!!!ERROR!!!**** Could not find \"lsof\" to get App Bandwidth***\n", ctime_buf, phase2str(current_phase));
+	}
+
+	fflush(tunLogPtr);
+
+return found;
+}
+
 void * fDoRunGetThresholds(void * vargp)
 {
 	time_t clk;
@@ -1435,6 +1506,11 @@ void * fDoRunGetThresholds(void * vargp)
 	/*sprintf(try,"bpftrace -e \'BEGIN { @name;} kfunc:dev_get_stats { $nd = (struct net_device *) args->dev; @name = $nd->name; } kretfunc:dev_get_stats /@name == \"%s\"/ { $nd = (struct net_device *) args->dev; $rtnl = (struct rtnl_link_stats64 *) args->storage; $rx_bytes = $rtnl->rx_bytes; $tx_bytes = $rtnl->tx_bytes; printf(\"%s %s\\n\", $tx_bytes, $rx_bytes); time(\"%s\"); exit(); } END { clear(@name); }\'",netDevice,"%lu","%lu","%S");*/
 
 start:
+	if (vDebugLevel > 1 && previous_average_tx_Gbits_per_sec && vIamASrcDtn)
+	{
+		fGetAppBandWidth();
+		sleep(1);
+	}
 #if 1
 	rx_before =  rx_now = rx_bytes_tot = rx_kbits_per_sec = 0;
 	tx_before =  tx_now = tx_bytes_tot = tx_kbits_per_sec = 0;
