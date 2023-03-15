@@ -1893,6 +1893,45 @@ void fDoManageRtt(double highest_rtt_ms, int * applied, int * suggested, int * n
 return;
 }
 
+double fDoCpuMonitoring()
+{
+	time_t clk;
+	char ctime_buf[27];
+	char buffer[128];
+	FILE *pipe;
+	char try[1024];
+
+	sprintf(try,"%s","mpstat -P ALL 1 1 | grep -v all | grep -v 100.00");
+
+	pipe = popen(try,"r");
+	if (!pipe)
+	{
+		printf("popen failed!\n");
+		printf("here2***\n");
+		return 0;
+	}
+
+	gettime(&clk, ctime_buf);
+	fprintf(tunLogPtr,"%s %s: ***Monitoring CPUs that are being utilized***\n", ctime_buf, phase2str(current_phase));
+
+	while (!feof(pipe))
+	{
+		// use buffer to read and add to result
+		if (fgets(buffer, 128, pipe) != NULL)
+		{
+			fprintf(tunLogPtr,"%s%s", pLearningSpaces, buffer);					
+		}
+		else
+			break;
+	}
+
+	pclose(pipe);
+		
+	fflush(tunLogPtr);
+
+return 0;
+}
+
 double fFindRttUsingPing()
 {
 	time_t clk;
@@ -1998,10 +2037,16 @@ void * fDoRunFindHighestRtt(void * vargp)
 
 rttstart:
 
-	if (vDebugLevel > 1 && previous_average_tx_Gbits_per_sec && vIamASrcDtn)
+	if (vDebugLevel > 1 && previous_average_tx_Gbits_per_sec)
 	{
 		sleep(1);
-		highest_rtt_from_ping = fFindRttUsingPing();
+
+		if (vIamASrcDtn)
+			highest_rtt_from_ping = fFindRttUsingPing();
+
+		sleep(1);
+		fDoCpuMonitoring();	
+
 	}
 
 	rtt = 0;
