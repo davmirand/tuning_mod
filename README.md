@@ -92,4 +92,4 @@ In order to compile and work with the Tuning Module, do the following:
 -	after unziping, to install, type ```sudo sh ./install.sh```
 -	follow the instructions to install the package 
 
-**Note: Please see <temp_directory>/readme.txt for additional information on how to start the Tuning Module**
+**Note: Please see <install_directory>/readme.txt for information on how to start the Tuning Module**

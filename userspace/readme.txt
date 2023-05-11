@@ -1,11 +1,13 @@
 		Notes on using the Tuning Module
 		----------------------------------
 **Important Note:**
-- Before starting tuning Module edit the file "user_config.txt" and specify the name of the NIC
-- you are going to use on the line marked 'nic_to_use'
+- Before starting the Tuning Module, edit the file "user_config.txt" and specify the 
+- name of the NIC you are going to use on the line marked 'nic_to_use'
 
 - To start the Tuning Module type 'sudo ./userdtn_adm start'
 - To stop the Tuning Module type 'sudo ./userdtn_adm stop'
+
+- To see what options can be changed dynamically, including debug levels,  type "./tuncli"
 
 Additional Notes:
 There are 6 files that are used in conjunction with the Tuning Module: 
