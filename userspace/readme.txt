@@ -1,13 +1,7 @@
-		Notes on using the dtntune utility
+		Notes on using the Tuning Module
 		----------------------------------
 
-dtntune is use to tune the Linux host for networking purposes.
-Please type "sudo ./dtnmenu" and follow instructions to tune system
-
-Note: This package requires 'lshw' and 'dmidecode' utilities tools
-      to be installed on the system
-
-Additional Notes:
+Notes:
 There are 6 files that are used in conjunction with the Tuning Module: 
 i.    readme.txt
 ii.   user_config.txt 
@@ -75,10 +69,9 @@ regarding performance issues to the source.  The default value is 5524.
 
 j. nic_to_use
 The name of the NIC that the Tuning Module will be working with. Eg. enp6s0.
-gdv_100.sh
-==========
-Same as gdv.sh below, but used for NICs with speeds >= 100G
 
+k. nic_attach_type
+The bpf program will attach to  network interface using this type
 
 gdv.sh 
 ======
@@ -178,7 +171,6 @@ create JSON formatted data.
 ==============================================
 ==============================================
 Additional specs that may be worth checking out. 
-Current settings below are on int03:
 
 /***
  ***Maximum number of microseconds in one NAPI polling cycle. 

@@ -4,9 +4,6 @@
 dtntune is use to tune the Linux host for networking purposes.
 Please type "sudo ./dtnmenu" and follow instructions to tune system
 
-Note: This package requires 'lshw' and 'dmidecode' utilities tools
-      to be installed on the system
-
 Additional Notes:
 There are 4 files that are used in conjunction with the Tuning Module: 
 i.   user_config.txt 
@@ -119,7 +116,7 @@ values.  The recommended values are 4096 65536 33554432.
 gdv_100.sh 
 ======
 The gdv_100.sh file is similar to the gdv.sh file, but it used when there is
-100 Gig card in play. It alos has a couple of additional tunables:
+100 Gig card in play. It also has a couple of additional tunables:
 
 a. net.core.netdev_max_backlog 
 This parameter sets the maximum size of the network interface's receive queue. 
