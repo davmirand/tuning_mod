@@ -33,8 +33,8 @@ There are also two relevant directories here:
 **To make a zip package:**
 -	**Note:** you must compile as explained above before trying to make a pkg.
 -	go to ```packaging``` directory
--	type ```sh ./createpkg.sh``` to create a zip file called dtntune.zip
--	```dtntune.zip``` consist of files from the ```assess-tuning``` directory
+-	type ```sh ./createpkg.sh``` to create two zip files, one of which is called ASSESSdtntune.zip. 
+-	```ASSESSdtntune.zip``` consist of files from the ```assess-tuning``` directory
 -	create a temp directory, copy the zip file into it, and type unzip *.zip
 -	after unziping, run the commands as mentioned above "for a quick test"
 
