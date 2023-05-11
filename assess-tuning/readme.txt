@@ -114,7 +114,7 @@ The net.ipv4.tcp_wmem attribute is the amount of memory in bytes for write
 values.  The recommended values are 4096 65536 33554432. 
 
 gdv_100.sh 
-======
+==========
 The gdv_100.sh file is similar to the gdv.sh file, but it used when there is
 100 Gig card in play. It also has a couple of additional tunables:
 

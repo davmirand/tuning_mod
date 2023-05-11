@@ -56,8 +56,8 @@ There are also two relevant directories here:
 
 **Part 2**
 
-There is one known dependency, apart from compilation requirements at this point. 
--	This package requires the 'bpftrace' utility to be installed on the system
+There are two known dependencies, apart from compilation requirements at this point. 
+-	This package requires 'bpftool' and 'bpftrace' utilities to be installed on the system
 
 There are a few relevant directories here:
 
@@ -83,3 +83,13 @@ In order to compile and work with the Tuning Module, do the following:
 	* 	```/tmp/tuningLog``` will contain all the relevant output 
 -	Run ```make``` in ```cli/```. This will create a directory call ```tmp``` which contains the binary ```tuncli```.
 	Run the binary and follow the instructions onscreen on how to use it
+
+**To make a zip package:**
+-	go to ```packaging``` directory
+-	type ```sh ./createpkg.sh``` to create two zip files, one of which is called ```SATuning_Module.zip```. 
+-	```SATuning_Module.zip``` consist of files from the ```userspace``` and ```cli``` directory
+-	create a temp directory, copy the ```SATuning_Module.zip``` file into it,  cd to it and type ```unzip *.zip```
+-	after unziping, to install, type ```sudo sh ./install.sh```
+-	follow the instructions to install the package 
+
+**Note: Please see <temp_directory>/readme.txt for additional information on how to start the Tuning Module**

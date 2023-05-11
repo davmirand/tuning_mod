@@ -1,7 +1,13 @@
 		Notes on using the Tuning Module
 		----------------------------------
+**Important Note:**
+- Before starting tuning Module edit the file "user_config.txt" and specify the name of the NIC
+- you are going to use on the line marked 'nic_to_use'
 
-Notes:
+- To start the Tuning Module type 'sudo ./userdtn_adm start'
+- To stop the Tuning Module type 'sudo ./userdtn_adm stop'
+
+Additional Notes:
 There are 6 files that are used in conjunction with the Tuning Module: 
 i.    readme.txt
 ii.   user_config.txt 
@@ -141,7 +147,7 @@ The net.ipv4.tcp_wmem attribute is the amount of memory in bytes for write
 values.  The recommended values are 4096 65536 33554432. 
 
 gdv_100.sh
-======
+==========
 The gdv_100.sh file is similar to the gdv.sh file, but it used when there is
 100 Gig card in play. It alos has a couple of additional tunables:
 
