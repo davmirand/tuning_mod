@@ -147,6 +147,21 @@ The net.ipv4.tcp_wmem attribute is the amount of memory in bytes for write
 (transmit) buffers per open socket. It contains the minimum, default and maximum
 values.  The recommended values are 4096 65536 33554432. 
 
+gdv_100.sh
+======
+The gdv_100.sh file is similar to the gdv.sh file, but it used when there is
+100 Gig card in play. It alos has a couple of additional tunables:
+
+a. net.core.netdev_max_backlog
+This parameter sets the maximum size of the network interface's receive queue.
+The queue is used to store received frames after removing them from the network
+adapter's ring buffer.
+
+b. net.ipv4.tcp_no_metrics_save
+By default, TCP saves various connection metrics in the route cache when the connection
+closes, so that connections established in the near future can use these to set initial
+conditions. Usually, this increases overall performance, but may sometimes cause performance
+degradation. If set, TCP will not cache metrics on closing connections.
 
 /tmp/tuningLog 
 ==============

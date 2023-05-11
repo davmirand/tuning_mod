@@ -38,11 +38,11 @@ There are also two relevant directories here:
 -	create a temp directory, copy the ASSESSdtntune.zip file into it,  cd to it and type unzip *.zip
 -	after unziping, run the commands as mentioned above "for a quick test"
 
-**Note: Please see packaging/readme.txt for additional instructions**
--	Basically, there are three files of interest
-	*	```user_config.txt```, ```gdv.sh``` and ```/tmp/tuningLog```
+**Note: Please see <temp_directory>/readme.txt for additional instructions**
+-	Basically, there are four files of interest
+	*	```user_config.txt```, ```gdv.sh```, ```gdv_100.sh``` and ```/tmp/tuningLog```
 	*	```user_config.txt``` contains well known values to control how the application operates
-	*	```gdv.sh``` conatins the settings that we are currently interested in
+	*	```gdv.sh``` and ```gdv_100.sh``` contains the settings that we are currently interested in
 	*	```/tmp/tuningLog``` will contain the output from the last run
 
 **This package has been tested with the following versions of Linux**
