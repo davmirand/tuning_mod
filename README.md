@@ -35,7 +35,7 @@ There are also two relevant directories here:
 -	go to ```packaging``` directory
 -	type ```sh ./createpkg.sh``` to create two zip files, one of which is called ASSESSdtntune.zip. 
 -	```ASSESSdtntune.zip``` consist of files from the ```assess-tuning``` directory
--	create a temp directory, copy the zip file into it, and type unzip *.zip
+-	create a temp directory, copy the ASSESSdtntune.zip file into it,  cd to it and type unzip *.zip
 -	after unziping, run the commands as mentioned above "for a quick test"
 
 **Note: Please see packaging/readme.txt for additional instructions**
