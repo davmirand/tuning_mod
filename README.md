@@ -80,7 +80,7 @@ In order to compile and work with the Tuning Module, do the following:
 		*	```git submodule update```
 
 -	Run ```make``` in ```userspace/``` to create Tuning Module's binaries
--	Run ```make``` in ```cli/``` to create a directory call ```tmp``` which contains the binary ```tuncli```.
+-	Run ```make``` in ```cli/``` to create a directory call ```tmp``` which contains the binary ```tuncli```
 
 **Make a zip package to install Tuning Module:**
 -	go to ```packaging``` directory
