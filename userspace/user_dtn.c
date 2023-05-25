@@ -99,6 +99,7 @@ union uIP {
 };
 
 static union uIP src_ip_addr;
+static __u16 src_port;
 
 void qOCC_Hop_TimerID_Handler(int signum, siginfo_t *info, void *ptr);
 static void timerHandler( int sig, siginfo_t *si, void *uc );
@@ -606,9 +607,11 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		print_hop_key(&hop_key);
 #if 1
                 if ((src_ip_addr.y != ntohl(hop_key.flow_key.src_ip)) || new_traffic)
+                //if ((src_ip_addr.y != ntohl(hop_key.flow_key.src_ip)) || new_traffic)
                 {
 			new_traffic = 0;
 			src_ip_addr.y = ntohl(hop_key.flow_key.src_ip);
+		//	src_ip_addr.y = hop_key.flow_key.src_ip;
 			if (vDebugLevel > 1)
 			{
 				gettime(&clk, ctime_buf);
@@ -622,7 +625,8 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
                         Pthread_mutex_unlock(&dtn_mutex);
 		}
 #endif
-		//src_ip_addr.y = ntohl(hop_key.flow_key.src_ip);
+		//src_port = ntohs(hop_key.flow_key.src_port);
+		src_port = hop_key.flow_key.src_port;
 		hop_key.hop_index++;
 
 	}
@@ -667,8 +671,7 @@ void print_flow_key(struct flow_key *key, char ctime_buf[])
 	//fprintf(stdout, "\tvlan_id:%hu\n", key->vlan_id);
 
 	if (src_ip_addr.y)
-		fprintf(tunLogPtr,"%s %s: \tsrc_ip:%u.%u.%u.%u", ctime_buf, phase2str(current_phase), src_ip_addr.a[0],src_ip_addr.a[1],src_ip_addr.a[2],src_ip_addr.a[3]);
-	//	fprintf(stdout,"%u.%u.%u.%u", src_ip_addr.a[0], src_ip_addr.a[1], src_ip_addr.a[2], src_ip_addr.a[3]);
+		fprintf(tunLogPtr,"%s %s: \tsrc_ip:%u.%u.%u.%u, src_port:%d", ctime_buf, phase2str(current_phase), src_ip_addr.a[0],src_ip_addr.a[1],src_ip_addr.a[2],src_ip_addr.a[3], src_port);
 #endif
 }
 
@@ -2861,6 +2864,7 @@ int main(int argc, char **argv)
 	memset(aDest_Ip2,0,sizeof(aDest_Ip2));
 	memset(aLocal_Ip,0,sizeof(aLocal_Ip));
 	src_ip_addr.y = 0;
+	src_port = 0;
 
 	vGoodBitrateValue = (((88/(double)100) * netDeviceSpeed)/(double)1000); //88% of NIC speed seem to be a good bitrate
 	fprintf(tunLogPtr, "%s %s: ***vGoodBitrateValue = %.1fGb/s***\n", ctime_buf, phase2str(current_phase), vGoodBitrateValue);
