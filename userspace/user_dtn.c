@@ -517,7 +517,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 	if (vDebugLevel > 3)
 	{
 		gettime(&clk, ctime_buf);
-		fprintf(tunLogPtr, "\n%s %s: ******************************************\n", ctime_buf, phase2str(current_phase));
+		fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", ctime_buf, phase2str(current_phase));
 	}
 
 	while (data + data_offset + sizeof(struct int_hop_metadata) <= data_end)
@@ -531,18 +531,35 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		hop_hop_latency_threshold = egress_time - ingress_time;
 		if (vDebugLevel > 3)
 		{
-
-//			fprintf(stdout, "switch_id = %u\n",ntohl(hop_metadata_ptr->switch_id));
-//			fprintf(stdout, "ingress_port_id = %d\n",ntohs(hop_metadata_ptr->ingress_port_id));
-//			fprintf(stdout, "egress_port_id = %d\n",ntohs(hop_metadata_ptr->egress_port_id));
+#if 0
+//			fprintf(tunLogPtr,"%s %s: Hop Key:\n", ctime_buf, phase2str(current_phase));
+			fprintf(tunLogPtr, "\n%s %s: hop_switch_id = %u\n",ctime_buf, phase2str(current_phase), ntohl(hop_metadata_ptr->switch_id));
+			fprintf(tunLogPtr, "%s %s: hop_ingress_port = %d\n",ctime_buf, phase2str(current_phase), ntohs(hop_metadata_ptr->ingress_port_id));
+			fprintf(tunLogPtr, "%s %s: hop_egress_port = %d\n",ctime_buf, phase2str(current_phase), ntohs(hop_metadata_ptr->egress_port_id));
 //			fprintf(stdout, "hop_latency = %u\n",ntohl(hop_metadata_ptr->hop_latency));
-			fprintf(tunLogPtr, "%s %s: Qinfo = %u\n",ctime_buf, phase2str(current_phase), Qinfo);
+			fprintf(tunLogPtr, "%s %s: queue_occupancy = %u\n",ctime_buf, phase2str(current_phase), Qinfo);
 			fprintf(tunLogPtr, "%s %s: ingress_time = %u\n",ctime_buf, phase2str(current_phase), ingress_time);
 			fprintf(tunLogPtr, "%s %s: egress_time = %u\n",ctime_buf, phase2str(current_phase), egress_time);
 			fprintf(tunLogPtr, "%s %s: time_in_hop = %u\n",ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
 //			fprintf(tunLogPtr, "%s %s: hop_latency = %u\n",ctime_buf, phase2str(current_phase), ntohl(hop_metadata_ptr->hop_latency));
 //			fprintf(stdout, "sizeof struct int_hop-metadata = %lu\n",sizeof(struct int_hop_metadata));
 //			fprintf(stdout, "sizeof struct hop_key = %lu\n",sizeof(struct hop_key));
+#endif
+#if 1
+//			fprintf(tunLogPtr,"%s %s: Hop Key:\n", ctime_buf, phase2str(current_phase));
+			//fprintf(tunLogPtr, "   %sFLOW    : %s", pLearningSpacesMinusLearning, er_buffer);
+			fprintf(tunLogPtr, "\n%sFLOW    : hop_switch_id = %u\n",pLearningSpacesMinusLearning, ntohl(hop_metadata_ptr->switch_id));
+			fprintf(tunLogPtr, "%sFLOW    : hop_ingress_port = %d\n",pLearningSpacesMinusLearning, ntohs(hop_metadata_ptr->ingress_port_id));
+			fprintf(tunLogPtr, "%sFLOW    : hop_egress_port = %d\n",pLearningSpacesMinusLearning, ntohs(hop_metadata_ptr->egress_port_id));
+//			fprintf(stdout, "hop_latency = %u\n",ntohl(hop_metadata_ptr->hop_latency));
+			fprintf(tunLogPtr, "%sFLOW    : queue_occupancy = %u\n",pLearningSpacesMinusLearning, Qinfo);
+			fprintf(tunLogPtr, "%sFLOW    : ingress_time = %u\n",pLearningSpacesMinusLearning, ingress_time);
+			fprintf(tunLogPtr, "%sFLOW    : egress_time = %u\n",pLearningSpacesMinusLearning, egress_time);
+			fprintf(tunLogPtr, "%sFLOW    : time_in_hop = %u\n",pLearningSpacesMinusLearning, hop_hop_latency_threshold);
+//			fprintf(tunLogPtr, "%s %s: hop_latency = %u\n",ctime_buf, phase2str(current_phase), ntohl(hop_metadata_ptr->hop_latency));
+//			fprintf(stdout, "sizeof struct int_hop-metadata = %lu\n",sizeof(struct int_hop_metadata));
+//			fprintf(stdout, "sizeof struct hop_key = %lu\n",sizeof(struct hop_key));
+#endif
 		}
 #if 1
 		if ((hop_hop_latency_threshold > vHOP_LATENCY_DELTA) && (Qinfo > vQUEUE_OCCUPANCY_DELTA))
@@ -552,7 +569,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 			{
 				gettime(&clk, ctime_buf);
 				fprintf(tunLogPtr, "%s %s: ***time_in_hop = %u\n", ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
-				fprintf(tunLogPtr, "%s %s: ***Qinfo = %u\n", ctime_buf, phase2str(current_phase), Qinfo);
+				fprintf(tunLogPtr, "%s %s: ***queue_occupancy = %u\n", ctime_buf, phase2str(current_phase), Qinfo);
 			}
 		}
 		else
@@ -571,7 +588,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 						if (hop_hop_latency_threshold > vHOP_LATENCY_DELTA)
 							fprintf(tunLogPtr, "%s %s: ***time_in_hop = %u\n", ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
 						else
-							fprintf(tunLogPtr, "%s %s: ***Qinfo = %u\n", ctime_buf, phase2str(current_phase), Qinfo);
+							fprintf(tunLogPtr, "%s %s: ***queue_occupancy = %u\n", ctime_buf, phase2str(current_phase), Qinfo);
 					}
 				}
 			}
@@ -660,19 +677,13 @@ void lost_func(struct threshold_maps *ctx, int cpu, __u64 cnt)
 	
 void print_flow_key(struct flow_key *key, char ctime_buf[])
 {
-	//fprintf(stdout, "Flow Key:\n");
-	fprintf(tunLogPtr,"%s %s: Flow Key:\n", ctime_buf, phase2str(current_phase));
-#if 1
-	fprintf(tunLogPtr,"%s %s: \tegress_switch:%X\n", ctime_buf, phase2str(current_phase), key->switch_id);
-	fprintf(tunLogPtr,"%s %s: \tegress_port:%hu\n", ctime_buf, phase2str(current_phase), key->egress_port);
-	fprintf(tunLogPtr,"%s %s: \tvlan_id:%hu\n", ctime_buf, phase2str(current_phase), key->vlan_id);
-	//fprintf(stdout, "\tegress_switch:%X\n", key->switch_id);
-	//fprintf(stdout, "\tegress_port:%hu\n", key->egress_port);
-	//fprintf(stdout, "\tvlan_id:%hu\n", key->vlan_id);
+	fprintf(tunLogPtr,"%sFLOW    : Flow Key:\n", pLearningSpacesMinusLearning);
+	fprintf(tunLogPtr,"%sFLOW    : \tflow_switch_id:%u\n", pLearningSpacesMinusLearning, key->switch_id);
+	fprintf(tunLogPtr,"%sFLOW    : \tflow_egress_port:%hu\n", pLearningSpacesMinusLearning, key->egress_port);
+	fprintf(tunLogPtr,"%sFLOW    : \tvlan_id:%hu\n", pLearningSpacesMinusLearning, key->vlan_id);
 
 	if (src_ip_addr.y)
-		fprintf(tunLogPtr,"%s %s: \tsrc_ip:%u.%u.%u.%u, src_port:%d", ctime_buf, phase2str(current_phase), src_ip_addr.a[0],src_ip_addr.a[1],src_ip_addr.a[2],src_ip_addr.a[3], src_port);
-#endif
+		fprintf(tunLogPtr,"%sFLOW    : \tsrc_ip:%u.%u.%u.%u, src_port:%d", pLearningSpacesMinusLearning, src_ip_addr.a[0],src_ip_addr.a[1],src_ip_addr.a[2],src_ip_addr.a[3], src_port);
 }
 
 void print_hop_key(struct hop_key *key)
@@ -682,11 +693,9 @@ void print_hop_key(struct hop_key *key)
 	if (vDebugLevel > 4 )
 	{
 		gettime(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: Hop Key:\n", ctime_buf, phase2str(current_phase));
-		//fprintf(stdout, "Hop Key:\n");
+		//fprintf(tunLogPtr,"%s %s: Hop Key:\n", ctime_buf, phase2str(current_phase));
 		print_flow_key(&(key->flow_key), ctime_buf);
 		fprintf(tunLogPtr,"  ***hop_index: %X\n", key->hop_index);
-		//fprintf(stdout, "\thop_index: %X\n", key->hop_index);
 	}
 }
 /* End of bpf stuff ****/
