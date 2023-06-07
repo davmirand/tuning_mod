@@ -88,6 +88,7 @@ pthread_cond_t dtn_cond = PTHREAD_COND_INITIALIZER;
 static int cdone = 0;
 static unsigned int sleep_count = 1;
 static double vGoodBitrateValue = 0.0;
+static double vGoodBitrateValueThatDoesntNeedMessage = 0.0;
 struct args test;
 char aSrc_Ip[32];
 char aDest_Ip2[32];
@@ -99,7 +100,6 @@ union uIP {
 };
 
 static union uIP src_ip_addr;
-static __u16 src_port;
 
 void qOCC_Hop_TimerID_Handler(int signum, siginfo_t *info, void *ptr);
 static void timerHandler( int sig, siginfo_t *si, void *uc );
@@ -216,7 +216,7 @@ static unsigned long rx_kbits_per_sec = 0, tx_kbits_per_sec = 0;
 //= 4 - include data from INT sink
 //= 5 - include additional sink data logging
 //= 6 - include additional information about the link
-//>=7 - include everything else
+//= 7 - include everything else
 static int vDebugLevel = 0;
 
 #define SIGINT_MSG "SIGINT received.\n"
@@ -265,6 +265,10 @@ typedef struct {
 
 #include "../../int-sink/src/shared/int_defs.h"
 #include "../../int-sink/src/shared/filter_defs.h"
+
+#ifdef INCLUDE_SRC_PORT
+static __u16 src_port;
+#endif
 
 enum ARGS{
 	CMD_ARG,
@@ -642,8 +646,10 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
                         Pthread_mutex_unlock(&dtn_mutex);
 		}
 #endif
+#ifdef INCLUDE_SRC_PORT
 		//src_port = ntohs(hop_key.flow_key.src_port);
 		src_port = hop_key.flow_key.src_port;
+#endif
 		hop_key.hop_index++;
 
 	}
@@ -681,9 +687,13 @@ void print_flow_key(struct flow_key *key, char ctime_buf[])
 	fprintf(tunLogPtr,"%sFLOW    : \tflow_switch_id:%u\n", pLearningSpacesMinusLearning, key->switch_id);
 	fprintf(tunLogPtr,"%sFLOW    : \tflow_egress_port:%hu\n", pLearningSpacesMinusLearning, key->egress_port);
 	fprintf(tunLogPtr,"%sFLOW    : \tvlan_id:%hu\n", pLearningSpacesMinusLearning, key->vlan_id);
-
+#ifdef INCLUDE_SRC_PORT
 	if (src_ip_addr.y)
 		fprintf(tunLogPtr,"%sFLOW    : \tsrc_ip:%u.%u.%u.%u, src_port:%d", pLearningSpacesMinusLearning, src_ip_addr.a[0],src_ip_addr.a[1],src_ip_addr.a[2],src_ip_addr.a[3], src_port);
+#else
+	if (src_ip_addr.y)
+		fprintf(tunLogPtr,"%sFLOW    : \tsrc_ip:%u.%u.%u.%u", pLearningSpacesMinusLearning, src_ip_addr.a[0],src_ip_addr.a[1],src_ip_addr.a[2],src_ip_addr.a[3]);
+#endif
 }
 
 void print_hop_key(struct hop_key *key)
@@ -1403,7 +1413,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 					}
 			}
 		
-		if (vDebugLevel > 0)
+		if ((vDebugLevel > 1) && (average_tx_Gbits_per_sec < vGoodBitrateValueThatDoesntNeedMessage ))
 		{
 			fprintf(tunLogPtr, "%s %s: !!!*****BITRATE IS LOW********!!!\n", ctime_buf, phase2str(current_phase));
 			if (aLocal_Ip[0])
@@ -2873,9 +2883,11 @@ int main(int argc, char **argv)
 	memset(aDest_Ip2,0,sizeof(aDest_Ip2));
 	memset(aLocal_Ip,0,sizeof(aLocal_Ip));
 	src_ip_addr.y = 0;
+#ifdef INCLUDE_SRC_PORT
 	src_port = 0;
-
-	vGoodBitrateValue = (((88/(double)100) * netDeviceSpeed)/(double)1000); //88% of NIC speed seem to be a good bitrate
+#endif
+	vGoodBitrateValue = (((97/(double)100) * netDeviceSpeed)/(double)1000); //97% of NIC speed is a good bitrate threshold
+	vGoodBitrateValueThatDoesntNeedMessage = (((88/(double)100) * netDeviceSpeed)/(double)1000); //Won't print 'BITRATE IS LOW' message in this case - log gets cumbersome
 	fprintf(tunLogPtr, "%s %s: ***vGoodBitrateValue = %.1fGb/s***\n", ctime_buf, phase2str(current_phase), vGoodBitrateValue);
 	fprintf(tunLogPtr, "%s %s: ***Numa Node for %s is %d***\n", ctime_buf, phase2str(current_phase), netDevice, numaNode);
 	if (numaNodeString[0])
