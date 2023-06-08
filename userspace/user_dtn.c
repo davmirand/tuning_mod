@@ -1943,7 +1943,7 @@ void fDoManageRtt(double highest_rtt_ms, int * applied, int * suggested, int * n
 	unsigned int kmaximum;
 	double average_tx_Gbits_per_sec = 2000.00;
 
-	return;
+	return; //******ATTENTION!!!!!!!!! doesn't do anything for now ******** ATTENTION!!!!!!!!!
 
 	gettime(&clk, ctime_buf);
 	if (from_bpftrace)
@@ -2269,6 +2269,94 @@ finish_up:
 return avg_rtt_ping;
 }
 
+void fDoCheckSoftirqd(void);
+void fDoCheckSoftirqd(void)
+{
+	time_t clk;
+	char ctime_buf[27];
+	char buffer[128];
+	FILE *pipe;
+	char try[1024];
+	double vCpuAmountUsed = 0.0;
+        char * foundstr = 0;
+	int found = 0;
+
+	sprintf(try,"top -n 1 | grep softirqd | awk \'{ printf(\"%s   %s\\n\", $10, $13); }\' grep -v 0.0 | grep -v [0-5][[:digit:]].", "%-8s", "%-8s");
+	//sprintf(try,"top -n 1 | grep softirqd | awk \'{ printf(\"%s   %s\\n\", $10, $13); }\'", "%-8s", "%-8s");
+	//top -n 1 | grep ksoftirqd | awk '{ printf("%-8s   %-8s\n", $10, $13); } ' | grep -v 0.0 | grep -v [0-5][[:digit:]].
+	
+	avg_rtt_ping = 0;
+	pipe = popen(try,"r");
+	if (!pipe)
+	{
+		printf("popen failed!\n");
+		printf("here2***\n");
+		return 0;
+	}
+
+	while (!feof(pipe))
+	{
+		// use buffer to read and add to result
+		if (fgets(buffer, 128, pipe) != NULL)
+		{
+			sscanf(buffer,"%d %c %u %d %u", kernel_parameter, &equal_sign, &kminimum, &kdefault, &kmaximum);
+		}
+		else
+			{
+				goto finish_up;
+			}
+
+		foundstr = strstr(buffer,"ksoftirqd");
+		//should look like example: "25.0        ksoftirqd/0"
+		//should look like example: "53.0        ksoftirqd/1"
+                if (foundstr)
+                {
+			if (vDebugLevel > 1)
+			{
+				gettime(&clk, ctime_buf);
+				fprintf(tunLogPtr,"%s %s: ***using \"%s\" returns *%s", ctime_buf, phase2str(current_phase),try, buffer);
+			}
+			foundstr = strchr(foundstr,'=');
+			if (foundstr)
+			{
+				foundstr = strchr(foundstr,'/');
+				if (foundstr)
+				{
+					char * q = 0;
+					char value[32];
+					memset(value,0,32);
+					foundstr++;
+					q = strchr(foundstr,'/');
+					if (q)
+					{
+						char * strpart;
+						strncpy(value,foundstr,q-foundstr);
+						avg_rtt_ping = strtod(value, &strpart);
+						found = 1;
+						break;	
+					}
+				}
+                	}
+		}
+		else
+			continue;
+	}
+
+finish_up:
+	pclose(pipe);
+	if (found)
+	{
+		if (vDebugLevel > 1)
+		{
+			gettime(&clk, ctime_buf);
+			fprintf(tunLogPtr,"%s %s: ***Average RTT using ping is %.3fms\n", ctime_buf, phase2str(current_phase), avg_rtt_ping);
+		}
+	}
+		
+	fflush(tunLogPtr);
+return;
+}
+
 void * fDoRunFindHighestRtt(void * vargp)
 {
 	time_t clk;
@@ -2378,11 +2466,13 @@ finish_up:
 	if (vDebugLevel > 5 && previous_average_tx_Gbits_per_sec)
 	{
 		gettime(&clk, ctime_buf);
-		fprintf(tunLogPtr, "%s %s: ***Sleeping for %d microseconds before resuming RTT checking...\n", ctime_buf, phase2str(current_phase), gInterval);
+		fprintf(tunLogPtr, "%s %s: ***Sleeping for 500000 microseconds before resuming RTT checking...\n", ctime_buf, phase2str(current_phase)); //2 x 250000
 	}
 
 	fflush(tunLogPtr);
-	my_usleep(gInterval); //sleeps in microseconds	
+	my_usleep(250000); //sleeps in microseconds	
+	fDoCheckSoftirqd(); //Just added
+	my_usleep(250000); 
 	goto rttstart;
 
 return ((char *) 0);
