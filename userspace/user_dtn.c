@@ -2277,21 +2277,18 @@ void fDoCheckSoftirqd(void)
 	char buffer[128];
 	FILE *pipe;
 	char try[1024];
-	double vCpuAmountUsed = 0.0;
+	//double vCpuAmountUsed = 0.0;
         char * foundstr = 0;
-	int found = 0;
 
-	sprintf(try,"top -n 1 | grep softirqd | awk \'{ printf(\"%s   %s\\n\", $10, $13); }\' grep -v 0.0 | grep -v [0-5][[:digit:]].", "%-8s", "%-8s");
+	sprintf(try,"top -b -n 1 | grep softirqd | awk \'{ printf(\"%s   %s\\n\", $9, $12); }\' | grep -E \'100|[6-9][0-9].\'", "%-8s", "%-8s");
 	//sprintf(try,"top -n 1 | grep softirqd | awk \'{ printf(\"%s   %s\\n\", $10, $13); }\'", "%-8s", "%-8s");
-	//top -n 1 | grep ksoftirqd | awk '{ printf("%-8s   %-8s\n", $10, $13); } ' | grep -v 0.0 | grep -v [0-5][[:digit:]].
 	
-	avg_rtt_ping = 0;
 	pipe = popen(try,"r");
 	if (!pipe)
 	{
 		printf("popen failed!\n");
 		printf("here2***\n");
-		return 0;
+		return;
 	}
 
 	while (!feof(pipe))
@@ -2299,14 +2296,13 @@ void fDoCheckSoftirqd(void)
 		// use buffer to read and add to result
 		if (fgets(buffer, 128, pipe) != NULL)
 		{
-			sscanf(buffer,"%d %c %u %d %u", kernel_parameter, &equal_sign, &kminimum, &kdefault, &kmaximum);
+			foundstr = strstr(buffer,"ksoftirqd");
 		}
 		else
 			{
 				goto finish_up;
 			}
 
-		foundstr = strstr(buffer,"ksoftirqd");
 		//should look like example: "25.0        ksoftirqd/0"
 		//should look like example: "53.0        ksoftirqd/1"
                 if (foundstr)
@@ -2314,29 +2310,8 @@ void fDoCheckSoftirqd(void)
 			if (vDebugLevel > 1)
 			{
 				gettime(&clk, ctime_buf);
-				fprintf(tunLogPtr,"%s %s: ***using \"%s\" returns *%s", ctime_buf, phase2str(current_phase),try, buffer);
+				fprintf(tunLogPtr,"%s %s: ***WARNING ksoftirqd is using >= 60%c of CPU resources::: %s", ctime_buf, phase2str(current_phase), '%', buffer);
 			}
-			foundstr = strchr(foundstr,'=');
-			if (foundstr)
-			{
-				foundstr = strchr(foundstr,'/');
-				if (foundstr)
-				{
-					char * q = 0;
-					char value[32];
-					memset(value,0,32);
-					foundstr++;
-					q = strchr(foundstr,'/');
-					if (q)
-					{
-						char * strpart;
-						strncpy(value,foundstr,q-foundstr);
-						avg_rtt_ping = strtod(value, &strpart);
-						found = 1;
-						break;	
-					}
-				}
-                	}
 		}
 		else
 			continue;
@@ -2344,15 +2319,6 @@ void fDoCheckSoftirqd(void)
 
 finish_up:
 	pclose(pipe);
-	if (found)
-	{
-		if (vDebugLevel > 1)
-		{
-			gettime(&clk, ctime_buf);
-			fprintf(tunLogPtr,"%s %s: ***Average RTT using ping is %.3fms\n", ctime_buf, phase2str(current_phase), avg_rtt_ping);
-		}
-	}
-		
 	fflush(tunLogPtr);
 return;
 }
