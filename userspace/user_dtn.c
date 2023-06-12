@@ -2307,11 +2307,8 @@ void fDoCheckSoftirqd(void)
 		//should look like example: "53.0        ksoftirqd/1"
                 if (foundstr)
                 {
-			if (vDebugLevel > 1)
-			{
-				gettime(&clk, ctime_buf);
-				fprintf(tunLogPtr,"%s %s: ***WARNING ksoftirqd is using >= 60%c of CPU resources::: %s", ctime_buf, phase2str(current_phase), '%', buffer);
-			}
+			gettime(&clk, ctime_buf);
+			fprintf(tunLogPtr,"%s %s: ***WARNING ksoftirqd is using >= 60%c of CPU resources::: %s", ctime_buf, phase2str(current_phase), '%', buffer);
 		}
 		else
 			continue;
@@ -2432,12 +2429,13 @@ finish_up:
 	if (vDebugLevel > 5 && previous_average_tx_Gbits_per_sec)
 	{
 		gettime(&clk, ctime_buf);
-		fprintf(tunLogPtr, "%s %s: ***Sleeping for 500000 microseconds before resuming RTT checking...\n", ctime_buf, phase2str(current_phase)); //2 x 250000
+		fprintf(tunLogPtr, "%s %s: ***Sleeping for 250000 microseconds before resuming RTT checking...\n", ctime_buf, phase2str(current_phase)); //2 x 250000
 	}
 
 	fflush(tunLogPtr);
 	my_usleep(250000); //sleeps in microseconds	
-	fDoCheckSoftirqd(); //Just added
+	if (vDebugLevel > 0)
+		fDoCheckSoftirqd(); //Just added
 	my_usleep(250000); 
 	goto rttstart;
 
