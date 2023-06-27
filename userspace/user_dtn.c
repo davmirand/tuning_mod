@@ -2405,8 +2405,9 @@ finish_up:
 			fprintf(tunLogPtr,"\n%s %s: ***Highest RTT using bpftrace is %.3fms\n", ctime_buf, phase2str(current_phase), highest_rtt_from_bpftrace);
 		}
 
-		if (((highest_rtt_from_ping > rtt_threshold) || (highest_rtt_from_bpftrace > rtt_threshold)) &&
-		    (((rtt_factor * highest_rtt_from_ping) <= highest_rtt_from_bpftrace) || ((rtt_factor * highest_rtt_from_bpftrace) <= highest_rtt_from_ping))
+		if (	highest_rtt_from_ping &&  //sometimes highest_rtt_from_ping is zero if not pinging anyone
+			((highest_rtt_from_ping > rtt_threshold) || (highest_rtt_from_bpftrace > rtt_threshold)) &&
+		    	(((rtt_factor * highest_rtt_from_ping) <= highest_rtt_from_bpftrace) || ((rtt_factor * highest_rtt_from_bpftrace) <= highest_rtt_from_ping))
 		   )
 		{
 			if (vDebugLevel > 0)
