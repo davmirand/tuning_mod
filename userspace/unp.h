@@ -57,12 +57,13 @@
 #define	SA	struct sockaddr
 
 //Added for Q-Factor
-struct args {
+#define QINFO_MSG	1
+struct PeerMsg {
 	unsigned int len;
 	char msg[80];
 };
 /*****************/
-void str_cli(int sockfd, struct args *this_test);
+void str_cli(int sockfd, struct PeerMsg *sThisMsg);
 void     process_request(int);
 void     read_sock(int);
 //void     str_cli(FILE *, int);

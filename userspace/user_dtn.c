@@ -89,7 +89,7 @@ static int cdone = 0;
 static unsigned int sleep_count = 1;
 static double vGoodBitrateValue = 0.0;
 static double vGoodBitrateValueThatDoesntNeedMessage = 0.0;
-struct args test;
+struct PeerMsg sMsg;
 char aSrc_Ip[32];
 char aDest_Ip2[32];
 char aLocal_Ip[32];
@@ -638,12 +638,14 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 				gettime(&clk, ctime_buf);
 				fprintf(tunLogPtr, "%s %s: ***new traffic???***\n", ctime_buf, phase2str(current_phase));
 			}
+#if 1
                         Pthread_mutex_lock(&dtn_mutex);
-                        strcpy(test.msg, "Hello there!!!\n");
-                        test.len = htonl(1);
+                        strcpy(sMsg.msg, "Hello there!!!\n");
+                        sMsg.len = htonl(1);
                         cdone = 1;
                         Pthread_cond_signal(&dtn_cond);
                         Pthread_mutex_unlock(&dtn_mutex);
+#endif
 		}
 #endif
 #ifdef INCLUDE_SRC_PORT
@@ -2601,8 +2603,8 @@ Readn(int fd, void *ptr, size_t nbytes)
 void
 process_request(int sockfd)
 {
-	ssize_t                 n;
-	struct args             from_cli;
+	ssize_t	n;
+	struct PeerMsg	from_cli;
 	time_t clk;
 	char ctime_buf[27];
 
@@ -2728,7 +2730,7 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 void read_sock(int sockfd)
 {
 	ssize_t                 n;
-	struct args             from_cli;
+	struct PeerMsg             from_cli;
 
 	for ( ; ; ) 
 	{
@@ -2739,9 +2741,9 @@ void read_sock(int sockfd)
 	}
 }
 
-void str_cli(int sockfd, struct args *this_test) //str_cli09
+void str_cli(int sockfd, struct PeerMsg *sThisMsg) //str_cli09
 {
-	Writen(sockfd, this_test, sizeof(struct args));
+	Writen(sockfd, sThisMsg, sizeof(struct PeerMsg));
 	return;
 }
 
@@ -2751,7 +2753,7 @@ void * fDoRunSendMessageToPeer(void * vargp)
 	char ctime_buf[27];
 	int sockfd;
 	struct sockaddr_in servaddr;
-	struct args test2;
+	struct PeerMsg sMsg2;
 	int check = 0;
 
 	gettime(&clk, ctime_buf);
@@ -2763,7 +2765,7 @@ cli_again:
 	
 	while(cdone == 0)
 		Pthread_cond_wait(&dtn_cond, &dtn_mutex);
-	memcpy(&test2,&test,sizeof(test2));
+	memcpy(&sMsg2,&sMsg,sizeof(sMsg2));
 	cdone = 0;
 	Pthread_mutex_unlock(&dtn_mutex);
 
@@ -2794,7 +2796,7 @@ cli_again:
 	{
 		goto cli_again;
 	}
-	str_cli(sockfd, &test2);         /* do it all */
+	str_cli(sockfd, &sMsg2);         /* do it all */
 	check = shutdown(sockfd, SHUT_WR);
 //	close(sockfd); - use shutdown instead of close
 	if (!check)
