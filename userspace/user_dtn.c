@@ -90,6 +90,7 @@ static unsigned int sleep_count = 1;
 static double vGoodBitrateValue = 0.0;
 static double vGoodBitrateValueThatDoesntNeedMessage = 0.0;
 struct PeerMsg sMsg;
+unsigned int sMsgSeqNo = 0;
 char aSrc_Ip[32];
 char aDest_Ip2[32];
 char aLocal_Ip[32];
@@ -102,9 +103,11 @@ union uIP {
 static union uIP src_ip_addr;
 
 void qOCC_Hop_TimerID_Handler(int signum, siginfo_t *info, void *ptr);
+void qOCC_TimerID_Handler(int signum, siginfo_t *info, void *ptr);
 static void timerHandler( int sig, siginfo_t *si, void *uc );
 
-timer_t qOCC_Hop_TimerID;
+timer_t qOCC_Hop_TimerID; //when both Qinfo and Hop latency over threshhold
+timer_t qOCC_TimerID; // when Qinfo over some user defined value that will cause us to send message to peer to start TCP Pacing if appropiate
 timer_t rTT_TimerID;
 
 struct itimerspec sStartTimer;
@@ -118,7 +121,11 @@ static void timerHandler( int sig, siginfo_t *si, void *uc )
 	if ( *tidp == qOCC_Hop_TimerID )
 		qOCC_Hop_TimerID_Handler(sig, si, uc);
 	else
-		fprintf(stdout, "Timer handler incorrect***\n");
+		if ( *tidp == qOCC_TimerID )
+			qOCC_TimerID_Handler(sig, si, uc);
+	
+		else
+			fprintf(stdout, "Timer handler incorrect***\n");
 
 	return;
 }
@@ -325,7 +332,8 @@ void print_hop_key(struct hop_key *key);
 void record_activity(char * pActivity); 
 
 #define SIGALRM_MSG "SIGALRM received.\n"
-int vTimerIsSet = 0;
+int vq_h_TimerIsSet = 0;
+int vq_TimerIsSet = 0;
 
 void qOCC_Hop_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 {
@@ -335,7 +343,23 @@ void qOCC_Hop_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 	gettime(&clk, ctime_buf);
 	fprintf(tunLogPtr, "%s %s: ***Timer Alarm went off*** still having problems with Queue Occupancy and HopDelays. Time to do something***\n",ctime_buf, phase2str(current_phase)); 
 	//***Do something here ***//
-	vTimerIsSet = 0;
+	vq_h_TimerIsSet = 0;
+	sprintf(activity,"%s %s: ***hop_key.hop_index %X, Doing Something",ctime_buf, phase2str(current_phase), curr_hop_key_hop_index);
+	record_activity(activity); //make sure activity big enough to concatenate additional data -- see record_activity()
+	fflush(tunLogPtr);
+	
+	return;
+}
+
+void qOCC_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
+{
+	time_t clk;
+	char ctime_buf[27];
+	char activity[MAX_SIZE_TUNING_STRING];
+	gettime(&clk, ctime_buf);
+	fprintf(tunLogPtr, "%s %s: ***Timer Alarm went off*** still having problems with Queue Occupancy and HopDelays. Time to do something***\n",ctime_buf, phase2str(current_phase)); 
+	//***Do something here ***//
+	vq_TimerIsSet = 0;
 	sprintf(activity,"%s %s: ***hop_key.hop_index %X, Doing Something",ctime_buf, phase2str(current_phase), curr_hop_key_hop_index);
 	record_activity(activity); //make sure activity big enough to concatenate additional data -- see record_activity()
 	fflush(tunLogPtr);
@@ -366,6 +390,15 @@ void * fDoRunBpfCollectionPerfEventArray2(void * vargp)
 	}
 	else
 		fprintf(tunLogPtr, "%s %s: *qOCC_Hop_TimerID* timer created.\n", ctime_buf, phase2str(current_phase));
+
+	timerRc = makeTimer("qOCC_TimerID", &qOCC_TimerID, gInterval);
+	if (timerRc)
+	{
+		fprintf(tunLogPtr, "%s %s: Problem creating timer *qOCC_TimerID*.\n", ctime_buf, phase2str(current_phase));
+		return ((char *)1);
+	}
+	else
+		fprintf(tunLogPtr, "%s %s: *qOCC_TimerID* timer created.\n", ctime_buf, phase2str(current_phase));
 
 open_maps: {
 	gettime(&clk, ctime_buf);
@@ -447,12 +480,12 @@ void EvaluateQOcc_and_HopDelay(__u32 hop_key_hop_index)
 	char ctime_buf[27];
 	int vRetTimer;
 
-	if (!vTimerIsSet)
+	if (!vq_h_TimerIsSet)
 	{
 		vRetTimer = timer_settime(qOCC_Hop_TimerID, 0, &sStartTimer, (struct itimerspec *)NULL);
 		if (!vRetTimer)
 		{
-			vTimerIsSet = 1;
+			vq_h_TimerIsSet = 1;
 			curr_hop_key_hop_index = hop_key_hop_index;
 			if (vDebugLevel > 2)
 			{
@@ -578,10 +611,10 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		}
 		else
 			{
-				if (vTimerIsSet)
+				if (vq_h_TimerIsSet)
 				{
 					timer_settime(qOCC_Hop_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
-					vTimerIsSet = 0;
+					vq_h_TimerIsSet = 0;
 				}
 
 				if ((hop_hop_latency_threshold > vHOP_LATENCY_DELTA) || (Qinfo > vQUEUE_OCCUPANCY_DELTA))
@@ -640,8 +673,11 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 			}
 #if 1
                         Pthread_mutex_lock(&dtn_mutex);
-                        strcpy(sMsg.msg, "Hello there!!!\n");
-                        sMsg.len = htonl(1);
+                        strcpy(sMsg.msg, "Hello there!!! This is a test...\n");
+                        sMsg.msg_no = htonl(TEST_MSG);
+			sMsg.value = htonl(0);
+			sMsgSeqNo++;
+			sMsg.seq_no = htonl(sMsgSeqNo);
                         cdone = 1;
                         Pthread_cond_signal(&dtn_cond);
                         Pthread_mutex_unlock(&dtn_mutex);
@@ -2613,13 +2649,23 @@ process_request(int sockfd)
 		if ( (n = Readn(sockfd, &from_cli, sizeof(from_cli))) == 0)
 			return;         /* connection closed by other end */
 
-		if (vDebugLevel > 1)
+		gettime(&clk, ctime_buf);
+		if (ntohl(from_cli.msg_no) == QINFO_MSG)
 		{
-			gettime(&clk, ctime_buf);
-			fprintf(tunLogPtr,"%s %s: ***Received message %d from destination DTN...***\n", ctime_buf, phase2str(current_phase), ntohl(from_cli.len));
-			fprintf(tunLogPtr,"%s %s: ***arg len = %d, arg buf = %s", ctime_buf, phase2str(current_phase), ntohl(from_cli.len), from_cli.msg);
-			fflush(tunLogPtr);
+			if (vDebugLevel > 1)
+			{
+				fprintf(tunLogPtr,"%s %s: ***Received message %u from destination DTN...***\n", ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
+				fprintf(tunLogPtr,"%s %s: ***msg_no = %d, msg buf = %s", ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), from_cli.msg);
+				fflush(tunLogPtr);
+			}
 		}
+		else
+			if (vDebugLevel > 1)
+			{
+				fprintf(tunLogPtr,"%s %s: ***Received message %u from destination DTN...***\n", ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
+				fprintf(tunLogPtr,"%s %s: ***msg_no = %d, msg buf = %s", ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), from_cli.msg);
+				fflush(tunLogPtr);
+			}
 	}
 }
 
@@ -2737,7 +2783,7 @@ void read_sock(int sockfd)
 		if ( (n = Readn(sockfd, &from_cli, sizeof(from_cli))) == 0)
 			return;         /* connection closed by other end */
 
-		printf("arg len = %d, arg buf = %s", from_cli.len, from_cli.msg);
+		printf("msg seq_no = %d, msg buf = %s", from_cli.seq_no, from_cli.msg);
 	}
 }
 
@@ -2935,6 +2981,7 @@ int main(int argc, char **argv)
 	gettime(&clk, ctime_buf);
 	current_phase = LEARNING;
 
+	memset(&sMsg,0,sizeof(sMsg));
 	memset(sFlowCounters,0,sizeof(sFlowCounters));
 	memset(aSrc_Ip,0,sizeof(aSrc_Ip));
 	memset(aDest_Ip2,0,sizeof(aDest_Ip2));

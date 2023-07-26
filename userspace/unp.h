@@ -57,9 +57,12 @@
 #define	SA	struct sockaddr
 
 //Added for Q-Factor
+#define TEST_MSG	0
 #define QINFO_MSG	1
 struct PeerMsg {
-	unsigned int len;
+	unsigned int msg_no;
+	unsigned int seq_no;
+	unsigned int value;
 	char msg[80];
 };
 /*****************/
