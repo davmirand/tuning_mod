@@ -93,6 +93,7 @@ struct PeerMsg sMsg;
 unsigned int sMsgSeqNo = 0;
 char aSrc_Ip[32];
 char aDest_Ip2[32];
+char aDest_Ip2_Binary[32];
 char aLocal_Ip[32];
 
 union uIP {
@@ -301,6 +302,7 @@ typedef struct {
 
 static __u32 flow_sink_time_threshold = 0;
 static __u32 Qinfo = 0;
+static __u32 vQinfoUserValue = 0; //Eventually Initialize this value with vQUEUE_OCCUPANCY_DELTA
 static __u32 ingress_time = 0;
 static __u32 egress_time = 0;
 static __u32 hop_hop_latency_threshold = 0;
@@ -357,13 +359,24 @@ void qOCC_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 	char ctime_buf[27];
 	char activity[MAX_SIZE_TUNING_STRING];
 	gettime(&clk, ctime_buf);
-	fprintf(tunLogPtr, "%s %s: ***Timer Alarm went off*** still having problems with Queue Occupancy and HopDelays. Time to do something***\n",ctime_buf, phase2str(current_phase)); 
+	fprintf(tunLogPtr, "%s %s: ***Timer Alarm went off*** still having problems with Queue Occupancy User Info. Time to do something***\n",ctime_buf, phase2str(current_phase)); 
 	//***Do something here ***//
 	vq_TimerIsSet = 0;
 	sprintf(activity,"%s %s: ***hop_key.hop_index %X, Doing Something",ctime_buf, phase2str(current_phase), curr_hop_key_hop_index);
 	record_activity(activity); //make sure activity big enough to concatenate additional data -- see record_activity()
 	fflush(tunLogPtr);
-	
+
+#if 1
+			Pthread_mutex_lock(&dtn_mutex);
+			strcpy(sMsg.msg, "Hello there!!! This is a Qinfo msg...\n");
+			sMsg.msg_no = htonl(QINFO_MSG);
+			sMsg.value = htonl(vQinfoUserValue);
+			sMsgSeqNo++;
+			sMsg.seq_no = htonl(sMsgSeqNo);
+			cdone = 1;
+			Pthread_cond_signal(&dtn_cond);
+			Pthread_mutex_unlock(&dtn_mutex);
+#endif	
 	return;
 }
 
@@ -501,6 +514,33 @@ void EvaluateQOcc_and_HopDelay(__u32 hop_key_hop_index)
 	return;
 }
 
+void EvaluateQOccUserInfo(__u32 hop_key_hop_index)
+{
+	time_t clk;
+	char ctime_buf[27];
+	int vRetTimer;
+
+	if (!vq_TimerIsSet)
+	{
+		vRetTimer = timer_settime(qOCC_TimerID, 0, &sStartTimer, (struct itimerspec *)NULL);
+		if (!vRetTimer)
+		{
+			vq_TimerIsSet = 1;
+			curr_hop_key_hop_index = hop_key_hop_index;
+			if (vDebugLevel > 2)
+			{
+				gettime(&clk, ctime_buf);
+				printf("%s %s: ***Timer set to %d microseconds for Queue Occupancy User Info***\n",ctime_buf, phase2str(current_phase), gInterval); 
+			}
+		}
+		else
+			printf("%s %s: ***could not set Qinfo User InfoTimer, vRetTimer = %d,  errno = to %d***\n",ctime_buf, phase2str(current_phase), vRetTimer, errno); 
+
+	}
+
+	return;
+}
+
 void record_activity(char *pActivity)
 {
 	char add_to_activity[512];
@@ -629,6 +669,26 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 					}
 				}
 			}
+
+#if 1
+		if (Qinfo > vQinfoUserValue)  
+		{
+			EvaluateQOccUserInfo(hop_key.hop_index);
+			if (vDebugLevel > 2)
+			{
+				gettime(&clk, ctime_buf);
+				fprintf(tunLogPtr, "%s %s: ***queue_occupancy = %u ***queue_user_info = %u\n", ctime_buf, phase2str(current_phase), Qinfo, vQinfoUserValue);
+			}
+		}
+		else
+			{
+				if (vq_TimerIsSet)
+				{
+					timer_settime(qOCC_Hop_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
+					vq_TimerIsSet = 0;
+				}
+			}
+#endif
 #endif
 		struct hop_thresholds hop_threshold_update = {
 			ntohl(hop_metadata_ptr->egress_time) - ntohl(hop_metadata_ptr->ingress_time),
@@ -673,7 +733,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 			}
 #if 1
                         Pthread_mutex_lock(&dtn_mutex);
-                        strcpy(sMsg.msg, "Hello there!!! This is a test...\n");
+                        strcpy(sMsg.msg, "Hello there!!! This is a Start of Traffic  msg...\n");
                         sMsg.msg_no = htonl(TEST_MSG);
 			sMsg.value = htonl(0);
 			sMsgSeqNo++;
@@ -929,6 +989,26 @@ void check_req(http_s *h, char aResp[])
 		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change queue occupancy delta from %u to %u***\n", ctime_buf, phase2str(current_phase), vQUEUE_OCCUPANCY_DELTA, vNewQueueOccupancyDelta);
 		vQUEUE_OCCUPANCY_DELTA = vNewQueueOccupancyDelta;
 		fprintf(tunLogPtr,"%s %s: ***New queue occupancy delta value is *%u***\n", ctime_buf, phase2str(current_phase), vQUEUE_OCCUPANCY_DELTA);
+		goto after_check;
+	}
+			
+	if (strstr(pReqData,"GET /-ct#q_user_occ#"))
+	{
+		/* Change the value of the queue occupancy user info */
+		__u32 vNewQueueOccupancyUserInfo = 0;
+		char *p = (pReqData + sizeof("GET /-ct#q_user_occ#")) - 1;
+		while (isdigit(*p))
+		{
+			aNumber[count++] = *p;
+			p++;
+		}
+
+		vNewQueueOccupancyUserInfo = strtoul(aNumber, (char **)0, 10);
+		sprintf(aResp,"Changed queue occupancy user info from %u to %u!\n", vQinfoUserValue, vNewQueueOccupancyUserInfo);
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change queue user info from %u to %u***\n", ctime_buf, phase2str(current_phase), vQinfoUserValue, vNewQueueOccupancyUserInfo);
+		vQinfoUserValue = vNewQueueOccupancyUserInfo;
+		fprintf(tunLogPtr,"%s %s: ***New queue occupancy user info value is *%u***\n", ctime_buf, phase2str(current_phase), vQinfoUserValue);
 		goto after_check;
 	}
 			
@@ -2214,6 +2294,138 @@ double fDoCpuMonitoring()
 return found;
 }
 
+static unsigned long prev_total_retrans = 0;
+double fFindNumRetranmissionPerSec(void);
+double fFindNumRetranmissionPerSec(void)
+{
+	time_t clk;
+	time_t vTime;
+	static time_t nnow_time = 0;
+	static time_t nlast_time = 0;
+	time_t time_passed = 0;
+	char ctime_buf[27];
+	char buffer[256];
+	FILE *pipe;
+	char try[1024];
+	double avg_retrans_per_sec = 0.0;
+	static unsigned long total_retrans = 0;
+	unsigned long new_total_retrans = 0;
+        char * foundstr = 0;
+	int found = 0;
+
+	if (aDest_Ip2[0] == 0)
+	{
+		if (vDebugLevel > 1)
+		{
+			gettime(&clk, ctime_buf);
+			fprintf(tunLogPtr,"%s %s: ***Waiting on Peer (Dest) Ip addres***\n", ctime_buf, phase2str(current_phase));
+			fflush(tunLogPtr);
+		}
+		return 0; //didn't get  a message from the peer yet
+	}
+	
+	sprintf(try,"%s","cat /sys/fs/bpf/tcp4");
+
+        if (nnow_time == 0) //first time thru
+        {
+                nnow_time = time(&vTime);
+        }
+        else
+        {
+                nlast_time = nnow_time;
+                nnow_time = time(&vTime);
+                time_passed =  nnow_time - nlast_time;
+        }
+
+
+
+	pipe = popen(try,"r");
+	if (!pipe)
+	{
+		printf("popen failed!\n");
+		printf("here2222***\n");
+		return 0;
+	}
+
+	while (!feof(pipe))
+	{
+		// use buffer to read and add to result
+		if (fgets(buffer, 256, pipe) != NULL);
+		else
+			{
+				goto finish_up;
+			}
+
+		foundstr = strstr(buffer,aDest_Ip2_Binary);
+		//should look like example: "11: 012E030A:8B2E 022E030A:1451 01 04DC97C7:00000000 01:00000014 00000000     0        0 13297797 2 00000000367a51de 41 0 0 3722 500 totrt 79""
+                if (foundstr)
+                {
+			gettime(&clk, ctime_buf);
+			foundstr = strstr(foundstr,"totrt");
+			if (foundstr)
+			{
+				if (vDebugLevel > 1)
+				{
+					fprintf(tunLogPtr,"%s %s: ***time_passed = %lu, actual string is \"%s\" returns *%s", ctime_buf, phase2str(current_phase),time_passed, try, buffer);
+				}
+
+				char aValue[32];
+				int count = 0;
+				memset(aValue,0,32);
+				foundstr = foundstr + 6;
+				while (*foundstr  != '0' && isdigit(*foundstr))
+                		{
+                        		aValue[count++] = *foundstr;
+					foundstr++;
+				}
+
+				aValue[count] = 0;
+				if (count)
+				{
+					//prev_total_retrans = total_retrans;
+
+					total_retrans = strtoul(aValue, (char **)0, 10);
+					if (vDebugLevel > 1)
+					{
+						fprintf(tunLogPtr,"%s %s: ***Value is *%s, count is %d, retrans is %lu\n", ctime_buf, phase2str(current_phase),aValue, count, total_retrans);
+					}
+
+
+
+					found = 1;
+					new_total_retrans = total_retrans - prev_total_retrans;
+					prev_total_retrans = total_retrans;
+					
+					if (vDebugLevel > 1)
+					{
+						fprintf(tunLogPtr,"%s %s: *** prev_total_retrans =  %lu, ***new retrans is %lu\n", ctime_buf, phase2str(current_phase), prev_total_retrans, new_total_retrans);
+					}
+				}
+                	}
+		}
+		else
+			continue;
+	}
+
+finish_up:
+	pclose(pipe);
+	if (found)
+	{
+		if (time_passed)
+			avg_retrans_per_sec = new_total_retrans / (double)time_passed;
+
+		if (vDebugLevel > 1)
+		{
+			gettime(&clk, ctime_buf);
+			fprintf(tunLogPtr,"%s %s: ***Average retransmissions using is %.2f per sec\n", ctime_buf, phase2str(current_phase), avg_retrans_per_sec);
+		}
+	}
+		
+	fflush(tunLogPtr);
+
+return avg_retrans_per_sec;
+}
+
 double fFindRttUsingPing()
 {
 	time_t clk;
@@ -2384,7 +2596,10 @@ rttstart:
 		sleep(1);
 
 		if (vIamASrcDtn)
+		{
 			highest_rtt_from_ping = fFindRttUsingPing();
+			fFindNumRetranmissionPerSec();
+		}
 
 		if (vDebugLevel > 2) 
 		{
@@ -2636,6 +2851,21 @@ Readn(int fd, void *ptr, size_t nbytes)
         return(n);
 }
 
+void fDoQinfoAssessment(unsigned int val);
+void fDoQinfoAssessment(unsigned int val)
+{
+
+	time_t clk;
+	char ctime_buf[27];
+
+	gettime(&clk, ctime_buf);
+	if (vDebugLevel > 1)
+	{
+		fprintf(tunLogPtr,"%s %s: ***Qinfo message value from destination DTN is %u***\n", ctime_buf, phase2str(current_phase), val);
+	}
+return;
+}
+
 void
 process_request(int sockfd)
 {
@@ -2654,18 +2884,20 @@ process_request(int sockfd)
 		{
 			if (vDebugLevel > 1)
 			{
-				fprintf(tunLogPtr,"%s %s: ***Received message %u from destination DTN...***\n", ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
-				fprintf(tunLogPtr,"%s %s: ***msg_no = %d, msg buf = %s", ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), from_cli.msg);
-				fflush(tunLogPtr);
+				fprintf(tunLogPtr,"%s %s: ***Received Qinfo message %u from destination DTN...***\n", ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
+				fprintf(tunLogPtr,"%s %s: ***msg_no = %d, msg value = %u, msg buf = %s", ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), ntohl(from_cli.value), from_cli.msg);
 			}
+
+			fDoQinfoAssessment(ntohl(from_cli.value));
 		}
 		else
 			if (vDebugLevel > 1)
 			{
 				fprintf(tunLogPtr,"%s %s: ***Received message %u from destination DTN...***\n", ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
 				fprintf(tunLogPtr,"%s %s: ***msg_no = %d, msg buf = %s", ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), from_cli.msg);
-				fflush(tunLogPtr);
 			}
+
+		fflush(tunLogPtr);
 	}
 }
 
@@ -2723,9 +2955,11 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 		else
 			{
 				char *peeraddrpresn = inet_ntoa(peeraddr.sin_addr);
-
+				sprintf(aDest_Ip2_Binary,"%02X",peeraddr.sin_addr.s_addr);
+				prev_total_retrans = 0;
 				if (vDebugLevel > 1)
 				{
+					fprintf(tunLogPtr,"%s %s: ***Peer information: ip long %s\n", ctime_buf, phase2str(current_phase), aDest_Ip2_Binary);
 					fprintf(tunLogPtr,"%s %s: ***Peer information:\n", ctime_buf, phase2str(current_phase));
 					fprintf(tunLogPtr,"%s %s: ***Peer Address Family: %d\n", ctime_buf, phase2str(current_phase), peeraddr.sin_family);
 					fprintf(tunLogPtr,"%s %s: ***Peer Port: %d\n", ctime_buf, phase2str(current_phase), peeraddr.sin_port);
@@ -2981,10 +3215,12 @@ int main(int argc, char **argv)
 	gettime(&clk, ctime_buf);
 	current_phase = LEARNING;
 
+	vQinfoUserValue = vQUEUE_OCCUPANCY_DELTA;
 	memset(&sMsg,0,sizeof(sMsg));
 	memset(sFlowCounters,0,sizeof(sFlowCounters));
 	memset(aSrc_Ip,0,sizeof(aSrc_Ip));
 	memset(aDest_Ip2,0,sizeof(aDest_Ip2));
+	memset(aDest_Ip2_Binary,0,sizeof(aDest_Ip2_Binary));
 	memset(aLocal_Ip,0,sizeof(aLocal_Ip));
 	src_ip_addr.y = 0;
 #ifdef INCLUDE_SRC_PORT
