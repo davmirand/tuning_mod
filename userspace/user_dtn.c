@@ -59,6 +59,7 @@ void open_csv_file(void)
 }
 
 static unsigned long prev_total_retrans = 0;
+static double vAvg_Num_Retransmissions_Per_Sec = 0;
 static int new_traffic = 0;
 static int rx_traffic = 0;
 static time_t now_time = 0;
@@ -2410,7 +2411,10 @@ double fFindNumRetranmissionPerSec(void)
 
 					total_retrans = strtoul(aValue, (char **)0, 10);
 					if (prev_total_retrans > total_retrans) //can't be ha ha - must have stopped in middle of file transfer and started over
+					{
 						prev_total_retrans = 0;
+						vAvg_Num_Retransmissions_Per_Sec = 0;
+					}
 
 					if (vDebugLevel > 2)
 					{
@@ -2626,7 +2630,7 @@ rttstart:
 		if (vIamASrcDtn)
 		{
 			highest_rtt_from_ping = fFindRttUsingPing();
-			fFindNumRetranmissionPerSec();
+			vAvg_Num_Retransmissions_Per_Sec = fFindNumRetranmissionPerSec();
 		}
 
 		if (vDebugLevel > 2) 
@@ -2885,12 +2889,35 @@ void fDoQinfoAssessment(unsigned int val)
 
 	time_t clk;
 	char ctime_buf[27];
+	char aQdiscVal[512];
+        char aNicSetting[1024];
+        FILE *nicCfgFPtr = 0;
+
+	//For now
+	memset(aQdiscVal,0,sizeof(aQdiscVal));
+	strcpy(aQdiscVal,"aTest");
+        sprintf(aNicSetting,"tc qdisc show dev %s root > /tmp/NIC.cfgfile 2>/dev/null",netDevice);
+        //system(aNicSetting);
+        //stat("/tmp/NIC.cfgfile", &sb);
+
 
 	gettime(&clk, ctime_buf);
-	if (vDebugLevel > 1)
+	fprintf(tunLogPtr,"%s %s: ***Qinfo message value from destination DTN is %u***\n", ctime_buf, phase2str(current_phase), val);
+
+	if (vAvg_Num_Retransmissions_Per_Sec > 1)
 	{
-		fprintf(tunLogPtr,"%s %s: ***Qinfo message value from destination DTN is %u***\n", ctime_buf, phase2str(current_phase), val);
-	}
+		fprintf(tunLogPtr,"%s %s: ***Appears that congestion is on the link. Please run the following:***\n", ctime_buf, phase2str(current_phase));
+		sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate 15.0gbit", netDevice, aQdiscVal, netDevice);
+		fprintf(tunLogPtr,"%s %s: *%s*\n", ctime_buf, phase2str(current_phase), aNicSetting);
+	} 
+	else //just a test
+		{
+			fprintf(tunLogPtr,"%s %s: ***Appears that congestion is on the link. Please run the following:***\n", ctime_buf, phase2str(current_phase));
+			sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate 15.0gbit", netDevice, aQdiscVal, netDevice);
+			fprintf(tunLogPtr,"%s %s: *%s*\n", ctime_buf, phase2str(current_phase), aNicSetting);
+		} 
+
+
 return;
 }
 
@@ -2985,6 +3012,7 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 				char *peeraddrpresn = inet_ntoa(peeraddr.sin_addr);
 				sprintf(aDest_Ip2_Binary,"%02X",peeraddr.sin_addr.s_addr);
 				prev_total_retrans = 0;
+				vAvg_Num_Retransmissions_Per_Sec = 0;
 				if (vDebugLevel > 1)
 				{
 					fprintf(tunLogPtr,"%s %s: ***Peer information: ip long %s\n", ctime_buf, phase2str(current_phase), aDest_Ip2_Binary);
