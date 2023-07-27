@@ -303,6 +303,7 @@ typedef struct {
 static __u32 flow_sink_time_threshold = 0;
 static __u32 Qinfo = 0;
 static __u32 vQinfoUserValue = 0; //Eventually Initialize this value with vQUEUE_OCCUPANCY_DELTA
+static __u32 vNumRetransmissionAllowedPerSec = 1000000; //For now just a big value
 static __u32 ingress_time = 0;
 static __u32 egress_time = 0;
 static __u32 hop_hop_latency_threshold = 0;
@@ -1009,6 +1010,26 @@ void check_req(http_s *h, char aResp[])
 		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change queue user info from %u to %u***\n", ctime_buf, phase2str(current_phase), vQinfoUserValue, vNewQueueOccupancyUserInfo);
 		vQinfoUserValue = vNewQueueOccupancyUserInfo;
 		fprintf(tunLogPtr,"%s %s: ***New queue occupancy user info value is *%u***\n", ctime_buf, phase2str(current_phase), vQinfoUserValue);
+		goto after_check;
+	}
+			
+	if (strstr(pReqData,"GET /-ct#retrans#"))
+	{
+		/* Change the value of the retransmits allwoed per sec */
+		__u32 vNewRetransPerSec = 0;
+		char *p = (pReqData + sizeof("GET /-ct#retrans#")) - 1;
+		while (isdigit(*p))
+		{
+			aNumber[count++] = *p;
+			p++;
+		}
+
+		vNewRetransPerSec = strtoul(aNumber, (char **)0, 10);
+		sprintf(aResp,"Changed queue occupancy user info from %u to %u!\n", vNumRetransmissionAllowedPerSec, vNewRetransPerSec);
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change number of retransmits allowed per second to %u to %u***\n", ctime_buf, phase2str(current_phase), vNumRetransmissionAllowedPerSec, vNewRetransPerSec);
+		vNumRetransmissionAllowedPerSec = vNewRetransPerSec;
+		fprintf(tunLogPtr,"%s %s: ***New retransmits allowed per second is *%u***\n", ctime_buf, phase2str(current_phase), vNumRetransmissionAllowedPerSec);
 		goto after_check;
 	}
 			
@@ -2308,7 +2329,7 @@ double fFindNumRetranmissionPerSec(void)
 	FILE *pipe;
 	char try[1024];
 	double avg_retrans_per_sec = 0.0;
-	static unsigned long total_retrans = 0;
+	unsigned long total_retrans = 0;
 	unsigned long new_total_retrans = 0;
         char * foundstr = 0;
 	int found = 0;
