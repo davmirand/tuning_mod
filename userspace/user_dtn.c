@@ -58,6 +58,7 @@ void open_csv_file(void)
 	return;
 }
 
+static unsigned long prev_total_retrans = 0;
 static int new_traffic = 0;
 static int rx_traffic = 0;
 static time_t now_time = 0;
@@ -625,15 +626,15 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 #endif
 #if 1
 //			fprintf(tunLogPtr,"%s %s: Hop Key:\n", ctime_buf, phase2str(current_phase));
-			//fprintf(tunLogPtr, "   %sFLOW    : %s", pLearningSpacesMinusLearning, er_buffer);
-			fprintf(tunLogPtr, "\n%sFLOW    : hop_switch_id = %u\n",pLearningSpacesMinusLearning, ntohl(hop_metadata_ptr->switch_id));
-			fprintf(tunLogPtr, "%sFLOW    : hop_ingress_port = %d\n",pLearningSpacesMinusLearning, ntohs(hop_metadata_ptr->ingress_port_id));
-			fprintf(tunLogPtr, "%sFLOW    : hop_egress_port = %d\n",pLearningSpacesMinusLearning, ntohs(hop_metadata_ptr->egress_port_id));
+//			fprintf(tunLogPtr, "   %sFLOW    : %s", pLearningSpacesMinusLearning, er_buffer);
+			fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",ctime_buf, phase2str(current_phase), ntohl(hop_metadata_ptr->switch_id));
+			fprintf(tunLogPtr, "%s %s: FLOW    : hop_ingress_port = %d\n",ctime_buf, phase2str(current_phase), ntohs(hop_metadata_ptr->ingress_port_id));
+			fprintf(tunLogPtr, "%s %s: FLOW    : hop_egress_port = %d\n",ctime_buf, phase2str(current_phase), ntohs(hop_metadata_ptr->egress_port_id));
 //			fprintf(stdout, "hop_latency = %u\n",ntohl(hop_metadata_ptr->hop_latency));
-			fprintf(tunLogPtr, "%sFLOW    : queue_occupancy = %u\n",pLearningSpacesMinusLearning, Qinfo);
-			fprintf(tunLogPtr, "%sFLOW    : ingress_time = %u\n",pLearningSpacesMinusLearning, ingress_time);
-			fprintf(tunLogPtr, "%sFLOW    : egress_time = %u\n",pLearningSpacesMinusLearning, egress_time);
-			fprintf(tunLogPtr, "%sFLOW    : time_in_hop = %u\n",pLearningSpacesMinusLearning, hop_hop_latency_threshold);
+			fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",ctime_buf, phase2str(current_phase), Qinfo);
+			fprintf(tunLogPtr, "%s %s: FLOW    : ingress_time = %u\n",ctime_buf, phase2str(current_phase), ingress_time);
+			fprintf(tunLogPtr, "%s %s: FLOW    : egress_time = %u\n",ctime_buf, phase2str(current_phase), egress_time);
+			fprintf(tunLogPtr, "%s %s: FLOW    : time_in_hop = %u\n",ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
 //			fprintf(tunLogPtr, "%s %s: hop_latency = %u\n",ctime_buf, phase2str(current_phase), ntohl(hop_metadata_ptr->hop_latency));
 //			fprintf(stdout, "sizeof struct int_hop-metadata = %lu\n",sizeof(struct int_hop_metadata));
 //			fprintf(stdout, "sizeof struct hop_key = %lu\n",sizeof(struct hop_key));
@@ -643,7 +644,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		if ((hop_hop_latency_threshold > vHOP_LATENCY_DELTA) && (Qinfo > vQUEUE_OCCUPANCY_DELTA))
 		{
 			EvaluateQOcc_and_HopDelay(hop_key.hop_index);
-			if (vDebugLevel > 2)
+			if (vDebugLevel > 0)
 			{
 				gettime(&clk, ctime_buf);
 				fprintf(tunLogPtr, "%s %s: ***time_in_hop = %u\n", ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
@@ -660,7 +661,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 
 				if ((hop_hop_latency_threshold > vHOP_LATENCY_DELTA) || (Qinfo > vQUEUE_OCCUPANCY_DELTA))
 				{
-					if (vDebugLevel > 3)
+					if (vDebugLevel > 0)
 					{
 						gettime(&clk, ctime_buf);
 						if (hop_hop_latency_threshold > vHOP_LATENCY_DELTA)
@@ -675,7 +676,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		if (Qinfo > vQinfoUserValue)  
 		{
 			EvaluateQOccUserInfo(hop_key.hop_index);
-			if (vDebugLevel > 2)
+			if (vDebugLevel > 0)
 			{
 				gettime(&clk, ctime_buf);
 				fprintf(tunLogPtr, "%s %s: ***queue_occupancy = %u ***queue_user_info = %u\n", ctime_buf, phase2str(current_phase), Qinfo, vQinfoUserValue);
@@ -2315,7 +2316,6 @@ double fDoCpuMonitoring()
 return found;
 }
 
-static unsigned long prev_total_retrans = 0;
 double fFindNumRetranmissionPerSec(void);
 double fFindNumRetranmissionPerSec(void)
 {
@@ -2385,7 +2385,7 @@ double fFindNumRetranmissionPerSec(void)
 			foundstr = strstr(foundstr,"totrt");
 			if (foundstr)
 			{
-				if (vDebugLevel > 1)
+				if (vDebugLevel > 5)
 				{
 					fprintf(tunLogPtr,"%s %s: ***time_passed = %lu, actual string is \"%s\" returns *%s", ctime_buf, phase2str(current_phase),time_passed, try, buffer);
 				}
@@ -2394,7 +2394,10 @@ double fFindNumRetranmissionPerSec(void)
 				int count = 0;
 				memset(aValue,0,32);
 				foundstr = foundstr + 6;
-				while (*foundstr  != '0' && isdigit(*foundstr))
+				if (*foundstr == '0')
+					continue; //no need to count zeros
+
+				while (isdigit(*foundstr))
                 		{
                         		aValue[count++] = *foundstr;
 					foundstr++;
@@ -2406,9 +2409,13 @@ double fFindNumRetranmissionPerSec(void)
 					//prev_total_retrans = total_retrans;
 
 					total_retrans = strtoul(aValue, (char **)0, 10);
-					if (vDebugLevel > 1)
+					if (prev_total_retrans > total_retrans) //can't be ha ha - must have stopped in middle of file transfer and started over
+						prev_total_retrans = 0;
+
+					if (vDebugLevel > 2)
 					{
-						fprintf(tunLogPtr,"%s %s: ***Value is *%s, count is %d, retrans is %lu\n", ctime_buf, phase2str(current_phase),aValue, count, total_retrans);
+						//fprintf(tunLogPtr,"%s %s: ***Value is *%s, count is %d, retrans is %lu\n", ctime_buf, phase2str(current_phase),aValue, count, total_retrans);
+						fprintf(tunLogPtr,"%s %s: ***total retransmissions so far  is %lu, previous retransmissions is %lu\n", ctime_buf, phase2str(current_phase), total_retrans, prev_total_retrans);
 					}
 
 
@@ -2417,9 +2424,9 @@ double fFindNumRetranmissionPerSec(void)
 					new_total_retrans = total_retrans - prev_total_retrans;
 					prev_total_retrans = total_retrans;
 					
-					if (vDebugLevel > 1)
+					if (vDebugLevel > 2)
 					{
-						fprintf(tunLogPtr,"%s %s: *** prev_total_retrans =  %lu, ***new retrans is %lu\n", ctime_buf, phase2str(current_phase), prev_total_retrans, new_total_retrans);
+						fprintf(tunLogPtr,"%s %s: ***new retransmissions is %lu\n", ctime_buf, phase2str(current_phase), new_total_retrans);
 					}
 				}
                 	}
@@ -2438,7 +2445,7 @@ finish_up:
 		if (vDebugLevel > 1)
 		{
 			gettime(&clk, ctime_buf);
-			fprintf(tunLogPtr,"%s %s: ***Average retransmissions using is %.2f per sec\n", ctime_buf, phase2str(current_phase), avg_retrans_per_sec);
+			fprintf(tunLogPtr,"%s %s: ***Average retransmissions currently is %.2f per sec\n", ctime_buf, phase2str(current_phase), avg_retrans_per_sec);
 		}
 	}
 		
