@@ -36,6 +36,19 @@ void gettime(time_t *clk, char *ctime_buf)
 	ctime_buf[24] = ':';
 }
 
+void gettimewithmilli(time_t *clk, char *ctime_buf, char *ms_ctime_buf)
+{
+	struct timespec ts;
+	timespec_get(&ts, TIME_UTC);
+	*clk = ts.tv_sec;
+	struct tm *t = localtime(clk);
+	ctime_r(clk,ctime_buf);
+	ctime_buf[19] = '.';
+	ctime_buf[20] = '\0';
+	sprintf(ms_ctime_buf,"%s%03ld %04d", ctime_buf, ts.tv_nsec/10000000, t->tm_year+1900);
+return;
+}
+
 void open_csv_file(void);
 void open_csv_file(void)
 {
@@ -218,7 +231,7 @@ int my_usleep(long usec)
 
 char netDevice[128];
 static unsigned long rx_kbits_per_sec = 0, tx_kbits_per_sec = 0;
-//vDebugLevel (Default = 0)
+//vDebugLevel (Default = 1)
 //= 0 - only applied tuning, error and important messages get written to log file unconditionally
 //= 1 - include suggested tuning
 //= 2 - include additional learning messages which provide window into decision making
@@ -227,7 +240,7 @@ static unsigned long rx_kbits_per_sec = 0, tx_kbits_per_sec = 0;
 //= 5 - include additional sink data logging
 //= 6 - include additional information about the link
 //= 7 - include everything else
-static int vDebugLevel = 0;
+static int vDebugLevel = 1;
 
 #define SIGINT_MSG "SIGINT received.\n"
 void sig_int_handler(int signum, siginfo_t *info, void *ptr)
@@ -466,6 +479,7 @@ perf_event_loop: {
 	do {
 	//err = perf_buffer__poll(pb, 500);
 	err = perf_buffer__poll(pb, 250);
+	//err = perf_buffer__poll(pb, 50);
 	}
 	while(err >= 0);
 	fprintf(tunLogPtr,"%s %s: Exited perf event loop with err %d..\n", ctime_buf, phase2str(current_phase), -err);
@@ -578,6 +592,9 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 	long long flow_hop_latency_threshold = 0;
 	time_t clk;
 	char ctime_buf[27];
+	char ms_ctime_buf[48];
+
+	static __u32 mycount = 0;
 
 	if(data + data_offset + sizeof(hop_key) > data_end) return;
 
@@ -604,7 +621,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 	{
 		struct int_hop_metadata *hop_metadata_ptr = data + data_offset;
 		data_offset += sizeof(struct int_hop_metadata);
-
+		mycount++;
 		Qinfo = ntohl(hop_metadata_ptr->queue_info) & 0xffffff;
 		ingress_time = ntohl(hop_metadata_ptr->ingress_time);
 		egress_time = ntohl(hop_metadata_ptr->egress_time);
@@ -754,6 +771,15 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		hop_key.hop_index++;
 
 	}
+
+	if (vDebugLevel > 0)
+	{
+		gettimewithmilli(&clk, ctime_buf, ms_ctime_buf);
+		//gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr, "%s %s: ***mycount = %u\n", ms_ctime_buf, phase2str(current_phase), mycount);
+	}
+
+	mycount = 0;
 
 	flow_threshold_update.total_hops = hop_key.hop_index;
 	bpf_map_update_elem(ctx->flow_thresholds, &hop_key.flow_key, &flow_threshold_update, BPF_ANY);
