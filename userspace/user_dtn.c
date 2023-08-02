@@ -45,7 +45,7 @@ void gettimewithmilli(time_t *clk, char *ctime_buf, char *ms_ctime_buf)
 	ctime_r(clk,ctime_buf);
 	ctime_buf[19] = '.';
 	ctime_buf[20] = '\0';
-	sprintf(ms_ctime_buf,"%s%03ld %04d", ctime_buf, ts.tv_nsec/10000000, t->tm_year+1900);
+	sprintf(ms_ctime_buf,"%s%03ld %04d:", ctime_buf, ts.tv_nsec/1000000, t->tm_year+1900);
 return;
 }
 
@@ -71,6 +71,7 @@ void open_csv_file(void)
 	return;
 }
 
+static int perf_buffer_poll_start = 0;
 static unsigned long prev_total_retrans = 0;
 static double vAvg_Num_Retransmissions_Per_Sec = 0;
 static int new_traffic = 0;
@@ -315,8 +316,19 @@ typedef struct {
 	char what_was_done[MAX_TUNING_ACTIVITIES_PER_FLOW][MAX_SIZE_TUNING_STRING];
 } sFlowCounters_t;
 
+#define QINFO_START_MIN_VALUE 0xFFFFFF //16777215
+#define CTIME_BUF_LEN	27
 static __u32 flow_sink_time_threshold = 0;
 static __u32 Qinfo = 0;
+static __u32 qinfo_min_value = QINFO_START_MIN_VALUE;
+static __u32 qinfo_hop_latency_min = 0;
+static __u32 qinfo_hop_switch_id_min = 0;
+static char qinfo_ctime_buf_min[CTIME_BUF_LEN];
+static __u32 qinfo_max_value = 0;
+static __u32 qinfo_hop_latency_max = 0;
+static __u32 qinfo_hop_switch_id_max = 0;
+static char qinfo_ctime_buf_max[CTIME_BUF_LEN];
+
 static __u32 vQinfoUserValue = 0; //Eventually Initialize this value with vQUEUE_OCCUPANCY_DELTA
 static __u32 vNumRetransmissionAllowedPerSec = 1000000; //For now just a big value
 static __u32 ingress_time = 0;
@@ -336,7 +348,7 @@ static sFlowCounters_t sFlowCounters[NUM_OF_FLOWS_TO_KEEP_TRACK_OF];
 #else
 static __u32 vHOP_LATENCY_DELTA = 500000; //was  120000
 static __u32 vFLOW_LATENCY_DELTA = 500000; //was 280000
-static __u32 vQUEUE_OCCUPANCY_DELTA = 30000; //was 6400
+static __u32 vQUEUE_OCCUPANCY_DELTA = 400; //was 6400 then 30000
 static __u32 vFLOW_SINK_TIME_DELTA = 4000000000;
 #endif
 #define INT_DSCP (0x17)
@@ -405,6 +417,8 @@ void * fDoRunBpfCollectionPerfEventArray2(void * vargp)
 	int int_dscp_map;
 	struct perf_buffer *pb;
 	struct threshold_maps maps = {};
+        
+	char ms_ctime_buf[48];
 
 	memset (&sStartTimer,0,sizeof(struct itimerspec));
 	memset (&sDisableTimer,0,sizeof(struct itimerspec));
@@ -477,9 +491,46 @@ perf_event_loop: {
 	fflush(tunLogPtr);
  	int err = 0;
 	do {
-	//err = perf_buffer__poll(pb, 500);
-	err = perf_buffer__poll(pb, 250);
-	//err = perf_buffer__poll(pb, 50);
+		//err = perf_buffer__poll(pb, 500);
+		if (vDebugLevel > 0)
+        	{
+               		gettimewithmilli(&clk, ctime_buf, ms_ctime_buf);
+                	//gettime(&clk, ctime_buf);
+                	fprintf(tunLogPtr, "%s %s: ***Came back from perf_buffer__poll\n", ms_ctime_buf, phase2str(current_phase));
+        	}
+
+		perf_buffer_poll_start = 1;
+		qinfo_min_value = QINFO_START_MIN_VALUE; 
+		qinfo_max_value = 0;
+
+		err = perf_buffer__poll(pb, 250);
+	
+		if (err >= 0)
+		{	
+			if (qinfo_min_value != QINFO_START_MIN_VALUE)
+			{
+				// got some info
+				if (vDebugLevel > 2)
+        			{
+					fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ctime_buf_min, phase2str(current_phase));
+					fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ctime_buf_min, phase2str(current_phase), qinfo_hop_switch_id_min);
+					fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ctime_buf_min, phase2str(current_phase), qinfo_min_value);
+					fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ctime_buf_min, phase2str(current_phase), qinfo_hop_latency_min);
+				}
+			}
+		
+			if (qinfo_max_value != 0)
+			{
+				// got some info
+				if (vDebugLevel > 2)
+        			{
+					fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ctime_buf_max, phase2str(current_phase));
+					fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ctime_buf_max, phase2str(current_phase), qinfo_hop_switch_id_max);
+					fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ctime_buf_max, phase2str(current_phase), qinfo_max_value);
+					fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ctime_buf_max, phase2str(current_phase), qinfo_hop_latency_max);
+				}
+			}
+		}
 	}
 	while(err >= 0);
 	fprintf(tunLogPtr,"%s %s: Exited perf event loop with err %d..\n", ctime_buf, phase2str(current_phase), -err);
@@ -626,6 +677,27 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		ingress_time = ntohl(hop_metadata_ptr->ingress_time);
 		egress_time = ntohl(hop_metadata_ptr->egress_time);
 		hop_hop_latency_threshold = egress_time - ingress_time;
+		
+		gettime(&clk, ctime_buf);
+
+		if (Qinfo < qinfo_min_value)
+		{
+			qinfo_min_value = Qinfo;
+			qinfo_hop_latency_min = hop_hop_latency_threshold;
+			qinfo_hop_switch_id_min = ntohl(hop_metadata_ptr->switch_id);
+			memcpy(qinfo_ctime_buf_min, ctime_buf, CTIME_BUF_LEN);
+		}
+		
+		if (Qinfo > qinfo_max_value && !perf_buffer_poll_start) //!perf_buffer_poll_start means there was at least 2 metadata info that we got at this point
+		{
+			qinfo_max_value = Qinfo;
+			qinfo_hop_latency_max = hop_hop_latency_threshold;
+			qinfo_hop_switch_id_max = ntohl(hop_metadata_ptr->switch_id);
+			memcpy(qinfo_ctime_buf_max, ctime_buf, CTIME_BUF_LEN);
+		}
+
+		perf_buffer_poll_start = 0;
+
 		if (vDebugLevel > 3)
 		{
 #if 0
@@ -652,7 +724,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 			fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",ctime_buf, phase2str(current_phase), Qinfo);
 			fprintf(tunLogPtr, "%s %s: FLOW    : ingress_time = %u\n",ctime_buf, phase2str(current_phase), ingress_time);
 			fprintf(tunLogPtr, "%s %s: FLOW    : egress_time = %u\n",ctime_buf, phase2str(current_phase), egress_time);
-			fprintf(tunLogPtr, "%s %s: FLOW    : time_in_hop = %u\n",ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
+			fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
 //			fprintf(tunLogPtr, "%s %s: hop_latency = %u\n",ctime_buf, phase2str(current_phase), ntohl(hop_metadata_ptr->hop_latency));
 //			fprintf(stdout, "sizeof struct int_hop-metadata = %lu\n",sizeof(struct int_hop_metadata));
 //			fprintf(stdout, "sizeof struct hop_key = %lu\n",sizeof(struct hop_key));
@@ -776,7 +848,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 	{
 		gettimewithmilli(&clk, ctime_buf, ms_ctime_buf);
 		//gettime(&clk, ctime_buf);
-		fprintf(tunLogPtr, "%s %s: ***mycount = %u\n", ms_ctime_buf, phase2str(current_phase), mycount);
+		fprintf(tunLogPtr, "%s %s: ***mycount = %u sz_longint = %lu sz_time_t %lu clk = %lu\n", ms_ctime_buf, phase2str(current_phase), mycount, sizeof(long int), sizeof(time_t), clk);
 	}
 
 	mycount = 0;
@@ -3298,6 +3370,8 @@ int main(int argc, char **argv)
 	current_phase = LEARNING;
 
 	vQinfoUserValue = vQUEUE_OCCUPANCY_DELTA;
+	memset(qinfo_ctime_buf_min,0,sizeof(qinfo_ctime_buf_min));
+	memset(qinfo_ctime_buf_max,0,sizeof(qinfo_ctime_buf_max));
 	memset(&sMsg,0,sizeof(sMsg));
 	memset(sFlowCounters,0,sizeof(sFlowCounters));
 	memset(aSrc_Ip,0,sizeof(aSrc_Ip));
