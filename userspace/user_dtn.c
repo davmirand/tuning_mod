@@ -26,8 +26,8 @@
 FILE * tunLogPtr = 0;
 FILE * csvLogPtr = 0;
 
-char *pLearningSpaces 			= "                                    ";
-char *pLearningSpacesMinusLearning 	= "                          ";
+char *pLearningSpaces 			= "                                        ";
+char *pLearningSpacesMinusLearning 	= "                              ";
 
 void gettime(time_t *clk, char *ctime_buf)
 {
@@ -54,6 +54,7 @@ void open_csv_file(void)
 {
 	time_t clk;
 	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 
 	csvLogPtr = fopen("/tmp/csvTuningLog","w");
 	if (!csvLogPtr)
@@ -317,18 +318,22 @@ typedef struct {
 } sFlowCounters_t;
 
 #define QINFO_START_MIN_VALUE 0xFFFFFF //16777215
-#define CTIME_BUF_LEN	27
-#define MS_CTIME_BUF_LEN	27
+//no need for a START_MAX since it will be zero
+
 static __u32 flow_sink_time_threshold = 0;
 static __u32 Qinfo = 0;
+
 static __u32 qinfo_min_value = QINFO_START_MIN_VALUE;
 static __u32 qinfo_hop_latency_min = 0;
 static __u32 qinfo_hop_switch_id_min = 0;
-static char qinfo_ctime_buf_min[CTIME_BUF_LEN];
+static time_t qinfo_clk_min = 0;
+static char qinfo_ms_ctime_buf_min[MS_CTIME_BUF_LEN];
+
 static __u32 qinfo_max_value = 0;
 static __u32 qinfo_hop_latency_max = 0;
 static __u32 qinfo_hop_switch_id_max = 0;
-static char qinfo_ctime_buf_max[CTIME_BUF_LEN];
+static time_t qinfo_clk_max = 0;
+static char qinfo_ms_ctime_buf_max[MS_CTIME_BUF_LEN];
 
 static __u32 vQinfoUserValue = 0; //Eventually Initialize this value with vQUEUE_OCCUPANCY_DELTA
 static __u32 vNumRetransmissionAllowedPerSec = 1000000; //For now just a big value
@@ -489,18 +494,19 @@ open_perf_event: {
 	if (pb == 0) { goto close_maps; }
 	}
 perf_event_loop: {
-	fprintf(tunLogPtr,"%s %s: Running perf event loop.\n", ctime_buf, phase2str(current_phase));
+	fprintf(tunLogPtr,"%s %s: Running perf event loop.\n", ms_ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
  	int err = 0;
 	do {
 		//err = perf_buffer__poll(pb, 500);
+#if 0
 		if (vDebugLevel > 0)
         	{
                		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
                 	//gettimeWithMilli(&clk, ctime_buf);
                 	fprintf(tunLogPtr, "%s %s: ***Came back from perf_buffer__poll\n", ms_ctime_buf, phase2str(current_phase));
         	}
-
+#endif
 		perf_buffer_poll_start = 1;
 		qinfo_min_value = QINFO_START_MIN_VALUE; 
 		qinfo_max_value = 0;
@@ -508,37 +514,62 @@ perf_event_loop: {
 		err = perf_buffer__poll(pb, 250);
 	
 		if (err >= 0)
-		{	
-			if (qinfo_min_value != QINFO_START_MIN_VALUE)
-			{
-				// got some info
-				if (vDebugLevel > 2)
-        			{
-					fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ctime_buf_min, phase2str(current_phase));
-					fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ctime_buf_min, phase2str(current_phase), qinfo_hop_switch_id_min);
-					fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ctime_buf_min, phase2str(current_phase), qinfo_min_value);
-					fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ctime_buf_min, phase2str(current_phase), qinfo_hop_latency_min);
-				}
-			}
+		{
+			
+			if (vDebugLevel == 4 && !perf_buffer_poll_start)
+        		{
+				if ((qinfo_min_value != QINFO_START_MIN_VALUE) && (qinfo_max_value != 0))
+				{
+					if (qinfo_clk_min <= qinfo_clk_max)
+					{ 	//print in this order
+						fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_min, phase2str(current_phase));
+						fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_switch_id_min);
+						fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_min_value);
+						fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_latency_min);
 		
-			if (qinfo_max_value != 0)
-			{
-				// got some info
-				if (vDebugLevel > 2)
-        			{
-					fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ctime_buf_max, phase2str(current_phase));
-					fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ctime_buf_max, phase2str(current_phase), qinfo_hop_switch_id_max);
-					fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ctime_buf_max, phase2str(current_phase), qinfo_max_value);
-					fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ctime_buf_max, phase2str(current_phase), qinfo_hop_latency_max);
+						fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_max, phase2str(current_phase));
+						fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_switch_id_max);
+						fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_max_value);
+						fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_latency_max);
+					}
+					else
+						{	//print in this order
+							fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_max, phase2str(current_phase));
+							fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_switch_id_max);
+							fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_max_value);
+							fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_latency_max);
+
+							fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_min, phase2str(current_phase));
+							fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_switch_id_min);
+							fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_min_value);
+							fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_latency_min);
+						}
 				}
+				else
+					{
+						if (qinfo_min_value != QINFO_START_MIN_VALUE)
+						{
+							fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_min, phase2str(current_phase));
+							fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_switch_id_min);
+							fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_min_value);
+							fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_latency_min);
+						}
+						else
+							{ //must be this
+								fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_max, phase2str(current_phase));
+								fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_switch_id_max);
+								fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_max_value);
+								fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_latency_max);
+							}
+					}
 			}
 		}
 	}
 	while(err >= 0);
-	fprintf(tunLogPtr,"%s %s: Exited perf event loop with err %d..\n", ctime_buf, phase2str(current_phase), -err);
+	fprintf(tunLogPtr,"%s %s: Exited perf event loop with err %d..\n", ms_ctime_buf, phase2str(current_phase), -err);
 	}
 close_maps: {
-	fprintf(tunLogPtr,"%s %s: Closing maps.\n", ctime_buf, phase2str(current_phase));
+	fprintf(tunLogPtr,"%s %s: Closing maps.\n", ms_ctime_buf, phase2str(current_phase));
 	if (maps.flow_counters <= 0) { goto exit_program; }
 	close(maps.flow_counters);
 	if (maps.flow_thresholds <= 0) { goto exit_program; }
@@ -625,7 +656,7 @@ void record_activity(char *pActivity)
 	sprintf(add_to_activity,":::***vFlowcount = %d, num_tuning_activty = %d, myCount = %u",vFlowCount, sFlowCounters[vFlowCount].num_tuning_activities + 1, myCount++);
 	strcat(pActivity,add_to_activity);
 
-	if (vDebugLevel > 4)
+	if (vDebugLevel > 6)
 		fprintf(tunLogPtr,"%s\n",pActivity); //special case for testing - making sure activity is recorded to use with tuncli
 
 	strcpy(sFlowCounters[vFlowCount].what_was_done[sFlowCounters[vFlowCount].num_tuning_activities], pActivity);
@@ -667,7 +698,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 
 	hop_key.hop_index = 0;
 
-	if (vDebugLevel > 3)
+	if (vDebugLevel > 4)
 	{
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", ms_ctime_buf, phase2str(current_phase));
@@ -687,52 +718,34 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 
 		if (Qinfo < qinfo_min_value)
 		{
+			qinfo_clk_min = clk;
 			qinfo_min_value = Qinfo;
 			qinfo_hop_latency_min = hop_hop_latency_threshold;
 			qinfo_hop_switch_id_min = ntohl(hop_metadata_ptr->switch_id);
-			memcpy(qinfo_ctime_buf_min, ctime_buf, CTIME_BUF_LEN);
+			memcpy(qinfo_ms_ctime_buf_min, ms_ctime_buf, MS_CTIME_BUF_LEN);
 		}
 		
 		if (Qinfo > qinfo_max_value && !perf_buffer_poll_start) //!perf_buffer_poll_start means there was at least 2 metadata info that we got at this point
 		{
+			qinfo_clk_max = clk;
 			qinfo_max_value = Qinfo;
 			qinfo_hop_latency_max = hop_hop_latency_threshold;
 			qinfo_hop_switch_id_max = ntohl(hop_metadata_ptr->switch_id);
-			memcpy(qinfo_ctime_buf_max, ctime_buf, CTIME_BUF_LEN);
+			memcpy(qinfo_ms_ctime_buf_max, ms_ctime_buf, MS_CTIME_BUF_LEN);
 		}
 
 		perf_buffer_poll_start = 0;
 
-		if (vDebugLevel > 3)
+		if (vDebugLevel > 4)
 		{
-#if 0
-//			fprintf(tunLogPtr,"%s %s: Hop Key:\n", ctime_buf, phase2str(current_phase));
-			fprintf(tunLogPtr, "\n%s %s: hop_switch_id = %u\n",ctime_buf, phase2str(current_phase), ntohl(hop_metadata_ptr->switch_id));
-			fprintf(tunLogPtr, "%s %s: hop_ingress_port = %d\n",ctime_buf, phase2str(current_phase), ntohs(hop_metadata_ptr->ingress_port_id));
-			fprintf(tunLogPtr, "%s %s: hop_egress_port = %d\n",ctime_buf, phase2str(current_phase), ntohs(hop_metadata_ptr->egress_port_id));
-//			fprintf(stdout, "hop_latency = %u\n",ntohl(hop_metadata_ptr->hop_latency));
-			fprintf(tunLogPtr, "%s %s: queue_occupancy = %u\n",ctime_buf, phase2str(current_phase), Qinfo);
-			fprintf(tunLogPtr, "%s %s: ingress_time = %u\n",ctime_buf, phase2str(current_phase), ingress_time);
-			fprintf(tunLogPtr, "%s %s: egress_time = %u\n",ctime_buf, phase2str(current_phase), egress_time);
-			fprintf(tunLogPtr, "%s %s: time_in_hop = %u\n",ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
-//			fprintf(tunLogPtr, "%s %s: hop_latency = %u\n",ctime_buf, phase2str(current_phase), ntohl(hop_metadata_ptr->hop_latency));
-//			fprintf(stdout, "sizeof struct int_hop-metadata = %lu\n",sizeof(struct int_hop_metadata));
-//			fprintf(stdout, "sizeof struct hop_key = %lu\n",sizeof(struct hop_key));
-#endif
 #if 1
-//			fprintf(tunLogPtr,"%s %s: Hop Key:\n", ctime_buf, phase2str(current_phase));
-//			fprintf(tunLogPtr, "   %sFLOW    : %s", pLearningSpacesMinusLearning, er_buffer);
 			fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",ms_ctime_buf, phase2str(current_phase), ntohl(hop_metadata_ptr->switch_id));
 			fprintf(tunLogPtr, "%s %s: FLOW    : hop_ingress_port = %d\n",ms_ctime_buf, phase2str(current_phase), ntohs(hop_metadata_ptr->ingress_port_id));
 			fprintf(tunLogPtr, "%s %s: FLOW    : hop_egress_port = %d\n",ms_ctime_buf, phase2str(current_phase), ntohs(hop_metadata_ptr->egress_port_id));
-//			fprintf(stdout, "hop_latency = %u\n",ntohl(hop_metadata_ptr->hop_latency));
 			fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",ms_ctime_buf, phase2str(current_phase), Qinfo);
 			fprintf(tunLogPtr, "%s %s: FLOW    : ingress_time = %u\n",ms_ctime_buf, phase2str(current_phase), ingress_time);
 			fprintf(tunLogPtr, "%s %s: FLOW    : egress_time = %u\n",ms_ctime_buf, phase2str(current_phase), egress_time);
 			fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",ms_ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
-//			fprintf(tunLogPtr, "%s %s: hop_latency = %u\n",ctime_buf, phase2str(current_phase), ntohl(hop_metadata_ptr->hop_latency));
-//			fprintf(stdout, "sizeof struct int_hop-metadata = %lu\n",sizeof(struct int_hop_metadata));
-//			fprintf(stdout, "sizeof struct hop_key = %lu\n",sizeof(struct hop_key));
 #endif
 		}
 #if 1
@@ -849,13 +862,6 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 
 	}
 
-	if (vDebugLevel > 0)
-	{
-		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-		//gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr, "%s %s: ***mycount = %u sz_longint = %lu sz_time_t %lu clk = %lu\n", ms_ctime_buf, phase2str(current_phase), mycount, sizeof(long int), sizeof(time_t), clk);
-	}
-
 	mycount = 0;
 
 	flow_threshold_update.total_hops = hop_key.hop_index;
@@ -863,7 +869,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 	struct counter_set empty_counter = {};
 	bpf_map_update_elem(ctx->flow_counters, &(hop_key.flow_key), &empty_counter, BPF_NOEXIST);
 
-	if (vDebugLevel > 3)
+	if (vDebugLevel > 6)
 	{
 		if (flow_hop_latency_threshold > vFLOW_LATENCY_DELTA)
 		{
@@ -886,18 +892,18 @@ void lost_func(struct threshold_maps *ctx, int cpu, __u64 cnt)
 	fflush(tunLogPtr);
 }
 	
-void print_flow_key(struct flow_key *key, char ctime_buf[])
+void print_flow_key(struct flow_key *key, char ms_ctime_buf[])
 {
-	fprintf(tunLogPtr,"%sFLOW    : Flow Key:\n", pLearningSpacesMinusLearning);
-	fprintf(tunLogPtr,"%sFLOW    : \tflow_switch_id:%u\n", pLearningSpacesMinusLearning, key->switch_id);
-	fprintf(tunLogPtr,"%sFLOW    : \tflow_egress_port:%hu\n", pLearningSpacesMinusLearning, key->egress_port);
-	fprintf(tunLogPtr,"%sFLOW    : \tvlan_id:%hu\n", pLearningSpacesMinusLearning, key->vlan_id);
+	fprintf(tunLogPtr,"%sFLOW    : Flow Key:\n", pLearningSpaces);
+	fprintf(tunLogPtr,"%sFLOW    : \tflow_switch_id:%u\n", pLearningSpaces, key->switch_id);
+	fprintf(tunLogPtr,"%sFLOW    : \tflow_egress_port:%hu\n", pLearningSpaces, key->egress_port);
+	fprintf(tunLogPtr,"%sFLOW    : \tvlan_id:%hu\n", pLearningSpaces, key->vlan_id);
 #ifdef INCLUDE_SRC_PORT
 	if (src_ip_addr.y)
-		fprintf(tunLogPtr,"%sFLOW    : \tsrc_ip:%u.%u.%u.%u, src_port:%d", pLearningSpacesMinusLearning, src_ip_addr.a[0],src_ip_addr.a[1],src_ip_addr.a[2],src_ip_addr.a[3], src_port);
+		fprintf(tunLogPtr,"%sFLOW    : \tsrc_ip:%u.%u.%u.%u, src_port:%d", pLearningSpaces, src_ip_addr.a[0],src_ip_addr.a[1],src_ip_addr.a[2],src_ip_addr.a[3], src_port);
 #else
 	if (src_ip_addr.y)
-		fprintf(tunLogPtr,"%sFLOW    : \tsrc_ip:%u.%u.%u.%u", pLearningSpacesMinusLearning, src_ip_addr.a[0],src_ip_addr.a[1],src_ip_addr.a[2],src_ip_addr.a[3]);
+		fprintf(tunLogPtr,"%sFLOW    : \tsrc_ip:%u.%u.%u.%u", pLearningSpaces, src_ip_addr.a[0],src_ip_addr.a[1],src_ip_addr.a[2],src_ip_addr.a[3]);
 #endif
 }
 
@@ -906,7 +912,7 @@ void print_hop_key(struct hop_key *key)
 	time_t clk;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
-	if (vDebugLevel > 4 )
+	if (vDebugLevel > 5 )
 	{
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		//fprintf(tunLogPtr,"%s %s: Hop Key:\n", ctime_buf, phase2str(current_phase));
@@ -1014,10 +1020,10 @@ void check_req(http_s *h, char aResp[])
 		vNewDebugLevel = atoi(aNumber);
 		sprintf(aResp,"Changed debug level of Tuning Module from %d to %d!\n", vDebugLevel, vNewDebugLevel);
 		
-		gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change debug level of Tuning Module from %d to %d***\n", ctime_buf, phase2str(current_phase), vDebugLevel, vNewDebugLevel);
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change debug level of Tuning Module from %d to %d***\n", ms_ctime_buf, phase2str(current_phase), vDebugLevel, vNewDebugLevel);
 		vDebugLevel = vNewDebugLevel;
-		fprintf(tunLogPtr,"%s %s: ***New debug level is %d***\n", ctime_buf, phase2str(current_phase), vDebugLevel);
+		fprintf(tunLogPtr,"%s %s: ***New debug level is %d***\n", ms_ctime_buf, phase2str(current_phase), vDebugLevel);
 		goto after_check;
 	}
 	
@@ -1033,11 +1039,11 @@ void check_req(http_s *h, char aResp[])
 
 		sprintf(aResp,"Tuning Module is in learning mode!!!\n");
 		
-		gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change Tuning Module learning mode from %s to on***\n", ctime_buf, phase2str(current_phase), aMode);
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change Tuning Module learning mode from %s to on***\n", ms_ctime_buf, phase2str(current_phase), aMode);
 		
 		gTuningMode = 0;
-		fprintf(tunLogPtr,"%s %s: ***Tuning Module is now in learning mode***\n", ctime_buf, phase2str(current_phase));
+		fprintf(tunLogPtr,"%s %s: ***Tuning Module is now in learning mode***\n", ms_ctime_buf, phase2str(current_phase));
 		goto after_check;
 	}
 
@@ -1053,11 +1059,11 @@ void check_req(http_s *h, char aResp[])
 
 		sprintf(aResp,"Tuning Module has turned off learning mode!!!\n");
 		
-		gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change Tuning Module learning mode from %s to off***\n", ctime_buf, phase2str(current_phase), aMode);
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change Tuning Module learning mode from %s to off***\n", ms_ctime_buf, phase2str(current_phase), aMode);
 		
 		gTuningMode = 1;
-		fprintf(tunLogPtr,"%s %s: ***Tuning Module is now *not* in learning mode***\n", ctime_buf, phase2str(current_phase));
+		fprintf(tunLogPtr,"%s %s: ***Tuning Module is now *not* in learning mode***\n", ms_ctime_buf, phase2str(current_phase));
 		goto after_check;
 	}
 
@@ -1074,10 +1080,10 @@ void check_req(http_s *h, char aResp[])
 
 		vNewFlowSinkTimeDelta = strtoul(aNumber, (char **)0, 10);
 		sprintf(aResp,"Changed flow sink time delta from %u to %u!\n", vFLOW_SINK_TIME_DELTA, vNewFlowSinkTimeDelta);
-		gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change flow sink time delta from %u to %u***\n", ctime_buf, phase2str(current_phase), vFLOW_SINK_TIME_DELTA, vNewFlowSinkTimeDelta);
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change flow sink time delta from %u to %u***\n", ms_ctime_buf, phase2str(current_phase), vFLOW_SINK_TIME_DELTA, vNewFlowSinkTimeDelta);
 		vFLOW_SINK_TIME_DELTA = vNewFlowSinkTimeDelta;
-		fprintf(tunLogPtr,"%s %s: ***New flow sink time delta value is *%u***\n", ctime_buf, phase2str(current_phase), vFLOW_SINK_TIME_DELTA);
+		fprintf(tunLogPtr,"%s %s: ***New flow sink time delta value is *%u***\n", ms_ctime_buf, phase2str(current_phase), vFLOW_SINK_TIME_DELTA);
 		goto after_check;
 	}
 			
@@ -1094,10 +1100,10 @@ void check_req(http_s *h, char aResp[])
 
 		vNewQueueOccupancyDelta = strtoul(aNumber, (char **)0, 10);
 		sprintf(aResp,"Changed queue occupancy delta from %u to %u!\n", vQUEUE_OCCUPANCY_DELTA, vNewQueueOccupancyDelta);
-		gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change queue occupancy delta from %u to %u***\n", ctime_buf, phase2str(current_phase), vQUEUE_OCCUPANCY_DELTA, vNewQueueOccupancyDelta);
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change queue occupancy delta from %u to %u***\n", ms_ctime_buf, phase2str(current_phase), vQUEUE_OCCUPANCY_DELTA, vNewQueueOccupancyDelta);
 		vQUEUE_OCCUPANCY_DELTA = vNewQueueOccupancyDelta;
-		fprintf(tunLogPtr,"%s %s: ***New queue occupancy delta value is *%u***\n", ctime_buf, phase2str(current_phase), vQUEUE_OCCUPANCY_DELTA);
+		fprintf(tunLogPtr,"%s %s: ***New queue occupancy delta value is *%u***\n", ms_ctime_buf, phase2str(current_phase), vQUEUE_OCCUPANCY_DELTA);
 		goto after_check;
 	}
 			
@@ -1114,10 +1120,10 @@ void check_req(http_s *h, char aResp[])
 
 		vNewQueueOccupancyUserInfo = strtoul(aNumber, (char **)0, 10);
 		sprintf(aResp,"Changed queue occupancy user info from %u to %u!\n", vQinfoUserValue, vNewQueueOccupancyUserInfo);
-		gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change queue user info from %u to %u***\n", ctime_buf, phase2str(current_phase), vQinfoUserValue, vNewQueueOccupancyUserInfo);
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change queue user info from %u to %u***\n", ms_ctime_buf, phase2str(current_phase), vQinfoUserValue, vNewQueueOccupancyUserInfo);
 		vQinfoUserValue = vNewQueueOccupancyUserInfo;
-		fprintf(tunLogPtr,"%s %s: ***New queue occupancy user info value is *%u***\n", ctime_buf, phase2str(current_phase), vQinfoUserValue);
+		fprintf(tunLogPtr,"%s %s: ***New queue occupancy user info value is *%u***\n", ms_ctime_buf, phase2str(current_phase), vQinfoUserValue);
 		goto after_check;
 	}
 			
@@ -1134,10 +1140,10 @@ void check_req(http_s *h, char aResp[])
 
 		vNewRetransPerSec = strtoul(aNumber, (char **)0, 10);
 		sprintf(aResp,"Changed queue occupancy user info from %u to %u!\n", vNumRetransmissionAllowedPerSec, vNewRetransPerSec);
-		gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change number of retransmits allowed per second to %u to %u***\n", ctime_buf, phase2str(current_phase), vNumRetransmissionAllowedPerSec, vNewRetransPerSec);
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change number of retransmits allowed per second to %u to %u***\n", ms_ctime_buf, phase2str(current_phase), vNumRetransmissionAllowedPerSec, vNewRetransPerSec);
 		vNumRetransmissionAllowedPerSec = vNewRetransPerSec;
-		fprintf(tunLogPtr,"%s %s: ***New retransmits allowed per second is *%u***\n", ctime_buf, phase2str(current_phase), vNumRetransmissionAllowedPerSec);
+		fprintf(tunLogPtr,"%s %s: ***New retransmits allowed per second is *%u***\n", ms_ctime_buf, phase2str(current_phase), vNumRetransmissionAllowedPerSec);
 		goto after_check;
 	}
 			
@@ -1154,10 +1160,10 @@ void check_req(http_s *h, char aResp[])
 
 		vNewHopLatencyDelta = strtoul(aNumber, (char **)0, 10);
 		sprintf(aResp,"Changed hop latency delta from %u to %u!\n", vHOP_LATENCY_DELTA, vNewHopLatencyDelta);
-		gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change hop latency delta from %u to %u***\n", ctime_buf, phase2str(current_phase), vHOP_LATENCY_DELTA, vNewHopLatencyDelta);
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change hop latency delta from %u to %u***\n", ms_ctime_buf, phase2str(current_phase), vHOP_LATENCY_DELTA, vNewHopLatencyDelta);
 		vHOP_LATENCY_DELTA = vNewHopLatencyDelta;
-		fprintf(tunLogPtr,"%s %s: ***New hop latency delta value is *%u***\n", ctime_buf, phase2str(current_phase), vHOP_LATENCY_DELTA);
+		fprintf(tunLogPtr,"%s %s: ***New hop latency delta value is *%u***\n", ms_ctime_buf, phase2str(current_phase), vHOP_LATENCY_DELTA);
 		goto after_check;
 	}
 			
@@ -1174,10 +1180,10 @@ void check_req(http_s *h, char aResp[])
 
 		vNewFlowLatencyDelta = strtoul(aNumber, (char **)0, 10);
 		sprintf(aResp,"Changed flow latency delta from %u to %u!\n", vFLOW_LATENCY_DELTA, vNewFlowLatencyDelta);
-		gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change flow latency delta from %u to %u***\n", ctime_buf, phase2str(current_phase), vFLOW_LATENCY_DELTA, vNewFlowLatencyDelta);
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change flow latency delta from %u to %u***\n", ms_ctime_buf, phase2str(current_phase), vFLOW_LATENCY_DELTA, vNewFlowLatencyDelta);
 		vFLOW_LATENCY_DELTA = vNewFlowLatencyDelta;
-		fprintf(tunLogPtr,"%s %s: ***New flow latency delta value is *%u***\n", ctime_buf, phase2str(current_phase), vFLOW_LATENCY_DELTA);
+		fprintf(tunLogPtr,"%s %s: ***New flow latency delta value is *%u***\n", ms_ctime_buf, phase2str(current_phase), vFLOW_LATENCY_DELTA);
 		goto after_check;
 	}
 			
@@ -1194,10 +1200,10 @@ void check_req(http_s *h, char aResp[])
 
 		vNewRttThreshold = strtoul(aNumber, (char **)0, 10);
 		sprintf(aResp,"Changed rtt threshold from %.2fms to %.2fms!\n", rtt_threshold, vNewRttThreshold*1.0);
-		gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change rtt threshold from %.2fms to %.2fms***\n", ctime_buf, phase2str(current_phase), rtt_threshold, vNewRttThreshold*1.0);
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change rtt threshold from %.2fms to %.2fms***\n", ms_ctime_buf, phase2str(current_phase), rtt_threshold, vNewRttThreshold*1.0);
 		rtt_threshold = vNewRttThreshold;
-		fprintf(tunLogPtr,"%s %s: ***New RTT THRESHOLD value is *%.2fms***\n", ctime_buf, phase2str(current_phase), rtt_threshold);
+		fprintf(tunLogPtr,"%s %s: ***New RTT THRESHOLD value is *%.2fms***\n", ms_ctime_buf, phase2str(current_phase), rtt_threshold);
 		goto after_check;
 	}
 
@@ -1214,10 +1220,10 @@ void check_req(http_s *h, char aResp[])
 
 		vNewRttFactor = strtoul(aNumber, (char **)0, 10);
 		sprintf(aResp,"Changed rtt factor from %d to %d!\n", rtt_factor, vNewRttFactor);
-		gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change rtt factor from %d to %d***\n", ctime_buf, phase2str(current_phase), rtt_factor, vNewRttFactor);
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change rtt factor from %d to %d***\n", ms_ctime_buf, phase2str(current_phase), rtt_factor, vNewRttFactor);
 		rtt_factor = vNewRttFactor;
-		fprintf(tunLogPtr,"%s %s: ***New RTT FACTOR value is *%d***\n", ctime_buf, phase2str(current_phase), rtt_factor);
+		fprintf(tunLogPtr,"%s %s: ***New RTT FACTOR value is *%d***\n", ms_ctime_buf, phase2str(current_phase), rtt_factor);
 		goto after_check;
 	}
 
@@ -1233,12 +1239,12 @@ void check_req(http_s *h, char aResp[])
 
 
 		sprintf(aResp,"Changed rx ring buffer size of %s to %s!\n", netDevice, aNumber);
-		gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change RX ring buffer size of %s to %s***\n", ctime_buf, phase2str(current_phase), netDevice, aNumber);
-		fprintf(tunLogPtr,"%s %s: ***Changing RX buffer size now***\n", ctime_buf, phase2str(current_phase));
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change RX ring buffer size of %s to %s***\n", ms_ctime_buf, phase2str(current_phase), netDevice, aNumber);
+		fprintf(tunLogPtr,"%s %s: ***Changing RX buffer size now***\n", ms_ctime_buf, phase2str(current_phase));
 		sprintf(aSettingFromHttp,"ethtool -G %s rx %s", netDevice, aNumber);
 		
-		fprintf(tunLogPtr,"%s %s: ***Doing *%s***\n", ctime_buf, phase2str(current_phase), aSettingFromHttp);
+		fprintf(tunLogPtr,"%s %s: ***Doing *%s***\n", ms_ctime_buf, phase2str(current_phase), aSettingFromHttp);
 		system(aSettingFromHttp);
 		goto after_check;
 	}
@@ -1255,12 +1261,12 @@ void check_req(http_s *h, char aResp[])
 
 		sprintf(aResp,"Changed tx ring buffer size of %s to %s!\n", netDevice, aNumber);
 		
-		gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change TX ring buffer size of %s to %s***\n", ctime_buf, phase2str(current_phase), netDevice, aNumber);
-		fprintf(tunLogPtr,"%s %s: ***Changing TX buffer size now***\n", ctime_buf, phase2str(current_phase));
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change TX ring buffer size of %s to %s***\n", ms_ctime_buf, phase2str(current_phase), netDevice, aNumber);
+		fprintf(tunLogPtr,"%s %s: ***Changing TX buffer size now***\n", ms_ctime_buf, phase2str(current_phase));
 		sprintf(aSettingFromHttp,"ethtool -G %s tx %s", netDevice, aNumber);
 		
-		fprintf(tunLogPtr,"%s %s: ***Doing *%s***\n", ctime_buf, phase2str(current_phase), aSettingFromHttp);
+		fprintf(tunLogPtr,"%s %s: ***Doing *%s***\n", ms_ctime_buf, phase2str(current_phase), aSettingFromHttp);
 		system(aSettingFromHttp);
 		goto after_check;
 	}
@@ -1277,12 +1283,12 @@ void check_req(http_s *h, char aResp[])
 
 		sprintf(aResp,"Changed the maximum OS receive buffer size for all types of connections to %s!\n", aNumber);
 		
-		gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change the maximum OS receive buffer size for all types of connections to %s***\n", ctime_buf, phase2str(current_phase), aNumber);
-		fprintf(tunLogPtr,"%s %s: ***Changing receive buffer size now***\n", ctime_buf, phase2str(current_phase));
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change the maximum OS receive buffer size for all types of connections to %s***\n", ms_ctime_buf, phase2str(current_phase), aNumber);
+		fprintf(tunLogPtr,"%s %s: ***Changing receive buffer size now***\n", ms_ctime_buf, phase2str(current_phase));
 		sprintf(aSettingFromHttp,"sysctl -w net.core.rmem_max=%s", aNumber);
 		
-		fprintf(tunLogPtr,"%s %s: ***Doing *%s***\n", ctime_buf, phase2str(current_phase), aSettingFromHttp);
+		fprintf(tunLogPtr,"%s %s: ***Doing *%s***\n", ms_ctime_buf, phase2str(current_phase), aSettingFromHttp);
 		system(aSettingFromHttp);
 		goto after_check;
 	}
@@ -1299,21 +1305,21 @@ void check_req(http_s *h, char aResp[])
 
 		sprintf(aResp,"Changed the maximum OS send buffer size for all types of connections to %s!\n", aNumber);
 		
-		gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change the maximum OS send buffer size for all types of connections to %s***\n", ctime_buf, phase2str(current_phase), aNumber);
-		fprintf(tunLogPtr,"%s %s: ***Changing send buffer size now***\n", ctime_buf, phase2str(current_phase));
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change the maximum OS send buffer size for all types of connections to %s***\n", ms_ctime_buf, phase2str(current_phase), aNumber);
+		fprintf(tunLogPtr,"%s %s: ***Changing send buffer size now***\n", ms_ctime_buf, phase2str(current_phase));
 		sprintf(aSettingFromHttp,"sysctl -w net.core.wmem_max=%s", aNumber);
 		
-		fprintf(tunLogPtr,"%s %s: ***Doing *%s***\n", ctime_buf, phase2str(current_phase), aSettingFromHttp);
+		fprintf(tunLogPtr,"%s %s: ***Doing *%s***\n", ms_ctime_buf, phase2str(current_phase), aSettingFromHttp);
 		system(aSettingFromHttp);
 		goto after_check;
 	}
 
 	{
 		strcpy(aResp,"Received something else!!!\n");
-		gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received some kind of request from Http Client***\n", ctime_buf, phase2str(current_phase));
-		fprintf(tunLogPtr,"%s %s: ***Applying some kind of request***\n", ctime_buf, phase2str(current_phase));
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received some kind of request from Http Client***\n", ms_ctime_buf, phase2str(current_phase));
+		fprintf(tunLogPtr,"%s %s: ***Applying some kind of request***\n", ms_ctime_buf, phase2str(current_phase));
 		/* fall thru */
 	}
 
@@ -1339,6 +1345,7 @@ void initialize_http_service(void)
 {
 	time_t clk;
 	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
   	char aListenPort[32];	
 
 	/* listen for inncoming connections */
@@ -1346,8 +1353,8 @@ void initialize_http_service(void)
 	if (http_listen(aListenPort, NULL, .on_request = on_http_request) == -1) 
 	{
     		/* listen failed ?*/
-		gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***ERROR: facil couldn't initialize HTTP service (already running?)...***\n", ctime_buf, phase2str(current_phase));
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***ERROR: facil couldn't initialize HTTP service (already running?)...***\n", ms_ctime_buf, phase2str(current_phase));
 		return;
   	}
 #if 0
@@ -1371,9 +1378,10 @@ void * fDoRunHttpServer(void * vargp)
 	//int * fd = (int *) vargp;
 	time_t clk;
 	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 
-	gettimeWithMilli(&clk, ctime_buf);
-	fprintf(tunLogPtr,"%s %s: ***Starting Http Server ...***\n", ctime_buf, phase2str(current_phase));
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+	fprintf(tunLogPtr,"%s %s: ***Starting Http Server ...***\n", ms_ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
 	initialize_http_service();
 	/* start facil */
@@ -1386,6 +1394,7 @@ void fGetMtuInfoOfDevices(void)
 
 	time_t clk;
 	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	char log_inter[128];
         char buffer[128];
         char buffer2[128];
@@ -1439,7 +1448,7 @@ finish_up:
 	pclose(pipe1);
 	if (found)
 	{
-		gettimeWithMilli(&clk, ctime_buf);
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		fprintf(tunLogPtr, "%sBITRATE : !!!*****PLEASE CHECK IF MTU of Physical Interface \"%s\" is correct or MTU of Interface \"%s\" is correct********!!!\n",
 			pLearningSpacesMinusLearning, netDevice, log_inter);
 		
@@ -1499,6 +1508,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 {
 	time_t clk;
 	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	char buffer[256];
 	FILE *pipe;
 	char kernel_parameter[128];
@@ -1508,7 +1518,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 	unsigned int kmaximum;
 	static time_t delta = 0;
 
-	gettimeWithMilli(&clk, ctime_buf);
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	if (average_tx_Gbits_per_sec < vGoodBitrateValue)
 	{
 #if 0
@@ -1517,7 +1527,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 #endif
 		if (current_phase == TUNING)
 		{
-			fprintf(tunLogPtr, "%s %s: Trying to tune net.ipv4.tcp_wmem, but already TUNING something else.  Will retry later if still need TUNING***\n",ctime_buf, phase2str(current_phase));
+			fprintf(tunLogPtr, "%s %s: Trying to tune net.ipv4.tcp_wmem, but already TUNING something else.  Will retry later if still need TUNING***\n",ms_ctime_buf, phase2str(current_phase));
 
 		}
 		else
@@ -1553,7 +1563,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 
 				if (gTuningMode && current_phase == LEARNING)
 				{
-					gettimeWithMilli(&clk, ctime_buf);
+					gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 					current_phase = TUNING;
 					//fprintf(tunLogPtr, "%s %s: Changed current phase***\n",ctime_buf, phase2str(current_phase));
 					//do something
@@ -1562,8 +1572,8 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 						if (vDebugLevel > 0)
 						{
 							//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
-							fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ctime_buf, phase2str(current_phase), buffer);
-							fprintf(tunLogPtr, "%s %s: *** Current Tuning of net.ipv4.tcp_wmem appears sufficient***\n", ctime_buf, phase2str(current_phase));
+							fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ms_ctime_buf, phase2str(current_phase), buffer);
+							fprintf(tunLogPtr, "%s %s: *** Current Tuning of net.ipv4.tcp_wmem appears sufficient***\n", ms_ctime_buf, phase2str(current_phase));
 						}
 						
 						*nothing_done = 1;
@@ -1593,7 +1603,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 									else
 										{
 								
-											fprintf(tunLogPtr, "%s %s: ***Could not apply tuning since the maximum value of wmem would be less than %d...***\n",ctime_buf, phase2str(current_phase), 600000 - KTUNING_DELTA);
+											fprintf(tunLogPtr, "%s %s: ***Could not apply tuning since the maximum value of wmem would be less than %d...***\n",ms_ctime_buf, phase2str(current_phase), 600000 - KTUNING_DELTA);
 											current_phase = LEARNING; //change back phase to LEARNING
 											*nothing_done = 1;
 											return;	
@@ -1602,17 +1612,17 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 								else
 									if (*tune == 3)
 									{
-										fprintf(tunLogPtr,"%s %s: ***No better change found. Using ***%s***\n\n", ctime_buf, phase2str(current_phase), aApplyDefTun);
+										fprintf(tunLogPtr,"%s %s: ***No better change found. Using ***%s***\n\n", ms_ctime_buf, phase2str(current_phase), aApplyDefTun);
 									}
 									else
 										{
-											fprintf(tunLogPtr, "%s %s: ***Could not apply tuning*** invalid value for tune %d***\n",ctime_buf, phase2str(current_phase), *tune);
+											fprintf(tunLogPtr, "%s %s: ***Could not apply tuning*** invalid value for tune %d***\n",ms_ctime_buf, phase2str(current_phase), *tune);
 											current_phase = LEARNING; //change back phase to LEARNING
 											*nothing_done = 1;
 											return;	
 										}
 
-							fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ctime_buf, phase2str(current_phase), buffer);
+							fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ms_ctime_buf, phase2str(current_phase), buffer);
 							strcpy(aApplyDefTunNoStdOut,aApplyDefTun);
 							strcat(aApplyDefTunNoStdOut," >/dev/null"); //so it won't print to stderr on console
 							system(aApplyDefTunNoStdOut);
@@ -1621,9 +1631,9 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 							fprintf(csvLogPtr,"%lu,%s,%s\n",delta,aName,aValue);
 							fflush(csvLogPtr);
 
-							fprintf(tunLogPtr, "%s %s: ***APPLIED TUNING***: %s\n\n",ctime_buf, phase2str(current_phase), aApplyDefTun);
+							fprintf(tunLogPtr, "%s %s: ***APPLIED TUNING***: %s\n\n",ms_ctime_buf, phase2str(current_phase), aApplyDefTun);
 
-							sprintf(activity,"%s %s: ***ACTIVITY=APPLIED TUNING***: %s",ctime_buf, phase2str(current_phase), aApplyDefTun);
+							sprintf(activity,"%s %s: ***ACTIVITY=APPLIED TUNING***: %s",ms_ctime_buf, phase2str(current_phase), aApplyDefTun);
 							record_activity(activity); //make sure activity big enough to concatenate additional data -- see record_activity()
 
 							*applied = 1;
@@ -1643,8 +1653,8 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 							if (vDebugLevel > 0)
 							{
 								//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
-								fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ctime_buf, phase2str(current_phase), buffer);
-								fprintf(tunLogPtr, "%s %s: *** Current Tuning of net.ipv4.tcp_wmem appears sufficient***\n", ctime_buf, phase2str(current_phase));
+								fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ms_ctime_buf, phase2str(current_phase), buffer);
+								fprintf(tunLogPtr, "%s %s: *** Current Tuning of net.ipv4.tcp_wmem appears sufficient***\n", ms_ctime_buf, phase2str(current_phase));
 							}
 						}
 						else
@@ -1653,8 +1663,8 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 								if (vDebugLevel > 0)
 								{
 									//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
-									fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: *%s",ctime_buf, phase2str(current_phase), buffer);
-									fprintf(tunLogPtr, "%s %s: ***SUGGESTED TUNING***: *sudo sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"\n\n",ctime_buf, phase2str(current_phase), kminimum, kdefault, kmaximum+KTUNING_DELTA);
+									fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: *%s",ms_ctime_buf, phase2str(current_phase), buffer);
+									fprintf(tunLogPtr, "%s %s: ***SUGGESTED TUNING***: *sudo sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"\n\n",ms_ctime_buf, phase2str(current_phase), kminimum, kdefault, kmaximum+KTUNING_DELTA);
 								}
 							}
 					}
@@ -1662,7 +1672,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 		
 		if ((vDebugLevel > 1) && (average_tx_Gbits_per_sec < vGoodBitrateValueThatDoesntNeedMessage ))
 		{
-			fprintf(tunLogPtr, "%s %s: !!!*****BITRATE IS LOW********!!!\n", ctime_buf, phase2str(current_phase));
+			fprintf(tunLogPtr, "%s %s: !!!*****BITRATE IS LOW********!!!\n", ms_ctime_buf, phase2str(current_phase));
 			if (aLocal_Ip[0])
 				fGetMtuInfoOfDevices();
 			else
@@ -1681,7 +1691,7 @@ double fCheckAppBandwidth(char app[])
 {
 	time_t clk;
 	char ctime_buf[27];
-	gettimeWithMilli(&clk, ctime_buf);
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	char buffer[128];
 	FILE *pipe;
 	char try[1024];
@@ -1710,9 +1720,9 @@ double fCheckAppBandwidth(char app[])
 			vBandWidthInBits = ((8 * vBandWidthInBits) / 1000);	//really became kilobits here
 			vBandWidthInGBits = vBandWidthInBits/(double)(1000000);
 			
-			gettimeWithMilli(&clk, ctime_buf);
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
-			fprintf(tunLogPtr,"%s %s: ***The app \"%s\" is using a Bandwidth of %.2f Gb/s\n", ctime_buf, phase2str(current_phase), app, vBandWidthInGBits); //only need this one buffer
+			fprintf(tunLogPtr,"%s %s: ***The app \"%s\" is using a Bandwidth of %.2f Gb/s\n", ms_ctime_buf, phase2str(current_phase), app, vBandWidthInGBits); //only need this one buffer
 			while (fgets(buffer, 128, pipe) != NULL); //dump the buffers after
 			break;
 		}
@@ -1732,6 +1742,7 @@ double fGetAppBandWidth()
 
 	time_t clk;
 	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	char buffer[256];
 	FILE *pipe;
 	char try[1024];
@@ -1750,7 +1761,7 @@ double fGetAppBandWidth()
 	}
 
 	strcpy(previous_value," ");
-	gettimeWithMilli(&clk, ctime_buf);
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
 	sprintf(try,"lsof | grep %s:",aDest_Ip2);
 
@@ -1791,8 +1802,8 @@ double fGetAppBandWidth()
 	if (!found)
 	{
 		nolsof = 1;
-		gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr,"\n%s %s: ***!!!ERROR!!!**** Could not find \"lsof\" to get App Bandwidth***\n", ctime_buf, phase2str(current_phase));
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"\n%s %s: ***!!!ERROR!!!**** Could not find \"lsof\" to get App Bandwidth***\n", ms_ctime_buf, phase2str(current_phase));
 	}
 
 	fflush(tunLogPtr);
@@ -1804,9 +1815,10 @@ void * fDoRunGetThresholds(void * vargp)
 {
 	time_t clk;
 	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	
-	gettimeWithMilli(&clk, ctime_buf);
-	fprintf(tunLogPtr,"%s %s: ***Starting Check Threshold thread ...***\n", ctime_buf, phase2str(current_phase));
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+	fprintf(tunLogPtr,"%s %s: ***Starting Check Threshold thread ...***\n", ms_ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
 	char buffer[128];
 	char aApplyDefTunBest[MAX_SIZE_SYSTEM_SETTING_STRING];
@@ -1926,8 +1938,8 @@ start:
 				//can't be - something off - don't use as a recorded value 
 				if (vDebugLevel > 0)
 				{
-					gettimeWithMilli(&clk, ctime_buf);
-					fprintf(tunLogPtr,"%s %s: ***ERROR BITRATE*** average_tx_Gbits_per_sec = %.2f Gb/s is above maximum Bandwidth of %.2f... skiping this value\n",ctime_buf, phase2str(current_phase), average_tx_Gbits_per_sec, netDeviceSpeed/1000.0);
+					gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+					fprintf(tunLogPtr,"%s %s: ***ERROR BITRATE*** average_tx_Gbits_per_sec = %.2f Gb/s is above maximum Bandwidth of %.2f... skiping this value\n",ms_ctime_buf, phase2str(current_phase), average_tx_Gbits_per_sec, netDeviceSpeed/1000.0);
 				}
 				average_tx_Gbits_per_sec = 0.0;
 				average_tx_kbits_per_sec = 0.0;
@@ -1938,11 +1950,11 @@ start:
 		}
 	}
 
-	gettimeWithMilli(&clk, ctime_buf);
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			
-	if (vDebugLevel > 5 && tx_kbits_per_sec)
+	if (vDebugLevel > 6 && tx_kbits_per_sec)
 	{
-		fprintf(tunLogPtr,"%s %s: DEV %s: TX : %.2f Gb/s RX : %.2f Gb/s\n", ctime_buf, phase2str(current_phase), netDevice, tx_kbits_per_sec/(double)(1000000), rx_kbits_per_sec/(double)(1000000));
+		fprintf(tunLogPtr,"%s %s: DEV %s: TX : %.2f Gb/s RX : %.2f Gb/s\n", ms_ctime_buf, phase2str(current_phase), netDevice, tx_kbits_per_sec/(double)(1000000), rx_kbits_per_sec/(double)(1000000));
 		//fprintf(tunLogPtr,"%s %s: DEV %s: TX : %.2f Gb/s RX : %.2f Gb/s\n", ctime_buf, phase2str(current_phase), netDevice, tx_kbits_per_sec/(double)(1048576), rx_kbits_per_sec/(double)(1048576));
 	}
 
@@ -1950,7 +1962,7 @@ start:
 	{
 		if (!check_bitrate_interval)
 		{
-			fprintf(tunLogPtr,"%s %s: average_tx_Gbits_per_sec = %.2f Gb/s, BITRATE_INTERVAL = %d \n",ctime_buf, phase2str(current_phase), average_tx_Gbits_per_sec, keep_bitrate_interval);
+			fprintf(tunLogPtr,"%s %s: average_tx_Gbits_per_sec = %.2f Gb/s, BITRATE_INTERVAL = %d \n",ms_ctime_buf, phase2str(current_phase), average_tx_Gbits_per_sec, keep_bitrate_interval);
 		}
 	}
 
@@ -1981,7 +1993,7 @@ start:
 	
 						if (vDebugLevel > 1)
 						{
-							fprintf(tunLogPtr,"%s %s: ***Best wmem val***%s***\n\n", ctime_buf, 
+							fprintf(tunLogPtr,"%s %s: ***Best wmem val***%s***\n\n", ms_ctime_buf, 
 										phase2str(current_phase), best_wmem_val);
 						}
 
@@ -1997,13 +2009,13 @@ start:
 				else
 					tune = 2; //down
 
-				gettimeWithMilli(&clk, ctime_buf);
+				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 				if (previous_average_tx_Gbits_per_sec)
 				{
-					if ((vDebugLevel > 3) &&  (highest_average_tx_Gbits_per_sec >= 1))
+					if ((vDebugLevel > 6) &&  (highest_average_tx_Gbits_per_sec >= 1))
 					{
 						fprintf(tunLogPtr,"%s %s: ***applied = %d, previous avg bitrate %.2f, highest avg bitrate= %.2f***\n", 
-								ctime_buf, phase2str(current_phase), applied, 
+								ms_ctime_buf, phase2str(current_phase), applied, 
 									previous_average_tx_Gbits_per_sec, highest_average_tx_Gbits_per_sec);
 					}
 
@@ -2017,10 +2029,10 @@ start:
 						if ((vDebugLevel > 1) &&  (highest_average_tx_Gbits_per_sec >= 1))
 						{
 							fprintf(tunLogPtr,"%s %s: previous value %.2f, is way too smaller than highest = %.2f***\n",
-								ctime_buf, phase2str(current_phase), previous_average_tx_Gbits_per_sec, 
+								ms_ctime_buf, phase2str(current_phase), previous_average_tx_Gbits_per_sec, 
 									highest_average_tx_Gbits_per_sec);
 
-							fprintf(tunLogPtr,"%s %s: Will need to adjust***\n", ctime_buf, phase2str(current_phase));
+							fprintf(tunLogPtr,"%s %s: Will need to adjust***\n", ms_ctime_buf, phase2str(current_phase));
 						}
 
 						highest_average_tx_Gbits_per_sec = previous_average_tx_Gbits_per_sec/2;
@@ -2046,7 +2058,7 @@ start:
 #if 1	
 					if (vDebugLevel > 1)
 					{
-						fprintf(tunLogPtr,"%s %s: ***Going to apply Best wmem val***%s***\n\n", ctime_buf, 
+						fprintf(tunLogPtr,"%s %s: ***Going to apply Best wmem val***%s***\n\n", ms_ctime_buf, 
 									phase2str(current_phase), best_wmem_val);
 					}
 #endif
@@ -2066,8 +2078,8 @@ start:
 					{
 						if ((suggested == 2) && (vDebugLevel > 0))
 						{
-							gettimeWithMilli(&clk, ctime_buf);
-							fprintf(tunLogPtr, "%s %s: ***Tuning was suggested but not applied, will skip suggesting for now ...***\n", ctime_buf, phase2str(current_phase));
+							gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+							fprintf(tunLogPtr, "%s %s: ***Tuning was suggested but not applied, will skip suggesting for now ...***\n", ms_ctime_buf, phase2str(current_phase));
 							fflush(tunLogPtr);
 						}
 						average_tx_Gbits_per_sec = 0.0;
@@ -2085,7 +2097,7 @@ start:
 					{
 						if (vDebugLevel > 2)
 						{
-							fprintf(tunLogPtr, "%s %s: ***What is nothing_done??? and nothing_done is %d ...***\n", ctime_buf, phase2str(current_phase), nothing_done);
+							fprintf(tunLogPtr, "%s %s: ***What is nothing_done??? and nothing_done is %d ...***\n", ms_ctime_buf, phase2str(current_phase), nothing_done);
 						}
 
 						if (nothing_done++ > 5)
@@ -2094,9 +2106,9 @@ start:
 						{
 							if ((nothing_done == 2) && (vDebugLevel > 0))
 							{
-								gettimeWithMilli(&clk, ctime_buf);
+								gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
-								fprintf(tunLogPtr, "%s %s: ***Tuning appears sufficient, will skip suggesting or applying for now ...***\n", ctime_buf, phase2str(current_phase));
+								fprintf(tunLogPtr, "%s %s: ***Tuning appears sufficient, will skip suggesting or applying for now ...***\n", ms_ctime_buf, phase2str(current_phase));
 								fflush(tunLogPtr);
 							}
 							average_tx_Gbits_per_sec = 0.0;
@@ -2167,7 +2179,7 @@ ck_stage:
 		goto start;
 	}
 
-	fprintf(tunLogPtr, "%s %s: ***Problems*** stage not set...\n", ctime_buf, phase2str(current_phase));
+	fprintf(tunLogPtr, "%s %s: ***Problems*** stage not set...\n", ms_ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
 
 return ((char *) 0);
@@ -2491,11 +2503,11 @@ double fFindNumRetranmissionPerSec(void)
 		//should look like example: "11: 012E030A:8B2E 022E030A:1451 01 04DC97C7:00000000 01:00000014 00000000     0        0 13297797 2 00000000367a51de 41 0 0 3722 500 totrt 79""
                 if (foundstr)
                 {
-			gettimeWithMilli(&clk, ctime_buf);
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			foundstr = strstr(foundstr,"totrt");
 			if (foundstr)
 			{
-				if (vDebugLevel > 5)
+				if (vDebugLevel > 6)
 				{
 					fprintf(tunLogPtr,"%s %s: ***time_passed = %lu, actual string is \"%s\" returns *%s", ms_ctime_buf, phase2str(current_phase),time_passed, try, buffer);
 				}
@@ -2525,7 +2537,7 @@ double fFindNumRetranmissionPerSec(void)
 						vAvg_Num_Retransmissions_Per_Sec = 0;
 					}
 
-					if (vDebugLevel > 2)
+					if (vDebugLevel > 4)
 					{
 						//fprintf(tunLogPtr,"%s %s: ***Value is *%s, count is %d, retrans is %lu\n", ctime_buf, phase2str(current_phase),aValue, count, total_retrans);
 						fprintf(tunLogPtr,"%s %s: ***total retransmissions so far  is %lu, previous retransmissions is %lu\n", ms_ctime_buf, phase2str(current_phase), total_retrans, prev_total_retrans);
@@ -2537,7 +2549,7 @@ double fFindNumRetranmissionPerSec(void)
 					new_total_retrans = total_retrans - prev_total_retrans;
 					prev_total_retrans = total_retrans;
 					
-					if (vDebugLevel > 2)
+					if (vDebugLevel > 4)
 					{
 						fprintf(tunLogPtr,"%s %s: ***new retransmissions is %lu\n", ms_ctime_buf, phase2str(current_phase), new_total_retrans);
 					}
@@ -2555,7 +2567,7 @@ finish_up:
 		if (time_passed)
 			avg_retrans_per_sec = new_total_retrans / (double)time_passed;
 
-		if (vDebugLevel > 1)
+		if (vDebugLevel > 2)
 		{
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			fprintf(tunLogPtr,"%s %s: ***Average retransmissions currently is %.2f per sec\n", ms_ctime_buf, phase2str(current_phase), avg_retrans_per_sec);
@@ -2583,7 +2595,7 @@ double fFindRttUsingPing()
 	{
 		if (vDebugLevel > 1)
 		{
-			gettimeWithMilli(&clk, ctime_buf);
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			fprintf(tunLogPtr,"%s %s: ***Waiting on Peer Ip address to Ping***\n", ms_ctime_buf, phase2str(current_phase));
 			fflush(tunLogPtr);
 		}
@@ -2785,7 +2797,7 @@ rttstart:
 			highest_rtt = rtt;
 
 #if 1
-		if (vDebugLevel > 6 && previous_average_tx_Gbits_per_sec) 
+		if (vDebugLevel > 7 && previous_average_tx_Gbits_per_sec) 
 			fprintf(tunLogPtr,"%s %s: **rtt = %luus, highest rtt = %luus\n", ms_ctime_buf, phase2str(current_phase), rtt, highest_rtt);
 #endif
 	}
@@ -2824,9 +2836,9 @@ finish_up:
 #endif
 	}
 
-	if (vDebugLevel > 5 && previous_average_tx_Gbits_per_sec)
+	if (vDebugLevel > 6 && previous_average_tx_Gbits_per_sec)
 	{
-		gettimeWithMilli(&clk, ctime_buf);
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		fprintf(tunLogPtr, "%s %s: ***Sleeping for 250000 microseconds before resuming RTT checking...\n", ms_ctime_buf, phase2str(current_phase)); //2 x 250000
 	}
 
@@ -2856,8 +2868,8 @@ void * fDoRunHelperDtn(void * vargp)
 	if (sb.st_size == 0); //good - no runaway process
 	else //kill it
 	{
-		gettimeWithMilli(&clk, ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Killing runaway help_dtn.sh process\n", ctime_buf, phase2str(current_phase));
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Killing runaway help_dtn.sh process\n", ms_ctime_buf, phase2str(current_phase));
 		system("pkill -9 help_dtn.sh");
 	}
 
@@ -2941,6 +2953,7 @@ void ignore_sigchld()
 {
 	time_t clk;
         char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	int sigret;
 	static struct sigaction act;
         memset(&act, 0, sizeof(act));
@@ -3020,15 +3033,15 @@ void fDoQinfoAssessment(unsigned int val)
 
 	if (vAvg_Num_Retransmissions_Per_Sec > 1)
 	{
-		fprintf(tunLogPtr,"%s %s: ***Appears that congestion is on the link. Please run the following:***\n", ctime_buf, phase2str(current_phase));
+		fprintf(tunLogPtr,"%s %s: ***Appears that congestion is on the link. Please run the following:***\n", ms_ctime_buf, phase2str(current_phase));
 		sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate 15.0gbit", netDevice, aQdiscVal, netDevice);
-		fprintf(tunLogPtr,"%s %s: *%s*\n", ctime_buf, phase2str(current_phase), aNicSetting);
+		fprintf(tunLogPtr,"%s %s: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
 	} 
 	else //just a test
 		{
-			fprintf(tunLogPtr,"%s %s: ***Appears that congestion is on the link. Please run the following:***\n", ctime_buf, phase2str(current_phase));
+			fprintf(tunLogPtr,"%s %s: ***Appears that congestion is on the link. Please run the following:***\n", ms_ctime_buf, phase2str(current_phase));
 			sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate 15.0gbit", netDevice, aQdiscVal, netDevice);
-			fprintf(tunLogPtr,"%s %s: *%s*\n", ctime_buf, phase2str(current_phase), aNicSetting);
+			fprintf(tunLogPtr,"%s %s: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
 		} 
 
 
@@ -3090,7 +3103,7 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 			peeraddrlen = sizeof(peeraddr);
 			localaddrlen = sizeof(localaddr);
 #endif
-	gettimeWithMilli(&clk, ms_ctime_buf);
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Starting Listener for receiving messages from destination DTN...***\n", ms_ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
 	
@@ -3131,11 +3144,11 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 				vAvg_Num_Retransmissions_Per_Sec = 0;
 				if (vDebugLevel > 1)
 				{
-					fprintf(tunLogPtr,"%s %s: ***Peer information: ip long %s\n", ctime_buf, phase2str(current_phase), aDest_Ip2_Binary);
-					fprintf(tunLogPtr,"%s %s: ***Peer information:\n", ctime_buf, phase2str(current_phase));
-					fprintf(tunLogPtr,"%s %s: ***Peer Address Family: %d\n", ctime_buf, phase2str(current_phase), peeraddr.sin_family);
-					fprintf(tunLogPtr,"%s %s: ***Peer Port: %d\n", ctime_buf, phase2str(current_phase), peeraddr.sin_port);
-					fprintf(tunLogPtr,"%s %s: ***Peer IP Address: %s***\n\n", ctime_buf, phase2str(current_phase), peeraddrpresn);
+					fprintf(tunLogPtr,"%s %s: ***Peer information: ip long %s\n", ms_ctime_buf, phase2str(current_phase), aDest_Ip2_Binary);
+					fprintf(tunLogPtr,"%s %s: ***Peer information:\n", ms_ctime_buf, phase2str(current_phase));
+					fprintf(tunLogPtr,"%s %s: ***Peer Address Family: %d\n", ms_ctime_buf, phase2str(current_phase), peeraddr.sin_family);
+					fprintf(tunLogPtr,"%s %s: ***Peer Port: %d\n", ms_ctime_buf, phase2str(current_phase), peeraddr.sin_port);
+					fprintf(tunLogPtr,"%s %s: ***Peer IP Address: %s***\n\n", ms_ctime_buf, phase2str(current_phase), peeraddrpresn);
 				}
 
 				vIamASrcDtn = 1;	
@@ -3145,7 +3158,7 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 		retval = getsockname(connfd, (struct sockaddr *) &localaddr, &localaddrlen);
 		if (retval == -1) 
 		{
-			fprintf(tunLogPtr,"%s %s: ***sock error:***\n", ctime_buf, phase2str(current_phase));
+			fprintf(tunLogPtr,"%s %s: ***sock error:***\n", ms_ctime_buf, phase2str(current_phase));
 		}
 		else
 			{
@@ -3153,10 +3166,10 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 
 				if (vDebugLevel > 1)
 				{
-					fprintf(tunLogPtr,"%s %s: ***Socket information:\n", ctime_buf, phase2str(current_phase));
-					fprintf(tunLogPtr,"%s %s: ***Local Address Family: %d\n", ctime_buf, phase2str(current_phase), localaddr.sin_family);
-					fprintf(tunLogPtr,"%s %s: ***Local Port: %d\n", ctime_buf, phase2str(current_phase), ntohs(localaddr.sin_port));
-					fprintf(tunLogPtr,"%s %s: ***Local IP Address: %s***\n\n", ctime_buf, phase2str(current_phase), localaddrpresn);
+					fprintf(tunLogPtr,"%s %s: ***Socket information:\n", ms_ctime_buf, phase2str(current_phase));
+					fprintf(tunLogPtr,"%s %s: ***Local Address Family: %d\n", ms_ctime_buf, phase2str(current_phase), localaddr.sin_family);
+					fprintf(tunLogPtr,"%s %s: ***Local Port: %d\n", ms_ctime_buf, phase2str(current_phase), ntohs(localaddr.sin_port));
+					fprintf(tunLogPtr,"%s %s: ***Local IP Address: %s***\n\n", ms_ctime_buf, phase2str(current_phase), localaddrpresn);
 				}
 
 				strcpy(aLocal_Ip,localaddrpresn);
@@ -3209,7 +3222,7 @@ void * fDoRunSendMessageToPeer(void * vargp)
 	struct PeerMsg sMsg2;
 	int check = 0;
 
-	gettimeWithMilli(&clk, ctime_buf);
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Starting Client for sending messages to source DTN...***\n", ms_ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
 
@@ -3224,7 +3237,7 @@ cli_again:
 
 	if (vDebugLevel > 1)
 	{
-		gettimeWithMilli(&clk, ctime_buf);
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		fprintf(tunLogPtr,"%s %s: ***Sending message %d to source DTN...***\n", ms_ctime_buf, phase2str(current_phase), sleep_count);
 		fflush(tunLogPtr);
 	}
@@ -3335,7 +3348,7 @@ int main(int argc, char **argv)
 		}
 		else
 			{
-				gettimeWithMilli(&clk, ctime_buf);
+				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 				fprintf(tunLogPtr, "%s %s: Device not found, Invalid device name *%s*, Exiting...***\n", ms_ctime_buf, phase2str(current_phase), argv[2]);
 				vExitValue = -1;
 				goto leave;
@@ -3367,7 +3380,7 @@ int main(int argc, char **argv)
 				}
 				else
 					{
-						gettimeWithMilli(&clk, ctime_buf);
+						gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 						fprintf(tunLogPtr, "%s %s: Device not found, Invalid device name *%s*, Exiting...***\n", ms_ctime_buf, phase2str(current_phase), netDevice);
 						vExitValue = -5;
 						goto leave;
@@ -3390,8 +3403,8 @@ int main(int argc, char **argv)
 	current_phase = LEARNING;
 
 	vQinfoUserValue = vQUEUE_OCCUPANCY_DELTA;
-	memset(qinfo_ctime_buf_min,0,sizeof(qinfo_ctime_buf_min));
-	memset(qinfo_ctime_buf_max,0,sizeof(qinfo_ctime_buf_max));
+	memset(qinfo_ms_ctime_buf_min,0,sizeof(qinfo_ms_ctime_buf_min));
+	memset(qinfo_ms_ctime_buf_max,0,sizeof(qinfo_ms_ctime_buf_max));
 	memset(&sMsg,0,sizeof(sMsg));
 	memset(sFlowCounters,0,sizeof(sFlowCounters));
 	memset(aSrc_Ip,0,sizeof(aSrc_Ip));
@@ -3404,12 +3417,12 @@ int main(int argc, char **argv)
 #endif
 	vGoodBitrateValue = (((97/(double)100) * netDeviceSpeed)/(double)1000); //97% of NIC speed is a good bitrate threshold
 	vGoodBitrateValueThatDoesntNeedMessage = (((88/(double)100) * netDeviceSpeed)/(double)1000); //Won't print 'BITRATE IS LOW' message in this case - log gets cumbersome
-	fprintf(tunLogPtr, "%s %s: ***vGoodBitrateValue = %.1fGb/s***\n", ctime_buf, phase2str(current_phase), vGoodBitrateValue);
-	fprintf(tunLogPtr, "%s %s: ***Numa Node for %s is %d***\n", ctime_buf, phase2str(current_phase), netDevice, numaNode);
+	fprintf(tunLogPtr, "%s %s: ***vGoodBitrateValue = %.1fGb/s***\n", ms_ctime_buf, phase2str(current_phase), vGoodBitrateValue);
+	fprintf(tunLogPtr, "%s %s: ***Numa Node for %s is %d***\n", ms_ctime_buf, phase2str(current_phase), netDevice, numaNode);
 	if (numaNodeString[0])
 	{
-		fprintf(tunLogPtr, "%s %s: ***You should use one of the following cores for application use when using the %s Device:\n", ctime_buf, phase2str(current_phase), netDevice);
-		fprintf(tunLogPtr, "%s %s: ***%s\n", ctime_buf, phase2str(current_phase), numaNodeString);
+		fprintf(tunLogPtr, "%s %s: ***You should use one of the following cores for application use when using the %s Device:\n", ms_ctime_buf, phase2str(current_phase), netDevice);
+		fprintf(tunLogPtr, "%s %s: ***%s\n", ms_ctime_buf, phase2str(current_phase), numaNodeString);
 	}
 	fflush(tunLogPtr);
 

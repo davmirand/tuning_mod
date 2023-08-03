@@ -2,7 +2,9 @@
 #define __user_dtn_h
 //extern enum workflow_phases;
 
-#define WORKFLOW_NAMES_MAX      4
+#define WORKFLOW_NAMES_MAX	4
+#define CTIME_BUF_LEN		27
+#define MS_CTIME_BUF_LEN	48
 
 enum workflow_phases {
         STARTING,
