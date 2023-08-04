@@ -500,14 +500,6 @@ perf_event_loop: {
 	fflush(tunLogPtr);
  	int err = 0;
 	do {
-#if 0
-		if (vDebugLevel > 0)
-        	{
-               		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-                	//gettimeWithMilli(&clk, ctime_buf);
-                	fprintf(tunLogPtr, "%s %s: ***Came back from perf_buffer__poll\n", ms_ctime_buf, phase2str(current_phase));
-        	}
-#endif
 		perf_buffer_poll_start = 1;
 		qinfo_min_value = QINFO_START_MIN_VALUE; 
 		qinfo_max_value = 0;
@@ -1960,7 +1952,7 @@ start:
 		//fprintf(tunLogPtr,"%s %s: DEV %s: TX : %.2f Gb/s RX : %.2f Gb/s\n", ctime_buf, phase2str(current_phase), netDevice, tx_kbits_per_sec/(double)(1048576), rx_kbits_per_sec/(double)(1048576));
 	}
 
-	if (vDebugLevel > 0 && average_tx_Gbits_per_sec)
+	if (vDebugLevel > 1 && average_tx_Gbits_per_sec)
 	{
 		if (!check_bitrate_interval)
 		{
@@ -2106,7 +2098,7 @@ start:
 							nothing_done = 0;
 						else
 						{
-							if ((nothing_done == 2) && (vDebugLevel > 0))
+							if ((nothing_done == 2) && (vDebugLevel > 1))
 							{
 								gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
@@ -2321,10 +2313,6 @@ void fDoManageRtt(double highest_rtt_ms, int * applied, int * suggested, int * n
 						if (my_tune_max <= kmaximum) //already high
 						{
 							*nothing_done = 1;
-							if (vDebugLevel > 0)
-							{
-								//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
-							}
 						}
 						else
 							{
@@ -2825,8 +2813,8 @@ finish_up:
 				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 				fprintf(tunLogPtr,"%s %s: !!!***WARNING: RTT from bpftrace and ping differs by a factor of %d and at least 1 is above the threshold of %.2fms***\n", 
 						ms_ctime_buf, phase2str(current_phase), rtt_factor, rtt_threshold);
-				fprintf(tunLogPtr,"%s!!!**RTT from bpftrace is %.3fms\n", pLearningSpaces, highest_rtt_from_bpftrace);
-				fprintf(tunLogPtr,"%s!!!**RTT from ping is %.3fms\n", pLearningSpaces, highest_rtt_from_ping);
+				fprintf(tunLogPtr,"%s!!!**RTT from bpftrace is %.3fms **** !!!**RTT from ping is %.3fms\n", 
+						pLearningSpaces, highest_rtt_from_bpftrace, highest_rtt_from_ping);
 			}
 			//leave line below in for now			
 			fDoManageRtt(highest_rtt_from_bpftrace, &applied, &suggested, &nothing_done, &tune, aApplyDefTunBest, 1); //1 is from bpftrace
