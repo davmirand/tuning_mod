@@ -74,8 +74,11 @@ void open_csv_file(void)
 
 static int perf_buffer_poll_start = 0;
 static unsigned long prev_total_retrans = 0;
-static double vLast_Avg_Num_Retransmissions_Per_Sec = 0;
-static double vTotal_Avg_Num_Retransmissions_Per_Sec = 0;
+static time_t total_time_passed = 0;
+static double vLast_Avg_Num_Retransmissions_Per_Sec = 0.0;
+static double vTotal_Num_Retransmissions_Per_Sec = 0.0;
+static double vRetransmissionRate = 0.0;
+static double vGlobal_average_tx_Gbits_per_sec = 0.0;
 static int new_traffic = 0;
 static int rx_traffic = 0;
 static time_t now_time = 0;
@@ -337,7 +340,7 @@ static time_t qinfo_clk_max = 0;
 static char qinfo_ms_ctime_buf_max[MS_CTIME_BUF_LEN];
 
 static __u32 vQinfoUserValue = 0; //Eventually Initialize this value with vQUEUE_OCCUPANCY_DELTA
-static __u32 vNumRetransmissionAllowedPerSec = 1000000; //For now just a big value
+static double vRetransmissionRateThreshold = 100; //Percentage - incoorect value beung used now. Will change.
 static __u32 ingress_time = 0;
 static __u32 egress_time = 0;
 static __u32 hop_hop_latency_threshold = 0;
@@ -1124,23 +1127,34 @@ void check_req(http_s *h, char aResp[])
 		goto after_check;
 	}
 #endif			
-	if (strstr(pReqData,"GET /-ct#retrans#"))
+	if (strstr(pReqData,"GET /-ct#retrans_rate#"))
 	{
 		/* Change the value of the retransmits allwoed per sec */
-		__u32 vNewRetransPerSec = 0;
-		char *p = (pReqData + sizeof("GET /-ct#retrans#")) - 1;
-		while (isdigit(*p))
+		double vNewRetransRate = 0.0;
+		int countdots = 0;
+
+		char *p = (pReqData + sizeof("GET /-ct#retrans_rate#")) - 1;
+
+		while ((isdigit(*p) || (*p == '.')) && countdots <= 1)
 		{
+			if (*p == '.') countdots++;
 			aNumber[count++] = *p;
 			p++;
 		}
+        
+		if (countdots > 1)
+        	{
+			fprintf(tunLogPtr,"%s %s: ***Received **INVALID** request from Http Client to change maximum retransmission rate. Number is invalid: *%s***\n", ms_ctime_buf, phase2str(current_phase), aNumber);
+			sprintf(aResp,"***ERROR: Number is invalid for retransmission rate: *%s***\n", aNumber);
+			goto after_check;
+		}
 
-		vNewRetransPerSec = strtoul(aNumber, (char **)0, 10);
-		sprintf(aResp,"Changed queue occupancy user info from %u to %u!\n", vNumRetransmissionAllowedPerSec, vNewRetransPerSec);
+        	sscanf(aNumber,"%lf", &vNewRetransRate);
+		sprintf(aResp,"Changed  maximum retransmission rate allowed from %.2f to %.2f!\n", vRetransmissionRateThreshold, vNewRetransRate);
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change number of retransmits allowed per second to %u to %u***\n", ms_ctime_buf, phase2str(current_phase), vNumRetransmissionAllowedPerSec, vNewRetransPerSec);
-		vNumRetransmissionAllowedPerSec = vNewRetransPerSec;
-		fprintf(tunLogPtr,"%s %s: ***New retransmits allowed per second is *%u***\n", ms_ctime_buf, phase2str(current_phase), vNumRetransmissionAllowedPerSec);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change maximum retransmission rate allowed from %.2f to %.2f***\n", ms_ctime_buf, phase2str(current_phase), vRetransmissionRateThreshold, vNewRetransRate);
+		vRetransmissionRateThreshold = vNewRetransRate;
+		fprintf(tunLogPtr,"%s %s: ***New retransmission rate allowed is *%.2f***\n", ms_ctime_buf, phase2str(current_phase), vRetransmissionRateThreshold);
 		goto after_check;
 	}
 			
@@ -1963,6 +1977,7 @@ start:
 
 	if (!check_bitrate_interval)
 	{
+		vGlobal_average_tx_Gbits_per_sec = average_tx_Gbits_per_sec;
 		if (tune == 3 && average_tx_Gbits_per_sec)
 		{
 			tune = 0;
@@ -2427,15 +2442,14 @@ double fDoCpuMonitoring()
 return found;
 }
 
-double fFindNumRetranmissionPerSec(void);
-double fFindNumRetranmissionPerSec(void)
+double fFindRetransmissionRate(void);
+double fFindRetransmissionRate(void)
 {
 	time_t clk;
 	time_t vTime;
 	static time_t nnow_time = 0;
 	static time_t nlast_time = 0;
 	time_t time_passed = 0;
-	time_t total_time_passed = 0;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	char buffer[256];
@@ -2525,6 +2539,8 @@ double fFindNumRetranmissionPerSec(void)
 					if (prev_total_retrans > total_retrans) //can't be ha ha - must have stopped in middle of file transfer and started over
 					{
 						prev_total_retrans = 0;
+						total_time_passed = 0;
+						vRetransmissionRate = 0.0;	
 						vLast_Avg_Num_Retransmissions_Per_Sec = 0;
 					}
 
@@ -2559,20 +2575,24 @@ finish_up:
 		{
 			avg_retrans_per_sec = new_total_retrans / (double)time_passed;
 			total_time_passed += time_passed;
-			vTotal_Avg_Num_Retransmissions_Per_Sec = total_retrans/(double)total_time_passed;
+			vTotal_Num_Retransmissions_Per_Sec = total_retrans/(double)total_time_passed;
 		}
 
 		if (vDebugLevel > 2)
 		{
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-			fprintf(tunLogPtr,"%s %s: ***Average retransmissions currently is %.2f per sec\n", ms_ctime_buf, phase2str(current_phase), avg_retrans_per_sec);
-			fprintf(tunLogPtr,"%s %s: ***Average retransmissions currently is %.2f per sec\n", ms_ctime_buf, phase2str(current_phase), avg_retrans_per_sec);
+			fprintf(tunLogPtr,"%s %s: ***Average retransmissions over last %lu seconds is %.2f per sec\n", ms_ctime_buf, phase2str(current_phase), time_passed, avg_retrans_per_sec);
+			fprintf(tunLogPtr,"%s %s: ***Total retransmissions per second is %.2f\n", ms_ctime_buf, phase2str(current_phase), vTotal_Num_Retransmissions_Per_Sec);
 		}
 	}
+	
+	vLast_Avg_Num_Retransmissions_Per_Sec = avg_retrans_per_sec;
 		
 	fflush(tunLogPtr);
 
-return avg_retrans_per_sec;
+	//retansmissionrate is (total_retrans/(double)tcp_sock->segs_out) * 100.0
+	//For now return vTotal_Num_Retransmissions_Per_Sec
+return vTotal_Num_Retransmissions_Per_Sec;
 }
 
 double fFindRttUsingPing()
@@ -2750,7 +2770,7 @@ rttstart:
 		if (vIamASrcDtn)
 		{
 			highest_rtt_from_ping = fFindRttUsingPing();
-			vLast_Avg_Num_Retransmissions_Per_Sec = fFindNumRetranmissionPerSec();
+			vRetransmissionRate = fFindRetransmissionRate();
 		}
 
 		if (vDebugLevel > 2) 
@@ -3013,36 +3033,32 @@ void fDoQinfoAssessment(unsigned int val)
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	char aQdiscVal[512];
-        char aNicSetting[1024];
-        FILE *nicCfgFPtr = 0;
+	char aNicSetting[1024];
+	//FILE *nicCfgFPtr = 0;
 
 	//For now
-	memset(aQdiscVal,0,sizeof(aQdiscVal));
-	strcpy(aQdiscVal,"aTest");
-        sprintf(aNicSetting,"tc qdisc show dev %s root > /tmp/NIC.cfgfile 2>/dev/null",netDevice);
-        //system(aNicSetting);
-        //stat("/tmp/NIC.cfgfile", &sb);
+	//memset(aQdiscVal,0,sizeof(aQdiscVal));
+	//strcpy(aQdiscVal,"aTest");
+	//sprintf(aNicSetting,"tc qdisc show dev %s root > /tmp/NIC.cfgfile 2>/dev/null",netDevice);
+	//system(aNicSetting);
+	//stat("/tmp/NIC.cfgfile", &sb);
 
-
+	strcpy(aQdiscVal,"fq");
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-	fprintf(tunLogPtr,"%s %s: ***Qinfo message value from destination DTN is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
+	fprintf(tunLogPtr,"%s %s: ***WARNING***: Qinfo message value from destination DTN is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
 
-	if (vLast_Avg_Num_Retransmissions_Per_Sec > 1)
+	if (vRetransmissionRate > vRetransmissionRateThreshold)
 	{
-
-		fprintf(tunLogPtr,"%s %s: ***Average number of retransmissions per second is . Please run the following:***\n", ms_ctime_buf, phase2str(current_phase));
-		fprintf(tunLogPtr,"%s %s: ***Appears that congestion is on the link. Please run the following:***\n", ms_ctime_buf, phase2str(current_phase));
-		sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate 15.0gbit", netDevice, aQdiscVal, netDevice);
-		fprintf(tunLogPtr,"%s %s: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+		fprintf(tunLogPtr,"%s %s: ***WARNING***: the retransmission rate of %.2f is higher that the retansmission threshold of %.2f.\n", ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
+		fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f. Try running the following:\n", ms_ctime_buf, phase2str(current_phase), vGlobal_average_tx_Gbits_per_sec);
+		sprintf(aNicSetting,"\"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit\"", netDevice, aQdiscVal, netDevice, (vGlobal_average_tx_Gbits_per_sec/4.0)*3.0);
+		fprintf(tunLogPtr,"%s %s: ***WARNING***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
 	} 
-	else //just a test
-		{
-			fprintf(tunLogPtr,"%s %s: ***Appears that congestion is on the link. Please run the following:***\n", ms_ctime_buf, phase2str(current_phase));
-			sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate 15.0gbit", netDevice, aQdiscVal, netDevice);
-			fprintf(tunLogPtr,"%s %s: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
-		} 
-
-
+	else 
+	{
+		fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link.:***\n", ms_ctime_buf, phase2str(current_phase));
+		fprintf(tunLogPtr,"%s %s: ***WARNING***: However, the retransmission rate of %.2f is lower that the retansmission threshold of %.2f. You may want to lower the threshold using \"tuncli\" ***\n", ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
+	}
 return;
 }
 
@@ -3139,6 +3155,7 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 				char *peeraddrpresn = inet_ntoa(peeraddr.sin_addr);
 				sprintf(aDest_Ip2_Binary,"%02X",peeraddr.sin_addr.s_addr);
 				prev_total_retrans = 0;
+				total_time_passed = 0;
 				vLast_Avg_Num_Retransmissions_Per_Sec = 0;
 				if (vDebugLevel > 1)
 				{
