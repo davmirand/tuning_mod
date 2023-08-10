@@ -2730,6 +2730,8 @@ void fDoCheckSoftirqd(void)
                 {
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			fprintf(tunLogPtr,"%s %s: ***WARNING ksoftirqd is using >= 60%c of CPU resources::: %s", ms_ctime_buf, phase2str(current_phase), '%', buffer);
+			
+			//sudo ethtool -L netro-switch rx 0 tx 28  combined 4
 		}
 		else
 			continue;
