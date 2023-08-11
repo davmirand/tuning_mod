@@ -1431,10 +1431,10 @@ void fDoShowChannels()
                                 int count = 0, ncount = 0;
                 		
 				fprintf(tunLogPtr,"%s", line);
-				continue;
 
                                 if (strstr(line,"RX:") && rxcount == 0)
                                 {
+					if (strstr(line,"n/a")) continue;
                                         rxcount++;
 
                                         while (!isdigit(line[count])) count++;
@@ -1449,6 +1449,7 @@ void fDoShowChannels()
                                 else
                                         if (strstr(line,"RX:"))
                                         {
+						if (strstr(line,"n/a")) continue;
                                                 rxcount++;
 
                                                 while (!isdigit(line[count])) count++;
@@ -1463,6 +1464,7 @@ void fDoShowChannels()
                                         else
                                                 if (strstr(line,"TX:") && txcount == 0)
 						{
+							if (strstr(line,"n/a")) continue;
                                                         txcount++;
 
                                                         while (!isdigit(line[count])) count++;
@@ -1477,6 +1479,7 @@ void fDoShowChannels()
                                                 else
                                                         if (strstr(line,"TX:"))
                                                         {
+								if (strstr(line,"n/a")) continue;
                                                                 txcount++;
 
                                                                 while (!isdigit(line[count])) count++;
@@ -1491,6 +1494,7 @@ void fDoShowChannels()
                                 			else
 								if (strstr(line,"Combined:") && combinedcount == 0)
                                 				{
+									if (strstr(line,"n/a")) continue;
                                         				combinedcount++;
 
                                         				while (!isdigit(line[count])) count++;
@@ -1505,6 +1509,7 @@ void fDoShowChannels()
                                 				else
                                         				if (strstr(line,"Combined:"))
                                         				{
+										if (strstr(line,"n/a")) continue;
                                                 				combinedcount++;
 	
        					                                        while (!isdigit(line[count])) count++;
@@ -1531,7 +1536,7 @@ void fDoShowChannels()
 
                                                                 		netDevice_tx_channel_cfg_max_val = atoi(sTXMAXValue);
                                                                			netDevice_tx_channel_cfg_curr_val = atoi(sTXCURRValue);
-                                                                
+										
                                                                 		//should be the last thing I need
                                                                 		break;
                                         				}
@@ -1549,10 +1554,7 @@ void fDoShowChannels()
 	return;
 
 dnrb_support:
-        vPad = SETTINGS_PAD_MAX-(strlen("ring_buffer_rx_tx"));
-        fprintf(tunLogPtr,"%s", "ring_buffer_rx_tx"); //redundancy for visual
-        fprintf(tunLogPtr,"%*s", vPad, "not supported");
-        fprintf(tunLogPtr,"%26s %20s\n", "not supported", "na");
+        fprintf(tunLogPtr,"****ethtool -l not supported\n");
         system("rm -f /tmp/NIC.cfgfile"); //remove file after use
 
         return;
