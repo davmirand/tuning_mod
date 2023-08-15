@@ -2710,18 +2710,39 @@ void fDoSetChannels(void)
 			if (!netDevice_only_combined_channel_cfg)
 			{
 				sprintf(buffer,"ethtool -L %s rx 0 tx %d  combined %d",netDevice, tx_to_use, combined_to_use);
-				fprintf(tunLogPtr,"%s %s: ***WARNING: run the following command to get rid of ksoftirqd resource issue::: %s", ms_ctime_buf, phase2str(current_phase),  buffer);
+				if (gTuningMode) //need to fix so that current_phase always has the right mode
+				{
+					fprintf(tunLogPtr,"%s %s: ***WARNING: running the following command to fix ksoftirqd resource issue::: %s", 
+														ms_ctime_buf, "TUNING",  buffer);
+					system(buffer);
+				}
+				else
+					{
+						fprintf(tunLogPtr,"%s %s: ***WARNING: please run the following command to fix ksoftirqd resource issue::: %s\n", 
+															ms_ctime_buf, phase2str(current_phase),  buffer);
+					}
 			}
 			else
 				{
 					sprintf(buffer,"ethtool -L %s combined %d",netDevice, combined_to_use);
-					fprintf(tunLogPtr,"%s %s: ***WARNING: run the following command to get rid of ksoftirqd resource issue::: %s", ms_ctime_buf, phase2str(current_phase),  buffer);
+					if (gTuningMode) //need to fix so that current_phase always has the right mode
+					{
+						fprintf(tunLogPtr,"%s %s: ***WARNING: running the following command to fix ksoftirqd resource issue::: %s", 
+																ms_ctime_buf, "TUNING",  buffer);
+						system(buffer);
+					}
+					else
+						{
+							fprintf(tunLogPtr,"%s %s: ***WARNING: please run the following command to fix ksoftirqd resource issue::: %s\n", 
+															ms_ctime_buf, phase2str(current_phase),  buffer);
+						}
 				}
 		}
 		else
-		{
-			fprintf(tunLogPtr,"%s %s: ***WARNING: can't fix ksoftirqd resource issue with ethtool command at this point***", ms_ctime_buf, phase2str(current_phase));
-		}
+			{
+				fprintf(tunLogPtr,"%s %s: ***WARNING: can't fix ksoftirqd resource issue with ethtool command at this point***", 
+															ms_ctime_buf, phase2str(current_phase));
+			}
 	}
 	else
 		if (nProc)
@@ -2734,14 +2755,32 @@ void fDoSetChannels(void)
 				if (!netDevice_only_combined_channel_cfg)
 				{
 					sprintf(buffer,"ethtool -L %s rx 0 tx %d  combined %d",netDevice, tx_to_use, combined_to_use);
-					fprintf(tunLogPtr,"%s %s: ***WARNING: run the following command to get rid of ksoftirqd resource issue::: %s", 
+					if (gTuningMode) //need to fix so that current_phase always has the right mode
+					{
+						fprintf(tunLogPtr,"%s %s: ***WARNING: running the following command to fix ksoftirqd resource issue::: %s", 
+														ms_ctime_buf, phase2str(current_phase),  buffer);
+						system(buffer);
+					}
+					else
+						{
+							fprintf(tunLogPtr,"%s %s: ***WARNING: please run the following command to fix ksoftirqd resource issue::: %s\n", 
 															ms_ctime_buf, phase2str(current_phase),  buffer);
+						}
 				}
 				else
 					{
 						sprintf(buffer,"ethtool -L %s combined %d",netDevice, combined_to_use);
-						fprintf(tunLogPtr,"%s %s: ***WARNING: run the following command to get rid of ksoftirqd resource issue::: %s", 
-															ms_ctime_buf, phase2str(current_phase),  buffer);
+						if (gTuningMode) //need to fix so that current_phase always has the right mode
+						{
+							fprintf(tunLogPtr,"%s %s: ***WARNING: running the following command to fix ksoftirqd resource issue::: %s", 
+															ms_ctime_buf, "TUNING",  buffer);
+							system(buffer);
+						}
+						else
+							{	
+								fprintf(tunLogPtr,"%s %s: ***WARNING: please run the following command to fix ksoftirqd resource issue::: %s\n", 
+																		ms_ctime_buf, "TUNING",  buffer);
+							}
 					}
 			}
 		}
