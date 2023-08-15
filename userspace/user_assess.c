@@ -29,19 +29,20 @@ int gAPI_listen_port = 5523; //default listening port
 int gSource_Dtn_Port = 5524; //default listening port
 int netDeviceSpeed = 0;
 int numaNode = 0;
+int nProc = 0;
 char numaNodeString[512]; 
 static int netDevice_rx_ring_buff_cfg_max_val = 0;
 static int netDevice_tx_ring_buff_cfg_max_val = 0;
 
-static int netDevice_rx_channel_cfg_max_val = 0;
-static int netDevice_tx_channel_cfg_max_val = 0;
-static int netDevice_combined_channel_cfg_max_val = 0;
+int netDevice_rx_channel_cfg_max_val = 0;
+int netDevice_tx_channel_cfg_max_val = 0;
+int netDevice_combined_channel_cfg_max_val = 0;
 
-static int netDevice_rx_channel_cfg_curr_val = 0;
-static int netDevice_tx_channel_cfg_curr_val = 0;
-static int netDevice_combined_channel_cfg_curr_val = 0;
+int netDevice_rx_channel_cfg_curr_val = 0;
+int netDevice_tx_channel_cfg_curr_val = 0;
+int netDevice_combined_channel_cfg_curr_val = 0;
 
-static int netDevice_only_combined_channel_cfg = 0;
+int netDevice_only_combined_channel_cfg = 0;
 
 char *pUserCfgFile = "user_config.txt";
 char gTuningMode = 0;
@@ -1211,6 +1212,64 @@ int fDoGetNuma(void)
 	return numa;
 }
 
+int fDoGetNproc()
+{
+	char ctime_buf[27];
+	time_t clk;
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t nread;
+	char aNicSetting[256];
+	FILE *nicCfgFPtr = 0;
+	int numa = -1;
+	int found = 0;
+	char * foundstr = 0;
+	int nProcValue = 0;
+
+
+	gettime(&clk, ctime_buf);
+	sprintf(aNicSetting,"nproc > /tmp/NIC.cfgfile 2>/dev/null");
+	system(aNicSetting);
+
+	nicCfgFPtr = fopen("/tmp/NIC.cfgfile","r");
+	if (!nicCfgFPtr)
+	{
+		int save_errno = errno;
+		gettime(&clk, ctime_buf);
+		fprintf(tunLogPtr,"%s %s: Could not open file /tmp/NIC.cfgfile to retrieve nproc info, errno = %d...\n", ctime_buf, phase2str(current_phase), save_errno);
+	}
+	else
+		{
+			sprintf(aNicSetting,"node %d cpus",numaNode);
+
+			while((nread = getline(&line, &len, nicCfgFPtr)) != -1)
+			{
+
+				if (nread > 0)
+				{
+					nProcValue = atoi(line);
+					if (nProcValue > 0)
+						found = 1;
+				}
+					
+				break;
+			}
+
+			fclose(nicCfgFPtr);
+			system("rm -f /tmp/NIC.cfgfile"); //remove file after use
+		
+			if (!found)
+			{
+				fprintf(tunLogPtr,"%s %s: Could not find number of cpus on the system.\n", ctime_buf, phase2str(current_phase));
+			}	
+		}
+
+	if (line)
+		free(line);
+
+	return nProcValue;
+}
+
 void fDoGetNumaNodeString(char numaString[])
 {
 	char ctime_buf[27];
@@ -2295,6 +2354,8 @@ int user_assess(int argc, char **argv)
 	//fDoGetUserCfgValues();
 
 	//fDoGetDeviceCap();
+	
+	nProc =  fDoGetNproc();
 	numaNode = fDoGetNuma();
 	memset(numaNodeString,0,sizeof(numaNodeString));	
 	fDoGetNumaNodeString(numaNodeString);

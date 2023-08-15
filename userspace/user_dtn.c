@@ -53,7 +53,7 @@ void open_csv_file(void);
 void open_csv_file(void)
 {
 	time_t clk;
-	char ctime_buf[27];
+	char ctime_buf[CTIME_BUF_LEN];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 
 	csvLogPtr = fopen("/tmp/csvTuningLog","w");
@@ -2689,6 +2689,65 @@ finish_up:
 return avg_rtt_ping;
 }
 
+void fDoSetChannels(void);
+void fDoSetChannels(void)
+{
+
+	time_t clk;
+	char ctime_buf[CTIME_BUF_LEN];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
+	char buffer[256];
+
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+
+	if (netDevice_combined_channel_cfg_max_val <= nProc)
+	{
+		if (netDevice_combined_channel_cfg_max_val)
+		{
+			int combined_to_use = netDevice_combined_channel_cfg_max_val/8;
+			int tx_to_use = netDevice_combined_channel_cfg_max_val - combined_to_use;
+
+			if (!netDevice_only_combined_channel_cfg)
+			{
+				sprintf(buffer,"ethtool -L %s rx 0 tx %d  combined %d",netDevice, tx_to_use, combined_to_use);
+				fprintf(tunLogPtr,"%s %s: ***WARNING: run the following command to get rid of ksoftirqd resource issue::: %s", ms_ctime_buf, phase2str(current_phase),  buffer);
+			}
+			else
+				{
+					sprintf(buffer,"ethtool -L %s combined %d",netDevice, combined_to_use);
+					fprintf(tunLogPtr,"%s %s: ***WARNING: run the following command to get rid of ksoftirqd resource issue::: %s", ms_ctime_buf, phase2str(current_phase),  buffer);
+				}
+		}
+		else
+		{
+			fprintf(tunLogPtr,"%s %s: ***WARNING: can't fix ksoftirqd resource issue with ethtool command at this point***", ms_ctime_buf, phase2str(current_phase));
+		}
+	}
+	else
+		if (nProc)
+		{
+			if (netDevice_combined_channel_cfg_max_val)
+			{
+				int combined_to_use = nProc/8;
+				int tx_to_use = netDevice_combined_channel_cfg_max_val - combined_to_use;
+
+				if (!netDevice_only_combined_channel_cfg)
+				{
+					sprintf(buffer,"ethtool -L %s rx 0 tx %d  combined %d",netDevice, tx_to_use, combined_to_use);
+					fprintf(tunLogPtr,"%s %s: ***WARNING: run the following command to get rid of ksoftirqd resource issue::: %s", 
+															ms_ctime_buf, phase2str(current_phase),  buffer);
+				}
+				else
+					{
+						sprintf(buffer,"ethtool -L %s combined %d",netDevice, combined_to_use);
+						fprintf(tunLogPtr,"%s %s: ***WARNING: run the following command to get rid of ksoftirqd resource issue::: %s", 
+															ms_ctime_buf, phase2str(current_phase),  buffer);
+					}
+			}
+		}
+}
+
+
 void fDoCheckSoftirqd(void);
 void fDoCheckSoftirqd(void)
 {
@@ -2732,6 +2791,7 @@ void fDoCheckSoftirqd(void)
 			fprintf(tunLogPtr,"%s %s: ***WARNING ksoftirqd is using >= 60%c of CPU resources::: %s", ms_ctime_buf, phase2str(current_phase), '%', buffer);
 			
 			//sudo ethtool -L netro-switch rx 0 tx 28  combined 4
+			fDoSetChannels();
 		}
 		else
 			continue;
@@ -3433,7 +3493,8 @@ int main(int argc, char **argv)
 #endif
 	vGoodBitrateValue = (((97/(double)100) * netDeviceSpeed)/(double)1000); //97% of NIC speed is a good bitrate threshold
 	vGoodBitrateValueThatDoesntNeedMessage = (((88/(double)100) * netDeviceSpeed)/(double)1000); //Won't print 'BITRATE IS LOW' message in this case - log gets cumbersome
-	fprintf(tunLogPtr, "%s %s: ***vGoodBitrateValue = %.1fGb/s***\n", ms_ctime_buf, phase2str(current_phase), vGoodBitrateValue);
+	fprintf(tunLogPtr, "%s %s: ***vGoodBitrateValue = %.1fGb/s*** //97%% of NIC speed is a good bitrate threshold \n", ms_ctime_buf, phase2str(current_phase), vGoodBitrateValue);
+	fprintf(tunLogPtr, "%s %s: ***Number of CPUs on system = %d***\n", ms_ctime_buf, phase2str(current_phase), nProc);
 	fprintf(tunLogPtr, "%s %s: ***Numa Node for %s is %d***\n", ms_ctime_buf, phase2str(current_phase), netDevice, numaNode);
 	if (numaNodeString[0])
 	{
