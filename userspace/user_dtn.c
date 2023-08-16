@@ -72,6 +72,7 @@ void open_csv_file(void)
 	return;
 }
 
+static int vDidSetChannel = 0;
 static int perf_buffer_poll_start = 0;
 static unsigned long prev_total_retrans = 0;
 static time_t total_time_passed = 0;
@@ -1967,6 +1968,32 @@ start:
 		//fprintf(tunLogPtr,"%s %s: DEV %s: TX : %.2f Gb/s RX : %.2f Gb/s\n", ctime_buf, phase2str(current_phase), netDevice, tx_kbits_per_sec/(double)(1048576), rx_kbits_per_sec/(double)(1048576));
 	}
 
+	if (!tx_kbits_per_sec && vDidSetChannel && (vDebugLevel > 0))
+	{
+		char buffer[256];
+		vDidSetChannel = 0;
+		if (!netDevice_only_combined_channel_cfg)
+		{
+			sprintf(buffer,"ethtool -L %s rx %d tx %d  combined %d",netDevice, netDevice_rx_channel_cfg_curr_val, netDevice_tx_channel_cfg_curr_val, 
+																netDevice_combined_channel_cfg_curr_val);
+			current_phase = TUNING;
+			fprintf(tunLogPtr,"%s %s: ***WARNING: File Transfer has stopped... Running the following command to set back %s channels::: %s\n",
+												ms_ctime_buf, phase2str(current_phase), netDevice, buffer);
+			system(buffer);
+			current_phase = LEARNING;
+		}
+		else
+			{
+				sprintf(buffer,"ethtool -L %s combined %d",netDevice,  netDevice_combined_channel_cfg_curr_val);
+				current_phase = TUNING;
+				fprintf(tunLogPtr,"%s %s: ***WARNING: File Transfer has stopped... Running the following command to set back %s channels::: %s\n",
+														ms_ctime_buf, phase2str(current_phase), netDevice, buffer);
+				system(buffer);
+				current_phase = LEARNING;
+			}
+	}
+
+
 	if (vDebugLevel > 1 && average_tx_Gbits_per_sec)
 	{
 		if (!check_bitrate_interval)
@@ -2697,11 +2724,14 @@ void fDoSetChannels(void)
 	char ctime_buf[CTIME_BUF_LEN];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	char buffer[256];
+	static unsigned int count = 0;
 
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
-	if (netDevice_combined_channel_cfg_max_val <= nProc)
+	if ((count++ % 5) == 0) //check every 5 times so it doesn't become annoying
 	{
+	 if (netDevice_combined_channel_cfg_max_val <= nProc)
+	 {
 		if (netDevice_combined_channel_cfg_max_val)
 		{
 			int combined_to_use = netDevice_combined_channel_cfg_max_val/8;
@@ -2710,26 +2740,32 @@ void fDoSetChannels(void)
 			if (!netDevice_only_combined_channel_cfg)
 			{
 				sprintf(buffer,"ethtool -L %s rx 0 tx %d  combined %d",netDevice, tx_to_use, combined_to_use);
-				if (gTuningMode) //need to fix so that current_phase always has the right mode
+				if (gTuningMode && current_phase == LEARNING) //need to fix so that current_phase always has the right mode
 				{
-					fprintf(tunLogPtr,"%s %s: ***WARNING: running the following command to fix ksoftirqd resource issue::: %s", 
-														ms_ctime_buf, "TUNING",  buffer);
+					current_phase = TUNING;
+					fprintf(tunLogPtr,"%s %s: ***WARNING: running the following command to fix ksoftirqd resource issue::: %s\n", 
+														ms_ctime_buf, phase2str(current_phase),  buffer);
 					system(buffer);
+					vDidSetChannel = 1;
+					current_phase = LEARNING;
 				}
 				else
 					{
 						fprintf(tunLogPtr,"%s %s: ***WARNING: please run the following command to fix ksoftirqd resource issue::: %s\n", 
-															ms_ctime_buf, phase2str(current_phase),  buffer);
+														ms_ctime_buf, phase2str(current_phase),  buffer);
 					}
 			}
 			else
 				{
 					sprintf(buffer,"ethtool -L %s combined %d",netDevice, combined_to_use);
-					if (gTuningMode) //need to fix so that current_phase always has the right mode
+					if (gTuningMode && current_phase == LEARNING) //need to fix so that current_phase always has the right mode
 					{
-						fprintf(tunLogPtr,"%s %s: ***WARNING: running the following command to fix ksoftirqd resource issue::: %s", 
-																ms_ctime_buf, "TUNING",  buffer);
+						current_phase = TUNING;
+						fprintf(tunLogPtr,"%s %s: ***WARNING: running the following command to fix ksoftirqd resource issue::: %s\n", 
+														ms_ctime_buf, phase2str(current_phase),  buffer);
 						system(buffer);
+						vDidSetChannel = 1;
+						current_phase = LEARNING;
 					}
 					else
 						{
@@ -2740,11 +2776,11 @@ void fDoSetChannels(void)
 		}
 		else
 			{
-				fprintf(tunLogPtr,"%s %s: ***WARNING: can't fix ksoftirqd resource issue with ethtool command at this point***", 
+				fprintf(tunLogPtr,"%s %s: ***WARNING: can't fix ksoftirqd resource issue with ethtool command at this point***\n", 
 															ms_ctime_buf, phase2str(current_phase));
 			}
-	}
-	else
+	 }
+	 else
 		if (nProc)
 		{
 			if (netDevice_combined_channel_cfg_max_val)
@@ -2755,35 +2791,42 @@ void fDoSetChannels(void)
 				if (!netDevice_only_combined_channel_cfg)
 				{
 					sprintf(buffer,"ethtool -L %s rx 0 tx %d  combined %d",netDevice, tx_to_use, combined_to_use);
-					if (gTuningMode) //need to fix so that current_phase always has the right mode
+					if (gTuningMode && current_phase == LEARNING) //need to fix so that current_phase always has the right mode
 					{
-						fprintf(tunLogPtr,"%s %s: ***WARNING: running the following command to fix ksoftirqd resource issue::: %s", 
+						current_phase = TUNING;
+						fprintf(tunLogPtr,"%s %s: ***WARNING: running the following command to fix ksoftirqd resource issue::: %s\n", 
 														ms_ctime_buf, phase2str(current_phase),  buffer);
 						system(buffer);
+						vDidSetChannel = 1;
+						current_phase = LEARNING;
 					}
 					else
 						{
 							fprintf(tunLogPtr,"%s %s: ***WARNING: please run the following command to fix ksoftirqd resource issue::: %s\n", 
-															ms_ctime_buf, phase2str(current_phase),  buffer);
+														ms_ctime_buf, phase2str(current_phase),  buffer);
 						}
 				}
 				else
 					{
 						sprintf(buffer,"ethtool -L %s combined %d",netDevice, combined_to_use);
-						if (gTuningMode) //need to fix so that current_phase always has the right mode
+						if (gTuningMode && (current_phase == LEARNING)) //need to fix so that current_phase always has the right mode
 						{
-							fprintf(tunLogPtr,"%s %s: ***WARNING: running the following command to fix ksoftirqd resource issue::: %s", 
-															ms_ctime_buf, "TUNING",  buffer);
+							current_phase = TUNING;
+							fprintf(tunLogPtr,"%s %s: ***WARNING: running the following command to fix ksoftirqd resource issue::: %s\n", 
+															ms_ctime_buf, phase2str(current_phase), buffer);
 							system(buffer);
+							vDidSetChannel = 1;
+							current_phase = LEARNING;
 						}
 						else
 							{	
 								fprintf(tunLogPtr,"%s %s: ***WARNING: please run the following command to fix ksoftirqd resource issue::: %s\n", 
-																		ms_ctime_buf, "TUNING",  buffer);
+															ms_ctime_buf, phase2str(current_phase), buffer);
 							}
 					}
 			}
 		}
+	}
 }
 
 
