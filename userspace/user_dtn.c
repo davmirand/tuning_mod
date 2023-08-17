@@ -2745,18 +2745,23 @@ void fDoSetChannels(void)
 					current_phase = TUNING;
 					fprintf(tunLogPtr,"%s %s: ***WARNING: running the following command to fix ksoftirqd resource issue::: %s\n", 
 														ms_ctime_buf, phase2str(current_phase),  buffer);
+					fprintf(tunLogPtr,"%s %s: ***WARNING: Also, please make sure you are running your application using a core in the Nic's NUMA***\n",
+														ms_ctime_buf, phase2str(current_phase));
 					system(buffer);
 					vDidSetChannel = 1;
 					current_phase = LEARNING;
 				}
 				else
 					{
-						fprintf(tunLogPtr,"%s %s: ***WARNING: please run the following command to fix ksoftirqd resource issue::: %s\n", 
+						fprintf(tunLogPtr,"%s %s: ***WARNING: Please make sure you are running your application using a core in the Nic's NUMA***\n",
+														ms_ctime_buf, phase2str(current_phase));
+						fprintf(tunLogPtr,"%s %s: ***WARNING: If the above is true, please run the following command to fix ksoftirqd resource issue::: %s\n", 
 														ms_ctime_buf, phase2str(current_phase),  buffer);
 					}
 			}
 			else
 				{
+#if 0
 					sprintf(buffer,"ethtool -L %s combined %d",netDevice, combined_to_use);
 					if (gTuningMode && current_phase == LEARNING) //need to fix so that current_phase always has the right mode
 					{
@@ -2772,11 +2777,17 @@ void fDoSetChannels(void)
 							fprintf(tunLogPtr,"%s %s: ***WARNING: please run the following command to fix ksoftirqd resource issue::: %s\n", 
 															ms_ctime_buf, phase2str(current_phase),  buffer);
 						}
+#endif
+					fprintf(tunLogPtr,"%s %s: ***WARNING: No known fix for ksoftirqd issue on this NIC at this point:::\n", ms_ctime_buf, phase2str(current_phase));
+					fprintf(tunLogPtr,"%s %s: ***WARNING: Please use tools like \"ethtool -L and/or ethtool -X\" to see if you can resolve this issue:::\n", ms_ctime_buf, phase2str(current_phase));
+					fprintf(tunLogPtr,"%s %s: ***WARNING: Also, please make sure you are running your application using a core in the Nic's NUMA***\n", ms_ctime_buf, phase2str(current_phase));
 				}
 		}
 		else
 			{
 				fprintf(tunLogPtr,"%s %s: ***WARNING: can't fix ksoftirqd resource issue with ethtool command at this point***\n", 
+															ms_ctime_buf, phase2str(current_phase));
+				fprintf(tunLogPtr,"%s %s: ***WARNING: However, please make sure you are running your application using a core in the Nic's NUMA***\n",
 															ms_ctime_buf, phase2str(current_phase));
 			}
 	 }
@@ -2796,18 +2807,23 @@ void fDoSetChannels(void)
 						current_phase = TUNING;
 						fprintf(tunLogPtr,"%s %s: ***WARNING: running the following command to fix ksoftirqd resource issue::: %s\n", 
 														ms_ctime_buf, phase2str(current_phase),  buffer);
+						fprintf(tunLogPtr,"%s %s: ***WARNING: Also, please make sure you are running your application using a core in the Nic's NUMA***\n",
+																ms_ctime_buf, phase2str(current_phase));
 						system(buffer);
 						vDidSetChannel = 1;
 						current_phase = LEARNING;
 					}
 					else
 						{
-							fprintf(tunLogPtr,"%s %s: ***WARNING: please run the following command to fix ksoftirqd resource issue::: %s\n", 
+							fprintf(tunLogPtr,"%s %s: ***WARNING: Please make sure you are running your application using a core in the Nic's NUMA***\n",
+														ms_ctime_buf, phase2str(current_phase));
+							fprintf(tunLogPtr,"%s %s: ***WARNING: If the above is true, please run the following command to fix ksoftirqd resource issue::: %s\n", 
 														ms_ctime_buf, phase2str(current_phase),  buffer);
 						}
 				}
 				else
 					{
+#if 0
 						sprintf(buffer,"ethtool -L %s combined %d",netDevice, combined_to_use);
 						if (gTuningMode && (current_phase == LEARNING)) //need to fix so that current_phase always has the right mode
 						{
@@ -2823,6 +2839,12 @@ void fDoSetChannels(void)
 								fprintf(tunLogPtr,"%s %s: ***WARNING: please run the following command to fix ksoftirqd resource issue::: %s\n", 
 															ms_ctime_buf, phase2str(current_phase), buffer);
 							}
+#endif
+						fprintf(tunLogPtr,"%s %s: ***WARNING: No known fix for ksoftirqd issue on this NIC at this point:::\n", ms_ctime_buf, phase2str(current_phase));
+						fprintf(tunLogPtr,"%s %s: ***WARNING: Please use tools like \"ethtool -L and/or ethtool -X\" to see if you can resolve this issue:::\n", 
+																			ms_ctime_buf, phase2str(current_phase));
+						fprintf(tunLogPtr,"%s %s: ***WARNING: Also, please make sure you are running your application using a core in the Nic's NUMA***\n",
+																			ms_ctime_buf, phase2str(current_phase));
 					}
 			}
 		}
