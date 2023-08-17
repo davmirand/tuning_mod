@@ -2469,13 +2469,12 @@ double fDoCpuMonitoring()
 return found;
 }
 
-double fFindRetransmissionRate(void);
-double fFindRetransmissionRate(void)
+void *doRunFindRetransmissionRate(void * vargp)
 {
 	time_t clk;
 	time_t vTime;
-	static time_t nnow_time = 0;
-	static time_t nlast_time = 0;
+	time_t nnow_time = 0;
+	time_t nlast_time = 0;
 	time_t time_passed = 0;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
@@ -2485,10 +2484,11 @@ double fFindRetransmissionRate(void)
 	double avg_retrans_per_sec = 0.0;
 	unsigned long total_retrans = 0;
 	unsigned long new_total_retrans = 0;
+	unsigned long packets_sent = 0;
         char * foundstr = 0;
 	int found = 0;
 
-	if (aDest_Ip2[0] == 0)
+	while (aDest_Ip2[0] == 0 && !vIamASrcDtn)
 	{
 		if (vDebugLevel > 1)
 		{
@@ -2496,10 +2496,19 @@ double fFindRetransmissionRate(void)
 			fprintf(tunLogPtr,"%s %s: ***Waiting on Peer (Dest) Ip addres***\n", ms_ctime_buf, phase2str(current_phase));
 			fflush(tunLogPtr);
 		}
-		return 0; //didn't get  a message from the peer yet
+		sleep(2);
 	}
 	
 	sprintf(try,"%s","cat /sys/fs/bpf/tcp4");
+
+retrans:
+	time_passed = 0;
+	avg_retrans_per_sec = 0.0;
+	total_retrans = 0;
+	new_total_retrans = 0;
+	packets_sent = 0;
+        foundstr = 0;
+	found = 0;
 
         if (nnow_time == 0) //first time thru
         {
@@ -2512,14 +2521,12 @@ double fFindRetransmissionRate(void)
                 time_passed =  nnow_time - nlast_time;
         }
 
-
-
 	pipe = popen(try,"r");
 	if (!pipe)
 	{
 		printf("popen failed!\n");
 		printf("here2222***\n");
-		return 0;
+		return (char *)0;
 	}
 
 	while (!feof(pipe))
@@ -2571,10 +2578,27 @@ double fFindRetransmissionRate(void)
 						vLast_Avg_Num_Retransmissions_Per_Sec = 0;
 					}
 
+					// get packets sent now
+					memset(aValue,0,32);
+					count = 0;
+					foundstr++;
+					
+					while (isdigit(*foundstr))
+                			{
+                        			aValue[count++] = *foundstr;
+						foundstr++;
+					}
+
+					aValue[count] = 0;
+					if (count)
+						packets_sent = strtoul(aValue, (char **)0, 10 );
+
+
+
 					if (vDebugLevel > 4)
 					{
 						//fprintf(tunLogPtr,"%s %s: ***Value is *%s, count is %d, retrans is %lu\n", ctime_buf, phase2str(current_phase),aValue, count, total_retrans);
-						fprintf(tunLogPtr,"%s %s: ***total retransmissions so far  is %lu, previous retransmissions is %lu\n", ms_ctime_buf, phase2str(current_phase), total_retrans, prev_total_retrans);
+						fprintf(tunLogPtr,"%s %s: ***packets_sent = %lu, total retransmissions so far  is %lu, previous retransmissions is %lu\n", ms_ctime_buf, phase2str(current_phase), packets_sent, total_retrans, prev_total_retrans);
 					}
 
 
@@ -2619,7 +2643,11 @@ finish_up:
 
 	//retansmissionrate is (total_retrans/(double)tcp_sock->segs_out) * 100.0
 	//For now return vTotal_Num_Retransmissions_Per_Sec
-return vTotal_Num_Retransmissions_Per_Sec;
+	vRetransmissionRate = vTotal_Num_Retransmissions_Per_Sec;
+	msleep(500); //sleep 500 millisecs
+	goto retrans;
+
+return (char *) 0;
 }
 
 double fFindRttUsingPing()
@@ -2922,10 +2950,14 @@ void * fDoRunFindHighestRtt(void * vargp)
 	int applied = 0, suggested = 0, nothing_done = 0;
 	int tune = 1; //1 = up, 2 = down - tune up initially
 
+	unsigned int retrans = 0;
+	unsigned int packets_sent = 0;
+
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Starting Finding Highest RTT thread ...***\n", ms_ctime_buf, phase2str(current_phase));
         
-	sprintf(try,"sudo bpftrace -e \'BEGIN { @ca_rtt_us;} kprobe:tcp_ack_update_rtt { @ca_rtt_us = arg4; } kretprobe:tcp_ack_update_rtt /pid != 0/ { printf(\"%s\\n\", @ca_rtt_us); } interval:ms:125 {  exit(); } END { clear(@ca_rtt_us); }\'", "%ld");
+	sprintf(try,"sudo bpftrace -e \'BEGIN { @ca_rtt_us; @str_tsock;} kprobe:tcp_ack_update_rtt { @str_tsock = (struct tcp_sock *) arg0; @ca_rtt_us = arg4; } kretprobe:tcp_ack_update_rtt /pid != 0/ { printf(\"%s %s %s\\n\", @ca_rtt_us, @str_tsock->total_retrans, @str_tsock->segs_out); } interval:ms:125 {  exit(); } END { clear(@ca_rtt_us); clear(@str_tsock);}\'", "%ld", "%u", "%u");
+	//sprintf(try,"sudo bpftrace -e \'BEGIN { @ca_rtt_us;} kprobe:tcp_ack_update_rtt { @ca_rtt_us = arg4; } kretprobe:tcp_ack_update_rtt /pid != 0/ { printf(\"%s\\n\", @ca_rtt_us); } interval:ms:125 {  exit(); } END { clear(@ca_rtt_us); }\'", "%ld");
 
 rttstart:
 
@@ -2936,7 +2968,7 @@ rttstart:
 		if (vIamASrcDtn)
 		{
 			highest_rtt_from_ping = fFindRttUsingPing();
-			vRetransmissionRate = fFindRetransmissionRate();
+			//vRetransmissionRate = fFindRetransmissionRate();
 		}
 
 		if (vDebugLevel > 2) 
@@ -2947,6 +2979,9 @@ rttstart:
 	}
 
 	rtt = 0;
+	retrans = 0;
+	packets_sent = 0;
+
 	highest_rtt = 0;
 	pipe = popen(try,"r");
 	if (!pipe)
@@ -2974,7 +3009,8 @@ rttstart:
 				goto finish_up;
 				return (char *)-2;
 			}
-		sscanf(buffer,"%lu", &rtt);
+		//sscanf(buffer,"%lu", &rtt);
+		sscanf(buffer,"%lu %u %u", &rtt, &retrans, &packets_sent);
 		if (rtt > highest_rtt)
 			highest_rtt = rtt;
 
@@ -3016,6 +3052,12 @@ finish_up:
 		if (highest_rtt_from_ping >= RTT_THRESHOLD)
 			fDoManageRtt(highest_rtt_from_ping, &applied, &suggested, &nothing_done, &tune, aApplyDefTunBest, 0); //0 is from ping
 #endif
+		if (vDebugLevel > 0)
+		{
+				fprintf(tunLogPtr,"%s %s: !!!***WARNING: retrans = %u and packets_sent = %u from bpf trace ***\n", 
+						ms_ctime_buf, phase2str(current_phase), retrans, packets_sent);
+		}
+
 	}
 
 	if (vDebugLevel > 6 && previous_average_tx_Gbits_per_sec)
@@ -3468,6 +3510,15 @@ int main(int argc, char **argv)
 	int vRetFromRunSendMessageToPeerThread, vRetFromRunSendMessageToPeerJoin;
 	pthread_t doRunBpfCollectionThread_id, doRunHttpServerThread_id, doRunGetThresholds_id, doRunHelperDtn_id;
 	pthread_t doRunFindHighestRttThread_id, doRunGetMessageFromPeerThread_id, doRunSendMessageToPeerThread_id;;
+
+#if 1
+
+	int vRetFromRunFindRetransmissionRateThread, vRetFromRunFindRetransmissionRateJoin;
+	pthread_t doRunFindRetransmissionRateThread_id;
+
+#endif
+
+
 	sArgv_t sArgv;
 	time_t clk;
 	char ctime_buf[27];
@@ -3624,6 +3675,8 @@ int main(int argc, char **argv)
 	vRetFromRunGetMessageFromPeerThread = pthread_create(&doRunGetMessageFromPeerThread_id, NULL, fDoRunGetMessageFromPeer, &sArgv); 
 	//Send messages to source DTN
 	vRetFromRunSendMessageToPeerThread = pthread_create(&doRunSendMessageToPeerThread_id, NULL, fDoRunSendMessageToPeer, &sArgv); 
+	//Find Retransmission rate to help determine congestion
+	vRetFromRunFindRetransmissionRateThread = pthread_create(&doRunFindRetransmissionRateThread_id, NULL, doRunFindRetransmissionRate, &sArgv); 
 
 	if (vRetFromRunBpfThread == 0)
     		vRetFromRunBpfJoin = pthread_join(doRunBpfCollectionThread_id, NULL);
@@ -3646,6 +3699,8 @@ int main(int argc, char **argv)
 	if (vRetFromRunSendMessageToPeerThread == 0)
     		vRetFromRunSendMessageToPeerJoin = pthread_join(doRunSendMessageToPeerThread_id, NULL);
 
+	if (vRetFromRunFindRetransmissionRateThread == 0)
+		vRetFromRunFindRetransmissionRateJoin = pthread_join(doRunFindRetransmissionRateThread_id, NULL); 
 leave:
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	fprintf(tunLogPtr, "%s %s: Closing tuning Log***\n", ms_ctime_buf, phase2str(current_phase));
