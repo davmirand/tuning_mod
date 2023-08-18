@@ -74,10 +74,7 @@ void open_csv_file(void)
 
 static int vDidSetChannel = 0;
 static int perf_buffer_poll_start = 0;
-static unsigned long prev_total_retrans = 0;
-static time_t total_time_passed = 0;
-static double vLast_Avg_Num_Retransmissions_Per_Sec = 0.0;
-static double vTotal_Num_Retransmissions_Per_Sec = 0.0;
+//static time_t total_time_passed = 0;
 static double vRetransmissionRate = 0.0;
 static double vGlobal_average_tx_Gbits_per_sec = 0.0;
 static int new_traffic = 0;
@@ -2469,57 +2466,42 @@ double fDoCpuMonitoring()
 return found;
 }
 
+#define COUNT_TO_LOG	100
 void *doRunFindRetransmissionRate(void * vargp)
 {
 	time_t clk;
-	time_t vTime;
-	time_t nnow_time = 0;
-	time_t nlast_time = 0;
-	time_t time_passed = 0;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	char buffer[256];
 	FILE *pipe;
 	char try[1024];
-	double avg_retrans_per_sec = 0.0;
 	unsigned long total_retrans = 0;
-	unsigned long new_total_retrans = 0;
 	unsigned long packets_sent = 0;
         char * foundstr = 0;
 	int found = 0;
+	unsigned int countLog = 0;
 
 	while (aDest_Ip2[0] == 0 && !vIamASrcDtn)
 	{
-		if (vDebugLevel > 1)
+		if (vDebugLevel > 6)
 		{
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			fprintf(tunLogPtr,"%s %s: ***Waiting on Peer (Dest) Ip addres***\n", ms_ctime_buf, phase2str(current_phase));
 			fflush(tunLogPtr);
 		}
-		sleep(2);
+		sleep(3);
 	}
 	
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+	fprintf(tunLogPtr,"%s %s: ***Starting Find Retransmission Rate thread ...***\n", ms_ctime_buf, phase2str(current_phase));	
+
 	sprintf(try,"%s","cat /sys/fs/bpf/tcp4");
 
 retrans:
-	time_passed = 0;
-	avg_retrans_per_sec = 0.0;
 	total_retrans = 0;
-	new_total_retrans = 0;
 	packets_sent = 0;
         foundstr = 0;
 	found = 0;
-
-        if (nnow_time == 0) //first time thru
-        {
-                nnow_time = time(&vTime);
-        }
-        else
-        {
-                nlast_time = nnow_time;
-                nnow_time = time(&vTime);
-                time_passed =  nnow_time - nlast_time;
-        }
 
 	pipe = popen(try,"r");
 	if (!pipe)
@@ -2546,18 +2528,14 @@ retrans:
 			foundstr = strstr(foundstr,"totrt");
 			if (foundstr)
 			{
-				if (vDebugLevel > 6)
-				{
-					fprintf(tunLogPtr,"%s %s: ***time_passed = %lu, actual string is \"%s\" returns *%s", ms_ctime_buf, phase2str(current_phase),time_passed, try, buffer);
-				}
-
 				char aValue[32];
 				int count = 0;
 				memset(aValue,0,32);
 				foundstr = foundstr + 6;
+#if 0
 				if (*foundstr == '0')
 					continue; //no need to count zeros
-
+#endif
 				while (isdigit(*foundstr))
                 		{
                         		aValue[count++] = *foundstr;
@@ -2567,16 +2545,13 @@ retrans:
 				aValue[count] = 0;
 				if (count)
 				{
-					//prev_total_retrans = total_retrans;
+				
+					if ((vDebugLevel > 8) && ((countLog % COUNT_TO_LOG) == 0))
+					{
+						fprintf(tunLogPtr,"%s %s: ***actual string with retransmission is \"%s\"", ms_ctime_buf, phase2str(current_phase),buffer);
+					}
 
 					total_retrans = strtoul(aValue, (char **)0, 10);
-					if (prev_total_retrans > total_retrans) //can't be ha ha - must have stopped in middle of file transfer and started over
-					{
-						prev_total_retrans = 0;
-						total_time_passed = 0;
-						vRetransmissionRate = 0.0;	
-						vLast_Avg_Num_Retransmissions_Per_Sec = 0;
-					}
 
 					// get packets sent now
 					memset(aValue,0,32);
@@ -2594,23 +2569,17 @@ retrans:
 						packets_sent = strtoul(aValue, (char **)0, 10 );
 
 
-
-					if (vDebugLevel > 4)
-					{
-						//fprintf(tunLogPtr,"%s %s: ***Value is *%s, count is %d, retrans is %lu\n", ctime_buf, phase2str(current_phase),aValue, count, total_retrans);
-						fprintf(tunLogPtr,"%s %s: ***packets_sent = %lu, total retransmissions so far  is %lu, previous retransmissions is %lu\n", ms_ctime_buf, phase2str(current_phase), packets_sent, total_retrans, prev_total_retrans);
-					}
-
-
+					if (vDebugLevel > 7) //quick log
+						fprintf(tunLogPtr,"%s %s: ***packets_sent = %lu, total retransmissions so far  is %lu\n", 
+								ms_ctime_buf, phase2str(current_phase), packets_sent, total_retrans);
+					else
+						if ((vDebugLevel > 5) && ((countLog % COUNT_TO_LOG) == 0)) //slow log
+						{
+							fprintf(tunLogPtr,"%s %s: ***packets_sent = %lu, total retransmissions so far  is %lu\n", 
+										ms_ctime_buf, phase2str(current_phase), packets_sent, total_retrans);
+						}
 
 					found = 1;
-					new_total_retrans = total_retrans - prev_total_retrans;
-					prev_total_retrans = total_retrans;
-					
-					if (vDebugLevel > 4)
-					{
-						fprintf(tunLogPtr,"%s %s: ***new retransmissions is %lu\n", ms_ctime_buf, phase2str(current_phase), new_total_retrans);
-					}
 				}
                 	}
 		}
@@ -2622,29 +2591,19 @@ finish_up:
 	pclose(pipe);
 	if (found)
 	{
-		if (time_passed)
-		{
-			avg_retrans_per_sec = new_total_retrans / (double)time_passed;
-			total_time_passed += time_passed;
-			vTotal_Num_Retransmissions_Per_Sec = total_retrans/(double)total_time_passed;
-		}
+		vRetransmissionRate = (total_retrans/(double)packets_sent) * 100.0;
 
-		if (vDebugLevel > 2)
+		if ((vDebugLevel > 2) && ((countLog % COUNT_TO_LOG) == 0))
 		{
-			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-			fprintf(tunLogPtr,"%s %s: ***Average retransmissions over last %lu seconds is %.2f per sec\n", ms_ctime_buf, phase2str(current_phase), time_passed, avg_retrans_per_sec);
-			fprintf(tunLogPtr,"%s %s: ***Total retransmissions per second is %.2f\n", ms_ctime_buf, phase2str(current_phase), vTotal_Num_Retransmissions_Per_Sec);
+			fprintf(tunLogPtr,"%s %s: Retransmission rate is %.5f\n", ms_ctime_buf, phase2str(current_phase), vRetransmissionRate);
 		}
+		
+		countLog++; //otherwise would output too quickly
 	}
 	
-	vLast_Avg_Num_Retransmissions_Per_Sec = avg_retrans_per_sec;
-		
 	fflush(tunLogPtr);
 
-	//retansmissionrate is (total_retrans/(double)tcp_sock->segs_out) * 100.0
-	//For now return vTotal_Num_Retransmissions_Per_Sec
-	vRetransmissionRate = vTotal_Num_Retransmissions_Per_Sec;
-	msleep(500); //sleep 500 millisecs
+	msleep(100); //sleep 100 millisecs
 	goto retrans;
 
 return (char *) 0;
@@ -2950,14 +2909,11 @@ void * fDoRunFindHighestRtt(void * vargp)
 	int applied = 0, suggested = 0, nothing_done = 0;
 	int tune = 1; //1 = up, 2 = down - tune up initially
 
-	unsigned int retrans = 0;
-	unsigned int packets_sent = 0;
-
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Starting Finding Highest RTT thread ...***\n", ms_ctime_buf, phase2str(current_phase));
         
-	sprintf(try,"sudo bpftrace -e \'BEGIN { @ca_rtt_us; @str_tsock;} kprobe:tcp_ack_update_rtt { @str_tsock = (struct tcp_sock *) arg0; @ca_rtt_us = arg4; } kretprobe:tcp_ack_update_rtt /pid != 0/ { printf(\"%s %s %s\\n\", @ca_rtt_us, @str_tsock->total_retrans, @str_tsock->segs_out); } interval:ms:125 {  exit(); } END { clear(@ca_rtt_us); clear(@str_tsock);}\'", "%ld", "%u", "%u");
-	//sprintf(try,"sudo bpftrace -e \'BEGIN { @ca_rtt_us;} kprobe:tcp_ack_update_rtt { @ca_rtt_us = arg4; } kretprobe:tcp_ack_update_rtt /pid != 0/ { printf(\"%s\\n\", @ca_rtt_us); } interval:ms:125 {  exit(); } END { clear(@ca_rtt_us); }\'", "%ld");
+	//sprintf(try,"sudo bpftrace -e \'BEGIN { @ca_rtt_us; @str_tsock;} kprobe:tcp_ack_update_rtt { @str_tsock = (struct tcp_sock *) arg0; @ca_rtt_us = arg4; } kretprobe:tcp_ack_update_rtt /pid != 0/ { printf(\"%s %s %s\\n\", @ca_rtt_us, @str_tsock->total_retrans, @str_tsock->segs_out); } interval:ms:125 {  exit(); } END { clear(@ca_rtt_us); clear(@str_tsock);}\'", "%ld", "%u", "%u");
+	sprintf(try,"sudo bpftrace -e \'BEGIN { @ca_rtt_us;} kprobe:tcp_ack_update_rtt { @ca_rtt_us = arg4; } kretprobe:tcp_ack_update_rtt /pid != 0/ { printf(\"%s\\n\", @ca_rtt_us); } interval:ms:125 {  exit(); } END { clear(@ca_rtt_us); }\'", "%ld");
 
 rttstart:
 
@@ -2968,7 +2924,6 @@ rttstart:
 		if (vIamASrcDtn)
 		{
 			highest_rtt_from_ping = fFindRttUsingPing();
-			//vRetransmissionRate = fFindRetransmissionRate();
 		}
 
 		if (vDebugLevel > 2) 
@@ -2979,9 +2934,6 @@ rttstart:
 	}
 
 	rtt = 0;
-	retrans = 0;
-	packets_sent = 0;
-
 	highest_rtt = 0;
 	pipe = popen(try,"r");
 	if (!pipe)
@@ -3009,8 +2961,8 @@ rttstart:
 				goto finish_up;
 				return (char *)-2;
 			}
-		//sscanf(buffer,"%lu", &rtt);
-		sscanf(buffer,"%lu %u %u", &rtt, &retrans, &packets_sent);
+		sscanf(buffer,"%lu", &rtt);
+		//sscanf(buffer,"%lu %u %u", &rtt, &retrans, &packets_sent);
 		if (rtt > highest_rtt)
 			highest_rtt = rtt;
 
@@ -3052,12 +3004,6 @@ finish_up:
 		if (highest_rtt_from_ping >= RTT_THRESHOLD)
 			fDoManageRtt(highest_rtt_from_ping, &applied, &suggested, &nothing_done, &tune, aApplyDefTunBest, 0); //0 is from ping
 #endif
-		if (vDebugLevel > 0)
-		{
-				fprintf(tunLogPtr,"%s %s: !!!***WARNING: retrans = %u and packets_sent = %u from bpf trace ***\n", 
-						ms_ctime_buf, phase2str(current_phase), retrans, packets_sent);
-		}
-
 	}
 
 	if (vDebugLevel > 6 && previous_average_tx_Gbits_per_sec)
@@ -3362,9 +3308,7 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 			{
 				char *peeraddrpresn = inet_ntoa(peeraddr.sin_addr);
 				sprintf(aDest_Ip2_Binary,"%02X",peeraddr.sin_addr.s_addr);
-				prev_total_retrans = 0;
-				total_time_passed = 0;
-				vLast_Avg_Num_Retransmissions_Per_Sec = 0;
+				//total_time_passed = 0;
 				if (vDebugLevel > 1)
 				{
 					fprintf(tunLogPtr,"%s %s: ***Peer information: ip long %s\n", ms_ctime_buf, phase2str(current_phase), aDest_Ip2_Binary);
