@@ -338,7 +338,7 @@ static time_t qinfo_clk_max = 0;
 static char qinfo_ms_ctime_buf_max[MS_CTIME_BUF_LEN];
 
 static __u32 vQinfoUserValue = 0; //Eventually Initialize this value with vQUEUE_OCCUPANCY_DELTA
-static double vRetransmissionRateThreshold = 100; //Percentage - incoorect value beung used now. Will change.
+static double vRetransmissionRateThreshold = 2; //Percentage 
 static __u32 ingress_time = 0;
 static __u32 egress_time = 0;
 static __u32 hop_hop_latency_threshold = 0;
@@ -1148,11 +1148,11 @@ void check_req(http_s *h, char aResp[])
 		}
 
         	sscanf(aNumber,"%lf", &vNewRetransRate);
-		sprintf(aResp,"Changed  maximum retransmission rate allowed from %.2f to %.2f!\n", vRetransmissionRateThreshold, vNewRetransRate);
+		sprintf(aResp,"Changed  maximum retransmission rate allowed from %.5f to %.5f!\n", vRetransmissionRateThreshold, vNewRetransRate);
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change maximum retransmission rate allowed from %.2f to %.2f***\n", ms_ctime_buf, phase2str(current_phase), vRetransmissionRateThreshold, vNewRetransRate);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change maximum retransmission rate allowed from %.5f to %.5f***\n", ms_ctime_buf, phase2str(current_phase), vRetransmissionRateThreshold, vNewRetransRate);
 		vRetransmissionRateThreshold = vNewRetransRate;
-		fprintf(tunLogPtr,"%s %s: ***New retransmission rate allowed is *%.2f***\n", ms_ctime_buf, phase2str(current_phase), vRetransmissionRateThreshold);
+		fprintf(tunLogPtr,"%s %s: ***New retransmission rate allowed is *%.5f***\n", ms_ctime_buf, phase2str(current_phase), vRetransmissionRateThreshold);
 		goto after_check;
 	}
 			
@@ -2477,6 +2477,8 @@ void *doRunFindRetransmissionRate(void * vargp)
 	char try[1024];
 	unsigned long total_retrans = 0;
 	unsigned long packets_sent = 0;
+	unsigned long pre_total_retrans = 0;
+	unsigned long pre_packets_sent = 0;
         char * foundstr = 0;
 	int found = 0;
 	unsigned int countLog = 0;
@@ -2502,7 +2504,15 @@ retrans:
 	packets_sent = 0;
         foundstr = 0;
 	found = 0;
+	pre_total_retrans = 0;
+	pre_packets_sent = 0;
 
+	if (!previous_average_tx_Gbits_per_sec)
+		msleep(1000); //nothing going on. Get some rest
+#if 0
+	else 
+		fprintf(tunLogPtr,"%s %s: ***Starting of Retransmission and packets %u***\n", ms_ctime_buf, phase2str(current_phase), countLog);
+#endif
 	pipe = popen(try,"r");
 	if (!pipe)
 	{
@@ -2551,7 +2561,8 @@ retrans:
 						fprintf(tunLogPtr,"%s %s: ***actual string with retransmission is \"%s\"", ms_ctime_buf, phase2str(current_phase),buffer);
 					}
 
-					total_retrans = strtoul(aValue, (char **)0, 10);
+					pre_total_retrans = strtoul(aValue, (char **)0, 10);
+					total_retrans += pre_total_retrans;
 
 					// get packets sent now
 					memset(aValue,0,32);
@@ -2566,12 +2577,19 @@ retrans:
 
 					aValue[count] = 0;
 					if (count)
-						packets_sent = strtoul(aValue, (char **)0, 10 );
+					{
+						pre_packets_sent = strtoul(aValue, (char **)0, 10 );
+						packets_sent += pre_packets_sent;
+					}
 
 
 					if (vDebugLevel > 7) //quick log
+					{
+						fprintf(tunLogPtr,"%s %s: ***pre_packets_sent = %lu, pre_total_retransmissions so far  is %lu\n", 
+								ms_ctime_buf, phase2str(current_phase), pre_packets_sent, pre_total_retrans);
 						fprintf(tunLogPtr,"%s %s: ***packets_sent = %lu, total retransmissions so far  is %lu\n", 
 								ms_ctime_buf, phase2str(current_phase), packets_sent, total_retrans);
+					}
 					else
 						if ((vDebugLevel > 5) && ((countLog % COUNT_TO_LOG) == 0)) //slow log
 						{
