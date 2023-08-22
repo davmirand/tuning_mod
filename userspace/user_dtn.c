@@ -3473,13 +3473,13 @@ int main(int argc, char **argv)
 	pthread_t doRunBpfCollectionThread_id, doRunHttpServerThread_id, doRunGetThresholds_id, doRunHelperDtn_id;
 	pthread_t doRunFindHighestRttThread_id, doRunGetMessageFromPeerThread_id, doRunSendMessageToPeerThread_id;;
 
-#if 1
-
 	int vRetFromRunFindRetransmissionRateThread, vRetFromRunFindRetransmissionRateJoin;
 	pthread_t doRunFindRetransmissionRateThread_id;
 
+#ifdef HPNSSH_QFACTOR
+	int vRetFromHandleHpnsshQfactorEnvThread, vRetFromHandleHpnsshQfactorEnvJoin;
+	pthread_t doHandleHpnsshQfactorEnvThread_id;
 #endif
-
 
 	sArgv_t sArgv;
 	time_t clk;
@@ -3640,6 +3640,10 @@ int main(int argc, char **argv)
 	//Find Retransmission rate to help determine congestion
 	vRetFromRunFindRetransmissionRateThread = pthread_create(&doRunFindRetransmissionRateThread_id, NULL, doRunFindRetransmissionRate, &sArgv); 
 
+#ifdef HPNSSH_QFACTOR
+	//Get Ready to accept connects from hpnssh process
+	vRetFromHandleHpnsshQfactorEnvThread = pthread_create(&doHandleHpnsshQfactorEnvThread_id, NULL, doHandleHpnsshQfactorEnv, &sArgv);
+#endif
 	if (vRetFromRunBpfThread == 0)
     		vRetFromRunBpfJoin = pthread_join(doRunBpfCollectionThread_id, NULL);
 	
@@ -3663,6 +3667,12 @@ int main(int argc, char **argv)
 
 	if (vRetFromRunFindRetransmissionRateThread == 0)
 		vRetFromRunFindRetransmissionRateJoin = pthread_join(doRunFindRetransmissionRateThread_id, NULL); 
+
+#ifdef HPNSSH_QFACTOR
+	if (vRetFromHandleHpnsshQfactorEnvThread == 0)
+		vRetFromHandleHpnsshQfactorEnvJoin = pthread_join(doHandleHpnsshQfactorEnvThread_id, NULL);
+#endif
+
 leave:
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	fprintf(tunLogPtr, "%s %s: Closing tuning Log***\n", ms_ctime_buf, phase2str(current_phase));
