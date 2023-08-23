@@ -20,6 +20,9 @@
 #include <linux/bpf.h>
 #include <arpa/inet.h>
 
+#include <sys/ipc.h>
+#include <sys/shm.h>
+
 #include "unp.h"
 #include "user_dtn.h"
 
@@ -49,6 +52,64 @@ void gettimeWithMilli(time_t *clk, char *ctime_buf, char *ms_ctime_buf)
 return;
 }
 
+
+typedef struct
+{
+  int id;
+  size_t size;
+} shm_t;
+
+shm_t *shm_new(size_t size)
+{
+  shm_t *shm = calloc(1, sizeof *shm);
+  shm->size = size;
+
+  if ((shm->id = shmget(IPC_PRIVATE, size, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR)) < 0)
+  {
+    perror("shmget");
+    free(shm);
+    return NULL;
+  }
+
+  return shm;
+}
+
+void shm_write(shm_t *shm, void *data)
+{
+  void *shm_data;
+
+  if ((shm_data = shmat(shm->id, NULL, 0)) == (void *) -1)
+  {
+    perror("write");
+    return;
+  }
+
+  memcpy(shm_data, data, shm->size);
+  shmdt(shm_data);
+}
+
+int shm_read(void *data, shm_t *shm)
+{
+  void *shm_data;
+
+  if ((shm_data = shmat(shm->id, NULL, 0)) == (void *) -1)
+  {
+    perror("read");
+    return 0;
+  }
+  memcpy(data, shm_data, shm->size);
+  shmdt(shm_data);
+  return 1;
+}
+
+void shm_del(shm_t *shm)
+{
+  shmctl(shm->id, IPC_RMID, 0);
+  free(shm);
+}
+
+shm_t *shm = 0;
+
 void open_csv_file(void);
 void open_csv_file(void)
 {
@@ -77,6 +138,7 @@ static int perf_buffer_poll_start = 0;
 //static time_t total_time_passed = 0;
 static double vRetransmissionRate = 0.0;
 static double vGlobal_average_tx_Gbits_per_sec = 0.0;
+int vResetPacingBack = 0;
 static int new_traffic = 0;
 static int rx_traffic = 0;
 static time_t now_time = 0;
@@ -251,6 +313,7 @@ void sig_int_handler(int signum, siginfo_t *info, void *ptr)
 {
 	//write(STDERR_FILENO, SIGINT_MSG, sizeof(SIGINT_MSG));
 	fprintf(tunLogPtr,"Caught SIGINT, exiting...\n");
+	shm_del(shm);
 	fclose(tunLogPtr);
 
 	if (csvLogPtr)
@@ -603,12 +666,11 @@ void EvaluateQOcc_and_HopDelay(__u32 hop_key_hop_index)
 			if (vDebugLevel > 2)
 			{
 				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-				printf("%s %s: ***Timer set to %d microseconds for Queue Occupancy and HopDelay over threshholds***\n",ms_ctime_buf, phase2str(current_phase), gInterval); 
+				fprintf(tunLogPtr,"%s %s: ***WARNING !!! WARNING !!! Timer set to %d microseconds for Queue Occupancy and HopDelay over threshholds***\n",ms_ctime_buf, phase2str(current_phase), gInterval); 
 			}
 		}
 		else
-			printf("%s %s: ***could not set Timer, vRetTimer = %d,  errno = to %d***\n",ms_ctime_buf, phase2str(current_phase), vRetTimer, errno); 
-
+			fprintf(tunLogPtr,"%s %s: ***WARNING !!! WARNING !!! Could not set Timer, vRetTimer = %d,  errno = to %d***\n",ms_ctime_buf, phase2str(current_phase), vRetTimer, errno); 
 	}
 
 	return;
@@ -631,12 +693,11 @@ void EvaluateQOccUserInfo(__u32 hop_key_hop_index)
 			if (vDebugLevel > 2)
 			{
 				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-				printf("%s %s: ***Timer set to %d microseconds for Queue Occupancy User Info***\n",ms_ctime_buf, phase2str(current_phase), gInterval); 
+				fprintf(tunLogPtr,"%s %s: ***WARNING !!! WARNING !!! Timer set to %d microseconds for Queue Occupancy User Info***\n",ms_ctime_buf, phase2str(current_phase), gInterval); 
 			}
 		}
 		else
-			printf("%s %s: ***could not set Qinfo User InfoTimer, vRetTimer = %d,  errno = to %d***\n",ms_ctime_buf, phase2str(current_phase), vRetTimer, errno); 
-
+			fprintf(tunLogPtr,"%s %s: ***WARNING !!! WARNING !!! Could not set Qinfo User InfoTimer, vRetTimer = %d,  errno = to %d***\n",ms_ctime_buf, phase2str(current_phase), vRetTimer, errno); 
 	}
 
 	return;
@@ -874,9 +935,9 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			fprintf(tunLogPtr, "%s %s: ***flow_total_time_in_all_hops = %lld\n", ms_ctime_buf, phase2str(current_phase), flow_hop_latency_threshold);
 		}
-
-		fflush(tunLogPtr);
 	}
+		
+	fflush(tunLogPtr);
 }
 
 void lost_func(struct threshold_maps *ctx, int cpu, __u64 cnt)
@@ -1818,6 +1879,77 @@ double fGetAppBandWidth()
 return found;
 }
 
+#if 1
+void fDoQinfoAssessment(unsigned int val);
+void fDoQinfoAssessment(unsigned int val)
+{
+
+        time_t clk;
+        char ctime_buf[27];
+        char ms_ctime_buf[MS_CTIME_BUF_LEN];
+        char aQdiscVal[512];
+        char aNicSetting[1024];
+        //FILE *nicCfgFPtr = 0;
+
+        //For now
+        //memset(aQdiscVal,0,sizeof(aQdiscVal));
+        //strcpy(aQdiscVal,"aTest");
+        //sprintf(aNicSetting,"tc qdisc show dev %s root > /tmp/NIC.cfgfile 2>/dev/null",netDevice);
+        //system(aNicSetting);
+        //stat("/tmp/NIC.cfgfile", &sb);
+
+        strcpy(aQdiscVal,"fq");
+        gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+        fprintf(tunLogPtr,"%s %s: ***WARNING***: Qinfo message value from destination DTN is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
+
+        if (vRetransmissionRate > vRetransmissionRateThreshold)
+        {
+                fprintf(tunLogPtr,"%s %s: ***WARNING***: the retransmission rate of %.5f is higher that the retansmission threshold of %.5f.\n", ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
+                sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, aQdiscVal, netDevice, (vGlobal_average_tx_Gbits_per_sec/4.0)*3.0);
+
+                if (gTuningMode && (current_phase == LEARNING))
+                {
+                        current_phase = TUNING;
+                        fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f. Will adjust the pacing with the following:\n",
+                                                                                                                                                        ms_ctime_buf, phase2str(current_phase), vGlobal_average_tx_Gbits_per_sec);
+                        fprintf(tunLogPtr,"%s %s: ***WARNING***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+                        system(aNicSetting);
+                        fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!!\n", ms_ctime_buf, phase2str(current_phase));
+                        current_phase = LEARNING;
+                        vResetPacingBack = 1;
+			shm_write(shm, &vResetPacingBack);
+
+                        fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!! %d\n", ms_ctime_buf, phase2str(current_phase), vResetPacingBack);
+                        current_phase = LEARNING;
+                }
+                else
+                        if (current_phase == TUNING)
+                        {
+                                fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f. Will adjust the pacing with the following:\n",
+                                                                                                                                                                ms_ctime_buf, phase2str(current_phase), vGlobal_average_tx_Gbits_per_sec);
+                                fprintf(tunLogPtr,"%s %s: ***WARNING***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+                                system(aNicSetting);
+                                fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!!\n", ms_ctime_buf, phase2str(current_phase));
+                                vResetPacingBack = 1;
+				shm_write(shm, &vResetPacingBack);
+                        }
+                        else
+                                {
+                                        fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f. Try running the following:\n",
+                                                                                                                                                        ms_ctime_buf, phase2str(current_phase), vGlobal_average_tx_Gbits_per_sec);
+                                        fprintf(tunLogPtr,"%s %s: ***WARNING***: \"%s\"\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+                                }
+        }
+        else
+        {
+                fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link.:***\n", ms_ctime_buf, phase2str(current_phase));
+                fprintf(tunLogPtr,"%s %s: ***WARNING***: However, the retransmission rate of %.5f is lower that the retansmission threshold of %.5f**\n",
+                                                                                        ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
+        }
+return;
+}
+#endif
+
 void * fDoRunGetThresholds(void * vargp)
 {
 	time_t clk;
@@ -1840,11 +1972,15 @@ void * fDoRunGetThresholds(void * vargp)
 	double tx_jitter = 0.30;
 	double highest_average_tx_Gbits_per_sec = 0.0;
 	char try[1024];
+	char aNicSetting[1024];
+	int vPacingCount = 9999;
 	int stage = 0;
 	int applied = 0, suggested = 0, nothing_done = 0, max_apply = 0, something_wrong_check = 0;
 	int tune = 1; //1 = up, 2 = down - tune up initially
 	static unsigned long count = 0;
 	static int vFirstTimeThru = 1;
+
+	sprintf(aNicSetting,"tc qdisc del dev %s root fq 2>/dev/null", netDevice);
 
 	sprintf(try,"bpftrace -e \'BEGIN { @name;} kprobe:dev_get_stats { $nd = (struct net_device *) arg0; @name = $nd->name; } kretprobe:dev_get_stats /@name == \"%s\"/ { $rtnl = (struct rtnl_link_stats64 *) retval; $rx_bytes = $rtnl->rx_bytes; $tx_bytes = $rtnl->tx_bytes; printf(\"%s %s\\n\", $tx_bytes, $rx_bytes); } interval:s:1 { exit(); } END { clear(@name); }\'",netDevice,"%lu","%lu");
 	/* fix for kfunc below too */
@@ -1927,7 +2063,52 @@ start:
 	//rx_kbits_per_sec = ((8 * rx_bytes_tot) / 1024) / secs_passed;;
 	tx_kbits_per_sec = ((8 * tx_bytes_tot) / 1000);
 	rx_kbits_per_sec = ((8 * rx_bytes_tot) / 1000);
-		
+
+	//shm_read(&vResetPacingBack, shm);
+#if 0	
+	if (!tx_kbits_per_sec) //nothing happening - reset back the pacing
+		fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on link has stopped for now Mode %d Pacing %d*\n",ms_ctime_buf, phase2str(current_phase), gTuningMode, vResetPacingBack);
+	else
+		fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on the link ****  Mode %d Pacing %d\n",ms_ctime_buf, phase2str(current_phase), gTuningMode, vResetPacingBack);
+#endif
+	if (!tx_kbits_per_sec && shm_read(&vResetPacingBack, shm) && vResetPacingBack) //nothing happening - reset back the pacing
+	{
+                if (gTuningMode && (current_phase == LEARNING))
+                {
+			vResetPacingBack = 0;
+                    	shm_write(shm, &vResetPacingBack);	    
+
+			current_phase = TUNING;
+			fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on link has stopped for now *** resetting back the Pacing with the following:",ms_ctime_buf, phase2str(current_phase));
+                        fprintf(tunLogPtr,"%s %s: ***INFO***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+                        system(aNicSetting);
+                        fprintf(tunLogPtr,"%s %s: ***INFO***: !!!!Pacing has been resetted!!!!\n", ms_ctime_buf, phase2str(current_phase));
+                        current_phase = LEARNING;
+                }
+                else
+                        if (current_phase == TUNING)
+                        {
+                                vResetPacingBack = 0;
+                    		shm_write(shm, &vResetPacingBack);	    
+
+				fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on link has stopped for now *** resetting back the Pacing with the following:",ms_ctime_buf, phase2str(current_phase));
+                        	fprintf(tunLogPtr,"%s %s: ***INFO***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+                        	system(aNicSetting);
+                        	fprintf(tunLogPtr,"%s %s: ***INFO***: !!!!Pacing has been resetted!!!!\n", ms_ctime_buf, phase2str(current_phase));
+                        }
+                        else
+                                {
+					if (((vPacingCount++) > 5) && (vDebugLevel > 0))
+					{
+						vPacingCount = 0;
+						fprintf(tunLogPtr,"%s %s: ***WARNING***: Activity on link has stopped for now, but the pacing was changed and should be changed back.***",ms_ctime_buf, phase2str(current_phase));
+                                        	fprintf(tunLogPtr,"%s %s: ***WARNING***: The simplest way to change back is to turn off Learning Mode and the Tuning Module will do it for you***\n", ms_ctime_buf, phase2str(current_phase));
+                                        	fprintf(tunLogPtr,"%s %s: ***WARNING***: Do the following from the Tuning Module directory to turn off Learning mode: \"./tuncli -l off\"\n", ms_ctime_buf, phase2str(current_phase));
+                                        	fprintf(tunLogPtr,"%s %s: ***WARNING***: You probably want to turn back on Learning mode after waiting a couple seconds with the following: \"./tuncli -l on\"\n", ms_ctime_buf, phase2str(current_phase));
+					}
+                                }
+	}
+	
 	average_tx_kbits_per_sec += tx_kbits_per_sec;	
 	keep_bitrate_interval = check_bitrate_interval;
 	if (check_bitrate_interval >= BITRATE_INTERVAL) 
@@ -2002,6 +2183,7 @@ start:
 	if (!check_bitrate_interval)
 	{
 		vGlobal_average_tx_Gbits_per_sec = average_tx_Gbits_per_sec;
+
 		if (tune == 3 && average_tx_Gbits_per_sec)
 		{
 			tune = 0;
@@ -3197,6 +3379,7 @@ Readn(int fd, void *ptr, size_t nbytes)
         return(n);
 }
 
+#if 0
 void fDoQinfoAssessment(unsigned int val);
 void fDoQinfoAssessment(unsigned int val)
 {
@@ -3221,18 +3404,48 @@ void fDoQinfoAssessment(unsigned int val)
 
 	if (vRetransmissionRate > vRetransmissionRateThreshold)
 	{
-		fprintf(tunLogPtr,"%s %s: ***WARNING***: the retransmission rate of %.2f is higher that the retansmission threshold of %.2f.\n", ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
-		fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f. Try running the following:\n", ms_ctime_buf, phase2str(current_phase), vGlobal_average_tx_Gbits_per_sec);
-		sprintf(aNicSetting,"\"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit\"", netDevice, aQdiscVal, netDevice, (vGlobal_average_tx_Gbits_per_sec/4.0)*3.0);
-		fprintf(tunLogPtr,"%s %s: ***WARNING***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+		fprintf(tunLogPtr,"%s %s: ***WARNING***: the retransmission rate of %.5f is higher that the retansmission threshold of %.5f.\n", ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
+		sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, aQdiscVal, netDevice, (vGlobal_average_tx_Gbits_per_sec/4.0)*3.0);
+
+		if (gTuningMode && (current_phase == LEARNING))
+		{
+			current_phase = TUNING;
+			fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f. Will adjust the pacing with the following:\n", 
+																			ms_ctime_buf, phase2str(current_phase), vGlobal_average_tx_Gbits_per_sec);
+			fprintf(tunLogPtr,"%s %s: ***WARNING***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+			system(aNicSetting);
+			fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!!\n", ms_ctime_buf, phase2str(current_phase));
+			current_phase = LEARNING;
+			vResetPacingBack = 1;
+			fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!! %d\n", ms_ctime_buf, phase2str(current_phase), vResetPacingBack);
+			current_phase = LEARNING;
+		}
+		else
+			if (current_phase == TUNING)
+			{
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f. Will adjust the pacing with the following:\n", 
+																				ms_ctime_buf, phase2str(current_phase), vGlobal_average_tx_Gbits_per_sec);
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+				system(aNicSetting);
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!!\n", ms_ctime_buf, phase2str(current_phase));
+				vResetPacingBack = 1;
+			}
+			else
+				{
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f. Try running the following:\n", 
+																			ms_ctime_buf, phase2str(current_phase), vGlobal_average_tx_Gbits_per_sec);
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: \"%s\"\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+				}
 	} 
 	else 
 	{
 		fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link.:***\n", ms_ctime_buf, phase2str(current_phase));
-		fprintf(tunLogPtr,"%s %s: ***WARNING***: However, the retransmission rate of %.2f is lower that the retansmission threshold of %.2f. You may want to lower the threshold using \"tuncli\" ***\n", ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
+		fprintf(tunLogPtr,"%s %s: ***WARNING***: However, the retransmission rate of %.5f is lower that the retansmission threshold of %.5f**\n", 
+											ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
 	}
 return;
 }
+#endif
 
 void
 process_request(int sockfd)
@@ -3362,7 +3575,9 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 
 		fflush(tunLogPtr);
 #endif
-        	
+
+
+#if 1
 		if ( (childpid = Fork()) == 0) 
 		{        /* child process */
 
@@ -3370,6 +3585,7 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 			process_request(connfd);/* process the request */
 			exit(0);
 		}
+#endif	
 		
 		Close(connfd); /* parent closes connected socket */
 	}
@@ -3622,6 +3838,8 @@ int main(int argc, char **argv)
 
 	system("rm -f /tmp/facil-io-sock-*"); //clean up old facil-io links
 	fprintf(tunLogPtr, "%s %s: ***Debug level is set to %d\n", ms_ctime_buf, phase2str(current_phase), vDebugLevel);
+
+	shm = shm_new(sizeof vResetPacingBack);
 
 	//Start Collector Thread - collect from int-sink
 	vRetFromRunBpfThread = pthread_create(&doRunBpfCollectionThread_id, NULL, fDoRunBpfCollectionPerfEventArray2, &sArgv);
