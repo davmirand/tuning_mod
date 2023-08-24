@@ -3475,6 +3475,112 @@ process_request(int sockfd)
 	}
 }
 
+#ifdef HPNSSH_QFACTOR
+void * doHandleHpnsshQfactorEnv(void * vargp)
+{
+	time_t clk;
+	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
+	int listenfd, connfd;
+	pid_t childpid;
+	socklen_t clilen;
+	struct sockaddr_in cliaddr, servaddr;
+	
+#if 1
+			struct sockaddr_in peeraddr;
+			socklen_t peeraddrlen;
+			struct sockaddr_in localaddr;
+			socklen_t localaddrlen;
+
+			peeraddrlen = sizeof(peeraddr);
+			localaddrlen = sizeof(localaddr);
+#endif
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+	fprintf(tunLogPtr,"%s %s: ***Starting Listener for receiving messages from HPNSSH...***\n", ms_ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
+	
+	listenfd = Socket(AF_INET, SOCK_STREAM, 0);
+
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family      = AF_INET;
+	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	servaddr.sin_port        = htons(gSource_HpnsshQfactor_Port);
+
+	Bind(listenfd, (SA *) &servaddr, sizeof(servaddr));
+	Listen(listenfd, LISTENQ);
+	
+	for ( ; ; ) 
+	{
+		clilen = sizeof(cliaddr);
+		if ( (connfd = accept(listenfd, (SA *) &cliaddr, &clilen)) < 0) 
+		{
+			if (errno == EINTR)
+				continue;  /* back to for() */
+			else
+				err_sys("accept error");
+		}
+#if 1
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+
+		int retval = getpeername(connfd, (struct sockaddr *) &peeraddr, &peeraddrlen);
+		if (retval == -1) 
+		{
+			fprintf(tunLogPtr,"%s %s: ***Peer error:***\n", ms_ctime_buf, phase2str(current_phase));
+		//	perror("getpeername()");
+		}
+		else
+			{
+				char *peeraddrpresn = inet_ntoa(peeraddr.sin_addr);
+				//total_time_passed = 0;
+				if (vDebugLevel > 1)
+				{
+					fprintf(tunLogPtr,"%s %s: ***Peer information: ip long %s\n", ms_ctime_buf, phase2str(current_phase), aDest_Ip2_Binary);
+					fprintf(tunLogPtr,"%s %s: ***Peer information:\n", ms_ctime_buf, phase2str(current_phase));
+					fprintf(tunLogPtr,"%s %s: ***Peer Address Family: %d\n", ms_ctime_buf, phase2str(current_phase), peeraddr.sin_family);
+					fprintf(tunLogPtr,"%s %s: ***Peer Port: %d\n", ms_ctime_buf, phase2str(current_phase), peeraddr.sin_port);
+					fprintf(tunLogPtr,"%s %s: ***Peer IP Address: %s***\n\n", ms_ctime_buf, phase2str(current_phase), peeraddrpresn);
+				}
+			}
+
+		retval = getsockname(connfd, (struct sockaddr *) &localaddr, &localaddrlen);
+		if (retval == -1) 
+		{
+			fprintf(tunLogPtr,"%s %s: ***sock error:***\n", ms_ctime_buf, phase2str(current_phase));
+		}
+		else
+			{
+				char *localaddrpresn = inet_ntoa(localaddr.sin_addr);
+
+				if (vDebugLevel > 1)
+				{
+					fprintf(tunLogPtr,"%s %s: ***Socket information:\n", ms_ctime_buf, phase2str(current_phase));
+					fprintf(tunLogPtr,"%s %s: ***Local Address Family: %d\n", ms_ctime_buf, phase2str(current_phase), localaddr.sin_family);
+					fprintf(tunLogPtr,"%s %s: ***Local Port: %d\n", ms_ctime_buf, phase2str(current_phase), ntohs(localaddr.sin_port));
+					fprintf(tunLogPtr,"%s %s: ***Local IP Address: %s***\n\n", ms_ctime_buf, phase2str(current_phase), localaddrpresn);
+				}
+			}
+
+		fflush(tunLogPtr);
+#endif
+
+
+#if 1
+		if ( (childpid = Fork()) == 0) 
+		{        /* child process */
+
+			Close(listenfd); /* close listening socket */
+			process_request(connfd);/* process the request */
+			exit(0);
+		}
+#endif	
+		
+		Close(connfd); /* parent closes connected socket */
+	}
+
+	return ((char *)0);
+}
+#endif
+
 void * fDoRunGetMessageFromPeer(void * vargp)
 {
 	time_t clk;
@@ -3851,7 +3957,6 @@ int main(int argc, char **argv)
 	vRetFromRunFindRetransmissionRateThread = pthread_create(&doRunFindRetransmissionRateThread_id, NULL, doRunFindRetransmissionRate, &sArgv); 
 
 #ifdef HPNSSH_QFACTOR
-	//Get Ready to accept connects from hpnssh process
 	vRetFromHandleHpnsshQfactorEnvThread = pthread_create(&doHandleHpnsshQfactorEnvThread_id, NULL, doHandleHpnsshQfactorEnv, &sArgv);
 #endif
 	if (vRetFromRunBpfThread == 0)

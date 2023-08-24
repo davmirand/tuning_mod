@@ -6,6 +6,8 @@
 #define CTIME_BUF_LEN		27
 #define MS_CTIME_BUF_LEN	48
 
+#define HPNSSH_QFACTOR  1
+
 enum workflow_phases {
         STARTING,
         ASSESSMENT,
@@ -34,6 +36,7 @@ extern enum workflow_phases current_phase;
 extern int gInterval;
 extern int gAPI_listen_port;
 extern int gSource_Dtn_Port;
+extern int gSource_HpnsshQfactor_Port;
 extern char gTuningMode;
 extern char netDevice[];
 extern char *gNic_to_use;
