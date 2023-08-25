@@ -59,6 +59,9 @@
 //Added for Q-Factor
 #define TEST_MSG	0
 #define QINFO_MSG	1
+
+#define HPN_MSG 	2
+
 struct PeerMsg {
 	unsigned int msg_no;
 	unsigned int seq_no;

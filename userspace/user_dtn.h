@@ -7,6 +7,9 @@
 #define MS_CTIME_BUF_LEN	48
 
 #define HPNSSH_QFACTOR  1
+#if 1
+#define HPNSSH_QFACTOR_TESTING 1 
+#endif
 
 enum workflow_phases {
         STARTING,

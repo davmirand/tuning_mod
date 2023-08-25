@@ -183,6 +183,13 @@ time_t calculate_delta_for_csv(void)
 pthread_mutex_t dtn_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t dtn_cond = PTHREAD_COND_INITIALIZER;
 static int cdone = 0;
+#ifdef HPNSSH_QFACTOR_TESTING
+pthread_mutex_t hpn_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t hpn_cond = PTHREAD_COND_INITIALIZER;
+static int hpncdone = 0;
+struct PeerMsg hpnMsg;
+unsigned int hpnMsgSeqNo = 0;
+#endif
 static unsigned int sleep_count = 1;
 static double vGoodBitrateValue = 0.0;
 static double vGoodBitrateValueThatDoesntNeedMessage = 0.0;
@@ -1185,17 +1192,45 @@ void check_req(http_s *h, char aResp[])
 		fprintf(tunLogPtr,"%s %s: ***New queue occupancy delta value is *%u***\n", ms_ctime_buf, phase2str(current_phase), vQUEUE_OCCUPANCY_DELTA);
 		goto after_check;
 	}
-#if 0	
-	if (strstr(pReqData,"GET /-ct#q_user_occ#"))
+
+#ifdef HPNSSH_QFACTOR_TESTING
+	if (strstr(pReqData,"GET /-ct#test_hpn#"))
 	{
 		/* Change the value of the queue occupancy user info */
 		__u32 vNewQueueOccupancyUserInfo = 0;
-		char *p = (pReqData + sizeof("GET /-ct#q_user_occ#")) - 1;
+		char *p = (pReqData + sizeof("GET /-ct#test_hpn#")) - 1;
 		while (isdigit(*p))
 		{
 			aNumber[count++] = *p;
 			p++;
 		}
+
+		        time_t clk;
+        char ctime_buf[27];
+        char ms_ctime_buf[MS_CTIME_BUF_LEN];
+        char activity[MAX_SIZE_TUNING_STRING];
+        gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+        fprintf(tunLogPtr, "%s %s: ***Timer Alarm went off*** still having problems with Queue Occupancy User Info. Time to do something***\n",ms_ctime_buf, phase2str(current_phase));
+        //***Do something here ***//
+        vq_TimerIsSet = 0;
+        sprintf(activity,"%s %s: ***hop_key.hop_index %X, Doing Something",ctime_buf, phase2str(current_phase), curr_hop_key_hop_index);
+        record_activity(activity); //make sure activity big enough to concatenate additional data -- see record_activity()
+        fflush(tunLogPtr);
+
+#if 1
+        Pthread_mutex_lock(&dtn_mutex);
+        strcpy(sMsg.msg, "Hello there!!! This is a Hpn msg...\n");
+        hpnMsg.msg_no = htonl(HPN_MSG);
+        hpnMsg.value = htonl(vQinfoUserValue);
+        hpnMsgSeqNo++;
+        hpnMsg.seq_no = htonl(hpnMsgSeqNo);
+        hpncdone = 1;
+        Pthread_cond_signal(&hpn_cond);
+        Pthread_mutex_unlock(&hpn_mutex);
+#endif
+        vq_WarningCount = 0;
+        return;
+
 
 		vNewQueueOccupancyUserInfo = strtoul(aNumber, (char **)0, 10);
 		sprintf(aResp,"Changed queue occupancy user info from %u to %u!\n", vQinfoUserValue, vNewQueueOccupancyUserInfo);
@@ -3711,6 +3746,72 @@ void str_cli(int sockfd, struct PeerMsg *sThisMsg) //str_cli09
 	return;
 }
 
+#ifdef HPNSSH_QFACTOR_TESTING
+void * doRunSendMessageToHpnsshQfactorEnv(void * vargp)
+{
+	time_t clk;
+	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
+	int sockfd;
+	struct sockaddr_in servaddr;
+	struct PeerMsg hpnMsg2;
+	int check = 0;
+
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+	fprintf(tunLogPtr,"%s %s: ***Starting Client for sending messages to source DTN...***\n", ms_ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
+
+cli_again:
+	Pthread_mutex_lock(&hpn_mutex);
+	
+	while(hpncdone == 0)
+		Pthread_cond_wait(&hpn_cond, &hpn_mutex);
+	memcpy(&hpnMsg2,&hpnMsg,sizeof(hpnMsg2));
+	hpncdone = 0;
+	Pthread_mutex_unlock(&hpn_mutex);
+
+	if (vDebugLevel > 1)
+	{
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Sending message %d to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase), sleep_count);
+		fflush(tunLogPtr);
+	}
+
+	sockfd = Socket(AF_INET, SOCK_STREAM, 0);
+
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_port = htons(gSource_HpnsshQfactor_Port);
+	if (src_ip_addr.y)
+	{
+		sprintf(aSrc_Ip,"%u.%u.%u.%u", src_ip_addr.a[0], src_ip_addr.a[1], src_ip_addr.a[2], src_ip_addr.a[3]);
+		Inet_pton(AF_INET, aSrc_Ip, &servaddr.sin_addr);
+	}
+	else
+	{
+		fprintf(stdout, "Server hpnssh-qfactor IP address is zero. Can't connect to it****\n");
+		goto cli_again;
+	}
+
+	if (Connect(sockfd, (SA *) &servaddr, sizeof(servaddr)))
+	{
+		goto cli_again;
+	}
+	str_cli(sockfd, &hpnMsg2);         /* do it all */
+	check = shutdown(sockfd, SHUT_WR);
+//	close(sockfd); - use shutdown instead of close
+	if (!check)
+		read_sock(sockfd); //final read to wait on close from other end
+	else
+		printf("shutdown failed, check = %d\n",check);
+
+	sleep_count++;
+	goto cli_again;
+
+return ((char *)0);
+}
+#endif
+
 void * fDoRunSendMessageToPeer(void * vargp)
 {
 	time_t clk;
@@ -3793,6 +3894,11 @@ int main(int argc, char **argv)
 #ifdef HPNSSH_QFACTOR
 	int vRetFromHandleHpnsshQfactorEnvThread, vRetFromHandleHpnsshQfactorEnvJoin;
 	pthread_t doHandleHpnsshQfactorEnvThread_id;
+
+#ifdef HPNSSH_QFACTOR_TESTING
+	int vRetFromRunSendMessageToHpnsshQfactorEnvThread, vRetFromRunSendMessageToHpnsshQfactorEnvJoin;
+	pthread_t doRunSendMessageToPHpnsshQfactorEnvThread_id;
+#endif
 #endif
 
 	sArgv_t sArgv;
@@ -3957,7 +4063,13 @@ int main(int argc, char **argv)
 	vRetFromRunFindRetransmissionRateThread = pthread_create(&doRunFindRetransmissionRateThread_id, NULL, doRunFindRetransmissionRate, &sArgv); 
 
 #ifdef HPNSSH_QFACTOR
+	//Handle messages from hpnssh client
 	vRetFromHandleHpnsshQfactorEnvThread = pthread_create(&doHandleHpnsshQfactorEnvThread_id, NULL, doHandleHpnsshQfactorEnv, &sArgv);
+	//Send messages tp HpnsshQfactor server for simulated testing
+#ifdef HPNSSH_QFACTOR_TESTING
+	memset(&hpnMsg,0,sizeof(hpnMsg));
+	vRetFromRunSendMessageToHpnsshQfactorEnvThread = pthread_create(&doRunSendMessageToPHpnsshQfactorEnvThread_id, NULL, doRunSendMessageToHpnsshQfactorEnv, &sArgv);
+#endif
 #endif
 	if (vRetFromRunBpfThread == 0)
     		vRetFromRunBpfJoin = pthread_join(doRunBpfCollectionThread_id, NULL);
@@ -3986,6 +4098,11 @@ int main(int argc, char **argv)
 #ifdef HPNSSH_QFACTOR
 	if (vRetFromHandleHpnsshQfactorEnvThread == 0)
 		vRetFromHandleHpnsshQfactorEnvJoin = pthread_join(doHandleHpnsshQfactorEnvThread_id, NULL);
+
+#ifdef HPNSSH_QFACTOR_TESTING
+	if (vRetFromRunSendMessageToHpnsshQfactorEnvThread == 0)
+		vRetFromRunSendMessageToHpnsshQfactorEnvJoin = pthread_join(doRunSendMessageToPHpnsshQfactorEnvThread_id, NULL);
+#endif
 #endif
 
 leave:
