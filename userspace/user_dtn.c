@@ -1197,7 +1197,6 @@ void check_req(http_s *h, char aResp[])
 	if (strstr(pReqData,"GET /-ct#test_hpn#"))
 	{
 		/* Change the value of the queue occupancy user info */
-		__u32 vNewQueueOccupancyUserInfo = 0;
 		char *p = (pReqData + sizeof("GET /-ct#test_hpn#")) - 1;
 		while (isdigit(*p))
 		{
@@ -1205,40 +1204,20 @@ void check_req(http_s *h, char aResp[])
 			p++;
 		}
 
-		        time_t clk;
-        char ctime_buf[27];
-        char ms_ctime_buf[MS_CTIME_BUF_LEN];
-        char activity[MAX_SIZE_TUNING_STRING];
         gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-        fprintf(tunLogPtr, "%s %s: ***Timer Alarm went off*** still having problems with Queue Occupancy User Info. Time to do something***\n",ms_ctime_buf, phase2str(current_phase));
-        //***Do something here ***//
-        vq_TimerIsSet = 0;
-        sprintf(activity,"%s %s: ***hop_key.hop_index %X, Doing Something",ctime_buf, phase2str(current_phase), curr_hop_key_hop_index);
-        record_activity(activity); //make sure activity big enough to concatenate additional data -- see record_activity()
-        fflush(tunLogPtr);
-
+	fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to test HPNSSH server ***\n", ms_ctime_buf, phase2str(current_phase));
 #if 1
         Pthread_mutex_lock(&dtn_mutex);
-        strcpy(sMsg.msg, "Hello there!!! This is a Hpn msg...\n");
-        hpnMsg.msg_no = htonl(HPN_MSG);
-        hpnMsg.value = htonl(vQinfoUserValue);
+        strcpy(hpnMsg.msg, "Hello there!!! This is a Hpn msg...\n");
+        hpnMsg.msg_no = htonl(HPNSSH_MSG);
+        hpnMsg.value = htonl(hpnMsgSeqNo); //testing purposes
         hpnMsgSeqNo++;
         hpnMsg.seq_no = htonl(hpnMsgSeqNo);
         hpncdone = 1;
         Pthread_cond_signal(&hpn_cond);
         Pthread_mutex_unlock(&hpn_mutex);
 #endif
-        vq_WarningCount = 0;
-        return;
-
-
-		vNewQueueOccupancyUserInfo = strtoul(aNumber, (char **)0, 10);
-		sprintf(aResp,"Changed queue occupancy user info from %u to %u!\n", vQinfoUserValue, vNewQueueOccupancyUserInfo);
-		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change queue user info from %u to %u***\n", ms_ctime_buf, phase2str(current_phase), vQinfoUserValue, vNewQueueOccupancyUserInfo);
-		vQinfoUserValue = vNewQueueOccupancyUserInfo;
-		fprintf(tunLogPtr,"%s %s: ***New queue occupancy user info value is *%u***\n", ms_ctime_buf, phase2str(current_phase), vQinfoUserValue);
-		goto after_check;
+	goto after_check;
 	}
 #endif			
 	if (strstr(pReqData,"GET /-ct#retrans_rate#"))
@@ -1933,6 +1912,22 @@ double fGetAppBandWidth()
 
 return found;
 }
+
+#ifdef HPNSSH_QFACTOR
+void fDoHpnAssessment(unsigned int val);
+void fDoHpnAssessment(unsigned int val)
+{
+
+        time_t clk;
+        char ctime_buf[27];
+        char ms_ctime_buf[MS_CTIME_BUF_LEN];
+        
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+        fprintf(tunLogPtr,"%s %s: ***WARNING***: Hpnmessage value from destination DTN is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
+
+return;
+}
+#endif
 
 #if 1
 void fDoQinfoAssessment(unsigned int val);
@@ -3499,6 +3494,19 @@ process_request(int sockfd)
 
 			fDoQinfoAssessment(ntohl(from_cli.value));
 		}
+#ifdef HPNSSH_QFACTOR
+		else
+		if (ntohl(from_cli.msg_no) == HPNSSH_MSG)
+		{
+			if (vDebugLevel > 0)
+			{
+				fprintf(tunLogPtr,"\n%s %s: ***Received Hpnssh message %u from Hpnssh Client...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
+				fprintf(tunLogPtr,"%s %s: ***msg_no = %d, msg value = %u, msg buf = %s", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), ntohl(from_cli.value), from_cli.msg);
+			}
+
+			fDoHpnAssessment(ntohl(from_cli.value));
+		}
+#endif
 		else
 			if (vDebugLevel > 0)
 			{
@@ -3593,6 +3601,7 @@ void * doHandleHpnsshQfactorEnv(void * vargp)
 					fprintf(tunLogPtr,"%s %s: ***Local Port: %d\n", ms_ctime_buf, phase2str(current_phase), ntohs(localaddr.sin_port));
 					fprintf(tunLogPtr,"%s %s: ***Local IP Address: %s***\n\n", ms_ctime_buf, phase2str(current_phase), localaddrpresn);
 				}
+				//strcpy(aLocal_Ip,localaddrpresn);
 			}
 
 		fflush(tunLogPtr);
@@ -3756,6 +3765,7 @@ void * doRunSendMessageToHpnsshQfactorEnv(void * vargp)
 	struct sockaddr_in servaddr;
 	struct PeerMsg hpnMsg2;
 	int check = 0;
+	char aMySrc_Ip[32];
 
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Starting Client for sending messages to source DTN...***\n", ms_ctime_buf, phase2str(current_phase));
@@ -3782,16 +3792,9 @@ cli_again:
 	bzero(&servaddr, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_port = htons(gSource_HpnsshQfactor_Port);
-	if (src_ip_addr.y)
-	{
-		sprintf(aSrc_Ip,"%u.%u.%u.%u", src_ip_addr.a[0], src_ip_addr.a[1], src_ip_addr.a[2], src_ip_addr.a[3]);
-		Inet_pton(AF_INET, aSrc_Ip, &servaddr.sin_addr);
-	}
-	else
-	{
-		fprintf(stdout, "Server hpnssh-qfactor IP address is zero. Can't connect to it****\n");
-		goto cli_again;
-	}
+
+	sprintf(aMySrc_Ip,"%s", "127.0.0.1");
+	Inet_pton(AF_INET, aMySrc_Ip, &servaddr.sin_addr);
 
 	if (Connect(sockfd, (SA *) &servaddr, sizeof(servaddr)))
 	{
