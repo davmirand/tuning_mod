@@ -371,6 +371,19 @@ const char *pin_basedir =  "/sys/fs/bpf";
 #include <net/if.h>
 #include <linux/if_link.h> /* depend on kernel-headers installed */
 
+#define NUMMETAVALUES   10000
+typedef struct {
+        char timestamp[MS_CTIME_BUF_LEN];
+        unsigned int hop_latency;
+        unsigned int queue_occupancy;
+	unsigned int switch_id;
+} sMetaData_t[NUMMETAVALUES];
+
+
+sMetaData_t metaData;
+unsigned int vMetaDataCount = 0;
+unsigned int vMetaDataClientCount = 0;
+
 typedef struct {
 	int argc;
 	char ** argv;
@@ -601,53 +614,116 @@ perf_event_loop: {
 		{
 			if (!perf_buffer_poll_start)
 			{
-				if (vDebugLevel == 4)
-        			{
 					if ((qinfo_min_value != QINFO_START_MIN_VALUE) && (qinfo_max_value != 0))
 					{
 						if (qinfo_clk_min <= qinfo_clk_max)
-						{ 	//print in this order
-							fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_min, phase2str(current_phase));
-							fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_switch_id_min);
-							fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_min_value);
-							fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_latency_min);
-		
-							fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_max, phase2str(current_phase));
-							fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_switch_id_max);
-							fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_max_value);
-							fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_latency_max);
-						}
-						else
-							{	//print in this order
-								fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_max, phase2str(current_phase));
-								fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_switch_id_max);
-								fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_max_value);
-								fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_latency_max);
+						{ 	
+							memcpy(metaData[vMetaDataCount].timestamp,qinfo_ms_ctime_buf_min,MS_CTIME_BUF_LEN);
+							metaData[vMetaDataCount].hop_latency = qinfo_hop_latency_min;
+							metaData[vMetaDataCount].queue_occupancy = qinfo_min_value;
+							metaData[vMetaDataCount].switch_id = qinfo_hop_switch_id_min;
+						
+							vMetaDataCount++;
+							if (vMetaDataCount == NUMMETAVALUES)
+								vMetaDataCount = 0;
+							
+							memcpy(metaData[vMetaDataCount].timestamp,qinfo_ms_ctime_buf_max,MS_CTIME_BUF_LEN);
+							metaData[vMetaDataCount].hop_latency = qinfo_hop_latency_max;
+							metaData[vMetaDataCount].queue_occupancy = qinfo_max_value;
+							metaData[vMetaDataCount].switch_id = qinfo_hop_switch_id_max;
+							
+							vMetaDataCount++;
+							if (vMetaDataCount == NUMMETAVALUES)
+								vMetaDataCount = 0;
 
+							if (vDebugLevel == 4)
+							{ 	//print in this order
 								fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_min, phase2str(current_phase));
 								fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_switch_id_min);
 								fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_min_value);
 								fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_latency_min);
+		
+								fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_max, phase2str(current_phase));
+								fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_switch_id_max);
+								fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_max_value);
+								fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_latency_max);
+							}
+						}
+						else
+							{	
+								memcpy(metaData[vMetaDataCount].timestamp,qinfo_ms_ctime_buf_min,MS_CTIME_BUF_LEN);
+								metaData[vMetaDataCount].hop_latency = qinfo_hop_latency_min;
+								metaData[vMetaDataCount].queue_occupancy = qinfo_min_value;
+								metaData[vMetaDataCount].switch_id = qinfo_hop_switch_id_min;
+						
+								vMetaDataCount++;
+								if (vMetaDataCount == NUMMETAVALUES)
+									vMetaDataCount = 0;
+							
+								memcpy(metaData[vMetaDataCount].timestamp,qinfo_ms_ctime_buf_max,MS_CTIME_BUF_LEN);
+								metaData[vMetaDataCount].hop_latency = qinfo_hop_latency_max;
+								metaData[vMetaDataCount].queue_occupancy = qinfo_max_value;
+								metaData[vMetaDataCount].switch_id = qinfo_hop_switch_id_max;
+							
+								vMetaDataCount++;
+								if (vMetaDataCount == NUMMETAVALUES)
+									vMetaDataCount = 0;
+
+								if (vDebugLevel == 4)
+								{ 	//print in this order
+									fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_max, phase2str(current_phase));
+									fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_switch_id_max);
+									fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_max_value);
+									fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_latency_max);
+
+									fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_min, phase2str(current_phase));
+									fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_switch_id_min);
+									fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_min_value);
+									fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_latency_min);
+								}
 							}
 					}
 					else
 						{
 							if (qinfo_min_value != QINFO_START_MIN_VALUE)
 							{
-								fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_min, phase2str(current_phase));
-								fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_switch_id_min);
-								fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_min_value);
-								fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_latency_min);
+								memcpy(metaData[vMetaDataCount].timestamp,qinfo_ms_ctime_buf_min,MS_CTIME_BUF_LEN);
+								metaData[vMetaDataCount].hop_latency = qinfo_hop_latency_min;
+								metaData[vMetaDataCount].queue_occupancy = qinfo_min_value;
+								metaData[vMetaDataCount].switch_id = qinfo_hop_switch_id_min;
+						
+								vMetaDataCount++;
+								if (vMetaDataCount == NUMMETAVALUES)
+									vMetaDataCount = 0;
+
+								if (vDebugLevel == 4)
+								{
+									fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_min, phase2str(current_phase));
+									fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_switch_id_min);
+									fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_min_value);
+									fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_latency_min);
+								}
 							}
 							else
 								{ //must be this
-									fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_max, phase2str(current_phase));
-									fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_switch_id_max);
-									fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_max_value);
-									fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_latency_max);
+									memcpy(metaData[vMetaDataCount].timestamp,qinfo_ms_ctime_buf_max,MS_CTIME_BUF_LEN);
+									metaData[vMetaDataCount].hop_latency = qinfo_hop_latency_max;
+									metaData[vMetaDataCount].queue_occupancy = qinfo_max_value;
+									metaData[vMetaDataCount].switch_id = qinfo_hop_switch_id_max;
+							
+									vMetaDataCount++;
+									if (vMetaDataCount == NUMMETAVALUES)
+										vMetaDataCount = 0;
+					
+									if (vDebugLevel == 4)
+									{
+										fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_max, phase2str(current_phase));
+										fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_switch_id_max);
+										fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_max_value);
+										fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_latency_max);
+									}
 								}
 						}
-				}
 			}
 		}
 	}
@@ -1217,12 +1293,12 @@ void check_req(http_s *h, char aResp[])
 		if (value == HPNSSH_READALL)
 			fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to read all current values stored from HPNSSH server num = %d***\n", ms_ctime_buf, phase2str(current_phase), value);
 		if (value == HPNSSH_SHUTDOWN)
-			fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to read all current values stored from HPNSSH server num = %d***\n", ms_ctime_buf, phase2str(current_phase), value);
+			fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to shutdown session HPNSSH server num = %d***\n", ms_ctime_buf, phase2str(current_phase), value);
 #if 1
         	Pthread_mutex_lock(&hpn_mutex);
         	strcpy(hpnMsg.msg, "Hello there!!! This is a Hpn msg...\n");
         	hpnMsg.msg_no = htonl(HPNSSH_MSG);
-        	hpnMsg.value = htonl(value);
+        	hpnMsg.value = value;
         	hpnMsgSeqNo++;
         	hpnMsg.seq_no = htonl(hpnMsgSeqNo);
         	hpncdone = 1;
@@ -1928,9 +2004,9 @@ return found;
 #ifdef HPNSSH_QFACTOR
 void fDoHpnRead(unsigned int val);
 void fDoHpnReadAll(unsigned int val);
-void fDoHpnShutdown(unsigned int val);
+void fDoHpnShutdown(unsigned int val, int sockfd);
 void fDoHpnStart(unsigned int val);
-void fDoHpnAssessment(unsigned int val);
+void fDoHpnAssessment(unsigned int val, int sockfd);
 
 void fDoHpnRead(unsigned int val)
 {
@@ -1940,6 +2016,15 @@ void fDoHpnRead(unsigned int val)
         
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
         fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
+
+	fprintf(tunLogPtr, "\n%s %s: ***********************HPN_CLIENT************************",metaData[vMetaDataClientCount].timestamp, phase2str(current_phase));
+	fprintf(tunLogPtr, "\n%s %s: HPN_CLIENT    : hop_switch_id = %u\n",metaData[vMetaDataClientCount].timestamp, phase2str(current_phase), metaData[vMetaDataCount].switch_id);
+	fprintf(tunLogPtr, "%s %s: HPN_CLIENT    : queue_occupancy = %u\n",metaData[vMetaDataClientCount].timestamp, phase2str(current_phase), metaData[vMetaDataCount].queue_occupancy);
+	fprintf(tunLogPtr, "%s %s: HPN_CLIENT    : hop_latency = %u\n",metaData[vMetaDataClientCount].timestamp, phase2str(current_phase), metaData[vMetaDataCount].hop_latency);
+
+	vMetaDataClientCount++;
+	if (vMetaDataClientCount == NUMMETAVALUES)
+		vMetaDataClientCount = 0;
 
 return;
 }
@@ -1956,14 +2041,21 @@ void fDoHpnReadAll(unsigned int val)
 return;
 }
 
-void fDoHpnShutdown(unsigned int val)
+void fDoHpnShutdown(unsigned int val, int sockfd)
 {
         time_t clk;
         char ctime_buf[27];
         char ms_ctime_buf[MS_CTIME_BUF_LEN];
+	int check = 0;
         
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-        fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnShutdown(), value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
+        fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnShutdown(), value is %u, Shutting down HPNSSH-QFACTOR  Server socket ***\n", ms_ctime_buf, phase2str(current_phase), val);
+	check = shutdown(sockfd, SHUT_WR);
+        //close(sockfd); //- use shutdown instead of close
+        if (!check)
+        	read_sock(sockfd); //final read to wait on close from other end
+        else
+        	fprintf(tunLogPtr,"%s %s: ***shutdoooown failed to HPNSSN_QFACTOR server..., check = %d***\n", ms_ctime_buf, phase2str(current_phase), check);
 
 return;
 }
@@ -1980,7 +2072,7 @@ void fDoHpnStart(unsigned int val)
 return;
 }
 
-void fDoHpnAssessment(unsigned int val)
+void fDoHpnAssessment(unsigned int val, int sockfd)
 {
         time_t clk;
         char ctime_buf[27];
@@ -1994,7 +2086,7 @@ void fDoHpnAssessment(unsigned int val)
 			fDoHpnReadAll(val);
 			break;
 		case HPNSSH_SHUTDOWN:
-			fDoHpnShutdown(val);
+			fDoHpnShutdown(val, sockfd);
 			break;
 		case HPNSSH_START:
 			fDoHpnStart(val);
@@ -3561,7 +3653,10 @@ process_request(int sockfd)
 	for ( ; ; ) 
 	{
 		if ( (n = Readn(sockfd, &from_cli, sizeof(from_cli))) == 0)
+		{
+			fprintf(tunLogPtr,"\n%s %s: ***Connection closed***\n", ms_ctime_buf, phase2str(current_phase));
 			return;         /* connection closed by other end */
+		}
 
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		if (ntohl(from_cli.msg_no) == QINFO_MSG)
@@ -3584,7 +3679,7 @@ process_request(int sockfd)
 					fprintf(tunLogPtr,"%s %s: ***msg_no = %d, msg value = %u, msg buf = %s", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), ntohl(from_cli.value), from_cli.msg);
 				}
 				
-				fDoHpnAssessment(ntohl(from_cli.value));
+				fDoHpnAssessment(ntohl(from_cli.value), sockfd);
 			}
 #endif
 			else
@@ -3643,6 +3738,7 @@ void * doHandleHpnsshQfactorEnv(void * vargp)
 				err_sys("accept error");
 		}
 #if 1
+		fprintf(tunLogPtr,"%s %s: ***Accepted connection with Listener for receiving messages from HPNSSH...***\n", ms_ctime_buf, phase2str(current_phase));
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
 		int retval = getpeername(connfd, (struct sockaddr *) &peeraddr, &peeraddrlen);
@@ -3688,7 +3784,7 @@ void * doHandleHpnsshQfactorEnv(void * vargp)
 #endif
 
 
-#if 1
+#if 0
 		if ( (childpid = Fork()) == 0) 
 		{        /* child process */
 
@@ -3697,8 +3793,10 @@ void * doHandleHpnsshQfactorEnv(void * vargp)
 			exit(0);
 		}
 #endif	
+
+		process_request(connfd);/* process the request */
 		
-		Close(connfd); /* parent closes connected socket */
+		//Close(connfd); /* parent closes connected socket */
 	}
 
 	return ((char *)0);
@@ -3864,31 +3962,62 @@ cli_again:
 	{
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		fprintf(tunLogPtr,"%s %s: ***Sending message %d to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase), sleep_count);
-		fflush(tunLogPtr);
 	}
 
-	sockfd = Socket(AF_INET, SOCK_STREAM, 0);
-
-	bzero(&servaddr, sizeof(servaddr));
-	servaddr.sin_family = AF_INET;
-	servaddr.sin_port = htons(gSource_HpnsshQfactor_Port);
-
-	sprintf(aMySrc_Ip,"%s", "127.0.0.1");
-	Inet_pton(AF_INET, aMySrc_Ip, &servaddr.sin_addr);
-
-	if (Connect(sockfd, (SA *) &servaddr, sizeof(servaddr)))
+	if (hpnMsg2.value == HPNSSH_START) //connect
 	{
-		goto cli_again;
+		fprintf(tunLogPtr,"%s %s: ***Sending start message to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
+		hpnMsg2.value = htonl(hpnMsg2.value);
+		fflush(tunLogPtr);
+		sockfd = Socket(AF_INET, SOCK_STREAM, 0);
+
+		bzero(&servaddr, sizeof(servaddr));
+		servaddr.sin_family = AF_INET;
+		servaddr.sin_port = htons(gSource_HpnsshQfactor_Port);
+
+		sprintf(aMySrc_Ip,"%s", "127.0.0.1");
+		Inet_pton(AF_INET, aMySrc_Ip, &servaddr.sin_addr);
+
+		if (Connect(sockfd, (SA *) &servaddr, sizeof(servaddr)))
+		{
+			goto cli_again;
+		}
+		str_cli(sockfd, &hpnMsg2);         /* do it all */
+		fprintf(tunLogPtr,"%s %s: ***Finish sending Sending start message to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
 	}
-	str_cli(sockfd, &hpnMsg2);         /* do it all */
-	check = shutdown(sockfd, SHUT_WR);
-//	close(sockfd); - use shutdown instead of close
-	if (!check)
-		read_sock(sockfd); //final read to wait on close from other end
 	else
-		printf("shutdown failed, check = %d\n",check);
+		if (hpnMsg2.value == HPNSSH_SHUTDOWN)
+		{
+			fprintf(tunLogPtr,"%s %s: ***Sending shutdown message to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
+			hpnMsg2.value = htonl(hpnMsg2.value);
+			str_cli(sockfd, &hpnMsg2);         /* do it all */
+			check = shutdown(sockfd, SHUT_WR);
+			//close(sockfd); //- use shutdown instead of close
+			if (!check)
+				read_sock(sockfd); //final read to wait on close from other end
+			else
+				fprintf(tunLogPtr,"%s %s: ***shutdown failed to HPNSSN_QFACTOR server..., check = %d***\n", ms_ctime_buf, phase2str(current_phase), check);
+		}
+		else
+			if (hpnMsg2.value == HPNSSH_READ)
+			{
+				fprintf(tunLogPtr,"%s %s: ***Sending read message to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
+				hpnMsg2.value = htonl(hpnMsg2.value);
+				str_cli(sockfd, &hpnMsg2);         /* do it all */
+			}
+			else
+				if (hpnMsg2.value == HPNSSH_READALL)
+				{
+					fprintf(tunLogPtr,"%s %s: ***Sending readall message to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
+					hpnMsg2.value = htonl(hpnMsg2.value);
+					str_cli(sockfd, &hpnMsg2);         /* do it all */
+				}
+				else
+					fprintf(tunLogPtr,"%s %s: ***Invalid hpnMsg2 value %d...***\n", ms_ctime_buf, phase2str(current_phase), hpnMsg2.value);
 
 	sleep_count++;
+	fflush(tunLogPtr);
+	
 	goto cli_again;
 
 return ((char *)0);
@@ -4099,6 +4228,7 @@ int main(int argc, char **argv)
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	current_phase = LEARNING;
 
+	memset(metaData,0,sizeof(metaData));
 	memset(qinfo_ms_ctime_buf_min,0,sizeof(qinfo_ms_ctime_buf_min));
 	memset(qinfo_ms_ctime_buf_max,0,sizeof(qinfo_ms_ctime_buf_max));
 	memset(&sMsg,0,sizeof(sMsg));
