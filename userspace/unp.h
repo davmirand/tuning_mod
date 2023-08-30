@@ -61,6 +61,12 @@
 #define QINFO_MSG	1
 #define HPNSSH_MSG 	2
 
+//For HPNSSH_MSGs value will be whether to do a read or readall or shutdown
+#define HPNSSH_READ	33
+#define HPNSSH_READALL	44
+#define HPNSSH_SHUTDOWN	55
+#define	HPNSSH_START	99
+
 struct PeerMsg {
 	unsigned int msg_no;
 	unsigned int seq_no;

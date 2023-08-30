@@ -1196,6 +1196,7 @@ void check_req(http_s *h, char aResp[])
 #ifdef HPNSSH_QFACTOR_TESTING
 	if (strstr(pReqData,"GET /-ct#test_hpn#"))
 	{
+		int value = 0;
 		/* Change the value of the queue occupancy user info */
 		char *p = (pReqData + sizeof("GET /-ct#test_hpn#")) - 1;
 		while (isdigit(*p))
@@ -1203,21 +1204,32 @@ void check_req(http_s *h, char aResp[])
 			aNumber[count++] = *p;
 			p++;
 		}
+		
+		value = atoi(aNumber);
 
-        gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-	fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to test HPNSSH server ***\n", ms_ctime_buf, phase2str(current_phase));
+		sprintf(aResp,"Sent message to Hpn server!!!\n");
+        	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+
+		if (value == HPNSSH_START)
+			fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to  start a session to HPNSSH server num = %d***\n", ms_ctime_buf, phase2str(current_phase), value);
+		if (value == HPNSSH_READ)
+			fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to read one set of current values from HPNSSH server num = %d***\n", ms_ctime_buf, phase2str(current_phase), value);
+		if (value == HPNSSH_READALL)
+			fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to read all current values stored from HPNSSH server num = %d***\n", ms_ctime_buf, phase2str(current_phase), value);
+		if (value == HPNSSH_SHUTDOWN)
+			fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to read all current values stored from HPNSSH server num = %d***\n", ms_ctime_buf, phase2str(current_phase), value);
 #if 1
-        Pthread_mutex_lock(&dtn_mutex);
-        strcpy(hpnMsg.msg, "Hello there!!! This is a Hpn msg...\n");
-        hpnMsg.msg_no = htonl(HPNSSH_MSG);
-        hpnMsg.value = htonl(hpnMsgSeqNo); //testing purposes
-        hpnMsgSeqNo++;
-        hpnMsg.seq_no = htonl(hpnMsgSeqNo);
-        hpncdone = 1;
-        Pthread_cond_signal(&hpn_cond);
-        Pthread_mutex_unlock(&hpn_mutex);
+        	Pthread_mutex_lock(&hpn_mutex);
+        	strcpy(hpnMsg.msg, "Hello there!!! This is a Hpn msg...\n");
+        	hpnMsg.msg_no = htonl(HPNSSH_MSG);
+        	hpnMsg.value = htonl(value);
+        	hpnMsgSeqNo++;
+        	hpnMsg.seq_no = htonl(hpnMsgSeqNo);
+        	hpncdone = 1;
+        	Pthread_cond_signal(&hpn_cond);
+        	Pthread_mutex_unlock(&hpn_mutex);
 #endif
-	goto after_check;
+		goto after_check;
 	}
 #endif			
 	if (strstr(pReqData,"GET /-ct#retrans_rate#"))
@@ -1914,16 +1926,84 @@ return found;
 }
 
 #ifdef HPNSSH_QFACTOR
+void fDoHpnRead(unsigned int val);
+void fDoHpnReadAll(unsigned int val);
+void fDoHpnShutdown(unsigned int val);
+void fDoHpnStart(unsigned int val);
 void fDoHpnAssessment(unsigned int val);
-void fDoHpnAssessment(unsigned int val)
-{
 
+void fDoHpnRead(unsigned int val)
+{
         time_t clk;
         char ctime_buf[27];
         char ms_ctime_buf[MS_CTIME_BUF_LEN];
         
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-        fprintf(tunLogPtr,"%s %s: ***WARNING***: Hpnmessage value from destination DTN is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
+        fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
+
+return;
+}
+
+void fDoHpnReadAll(unsigned int val)
+{
+        time_t clk;
+        char ctime_buf[27];
+        char ms_ctime_buf[MS_CTIME_BUF_LEN];
+        
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+        fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnReadAll(), value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
+
+return;
+}
+
+void fDoHpnShutdown(unsigned int val)
+{
+        time_t clk;
+        char ctime_buf[27];
+        char ms_ctime_buf[MS_CTIME_BUF_LEN];
+        
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+        fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnShutdown(), value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
+
+return;
+}
+
+void fDoHpnStart(unsigned int val)
+{
+        time_t clk;
+        char ctime_buf[27];
+        char ms_ctime_buf[MS_CTIME_BUF_LEN];
+        
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+        fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnStart(), value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
+
+return;
+}
+
+void fDoHpnAssessment(unsigned int val)
+{
+        time_t clk;
+        char ctime_buf[27];
+        char ms_ctime_buf[MS_CTIME_BUF_LEN];
+        
+	switch (val) {
+		case  HPNSSH_READ:
+			fDoHpnRead(val);
+			break;
+		case HPNSSH_READALL:
+			fDoHpnReadAll(val);
+			break;
+		case HPNSSH_SHUTDOWN:
+			fDoHpnShutdown(val);
+			break;
+		case HPNSSH_START:
+			fDoHpnStart(val);
+			break;
+		default:
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+        		fprintf(tunLogPtr,"%s %s: ***WARNING***: Invalid Hpnmessage value from client. Value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
+			break;
+	}
 
 return;
 }
@@ -3496,23 +3576,23 @@ process_request(int sockfd)
 		}
 #ifdef HPNSSH_QFACTOR
 		else
-		if (ntohl(from_cli.msg_no) == HPNSSH_MSG)
-		{
-			if (vDebugLevel > 0)
+			if (ntohl(from_cli.msg_no) == HPNSSH_MSG)
 			{
-				fprintf(tunLogPtr,"\n%s %s: ***Received Hpnssh message %u from Hpnssh Client...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
-				fprintf(tunLogPtr,"%s %s: ***msg_no = %d, msg value = %u, msg buf = %s", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), ntohl(from_cli.value), from_cli.msg);
+				if (vDebugLevel > 0)
+				{
+					fprintf(tunLogPtr,"\n%s %s: ***Received Hpnssh message %u from Hpnssh Client...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
+					fprintf(tunLogPtr,"%s %s: ***msg_no = %d, msg value = %u, msg buf = %s", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), ntohl(from_cli.value), from_cli.msg);
+				}
+				
+				fDoHpnAssessment(ntohl(from_cli.value));
 			}
-
-			fDoHpnAssessment(ntohl(from_cli.value));
-		}
 #endif
-		else
-			if (vDebugLevel > 0)
-			{
-				fprintf(tunLogPtr,"\n%s %s: ***Received message %u from destination DTN...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
-				fprintf(tunLogPtr,"%s %s: ***msg_no = %d, msg buf = %s", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), from_cli.msg);
-			}
+			else
+				if (vDebugLevel > 0)
+				{
+					fprintf(tunLogPtr,"\n%s %s: ***Received message %u from destination DTN...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
+					fprintf(tunLogPtr,"%s %s: ***msg_no = %d, msg buf = %s", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), from_cli.msg);
+				}
 
 		fflush(tunLogPtr);
 	}
