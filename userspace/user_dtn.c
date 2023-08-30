@@ -2018,9 +2018,9 @@ void fDoHpnRead(unsigned int val)
         fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
 
 	fprintf(tunLogPtr, "\n%s %s: ***********************HPN_CLIENT************************",metaData[vMetaDataClientCount].timestamp, phase2str(current_phase));
-	fprintf(tunLogPtr, "\n%s %s: HPN_CLIENT    : hop_switch_id = %u\n",metaData[vMetaDataClientCount].timestamp, phase2str(current_phase), metaData[vMetaDataCount].switch_id);
-	fprintf(tunLogPtr, "%s %s: HPN_CLIENT    : queue_occupancy = %u\n",metaData[vMetaDataClientCount].timestamp, phase2str(current_phase), metaData[vMetaDataCount].queue_occupancy);
-	fprintf(tunLogPtr, "%s %s: HPN_CLIENT    : hop_latency = %u\n",metaData[vMetaDataClientCount].timestamp, phase2str(current_phase), metaData[vMetaDataCount].hop_latency);
+	fprintf(tunLogPtr, "\n%s %s: HPN_CLIENT    : hop_switch_id = %u\n",metaData[vMetaDataClientCount].timestamp, phase2str(current_phase), metaData[vMetaDataClientCount].switch_id);
+	fprintf(tunLogPtr, "%s %s: HPN_CLIENT    : queue_occupancy = %u\n",metaData[vMetaDataClientCount].timestamp, phase2str(current_phase), metaData[vMetaDataClientCount].queue_occupancy);
+	fprintf(tunLogPtr, "%s %s: HPN_CLIENT    : hop_latency = %u\n",metaData[vMetaDataClientCount].timestamp, phase2str(current_phase), metaData[vMetaDataClientCount].hop_latency);
 
 	vMetaDataClientCount++;
 	if (vMetaDataClientCount == NUMMETAVALUES)
