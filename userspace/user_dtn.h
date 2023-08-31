@@ -3,12 +3,11 @@
 //extern enum workflow_phases;
 
 #define WORKFLOW_NAMES_MAX	4
-#define CTIME_BUF_LEN		27
-#define MS_CTIME_BUF_LEN	48
-
+#if 1
 #define HPNSSH_QFACTOR  1
 #if 1
 #define HPNSSH_QFACTOR_TESTING 1 
+#endif
 #endif
 
 enum workflow_phases {

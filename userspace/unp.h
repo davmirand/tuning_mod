@@ -57,6 +57,9 @@
 #define	SA	struct sockaddr
 
 //Added for Q-Factor
+#define CTIME_BUF_LEN		27
+#define MS_CTIME_BUF_LEN	48
+
 #define TEST_MSG	0
 #define QINFO_MSG	1
 #define HPNSSH_MSG 	2
@@ -71,6 +74,10 @@ struct PeerMsg {
 	unsigned int msg_no;
 	unsigned int seq_no;
 	unsigned int value;
+	unsigned int hop_latency;
+	unsigned int queue_occupancy;
+	unsigned int switch_id;
+	char timestamp[MS_CTIME_BUF_LEN];
 	char msg[80];
 };
 /*****************/
