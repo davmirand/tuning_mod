@@ -79,6 +79,7 @@ struct PeerMsg {
 	unsigned int switch_id;
 	char timestamp[MS_CTIME_BUF_LEN];
 	char msg[80];
+	char * pts;
 };
 /*****************/
 void str_cli(int sockfd, struct PeerMsg *sThisMsg);
