@@ -30,7 +30,7 @@ static unsigned int sleep_count = 1;
 struct PeerMsg sMsg;
 unsigned int sMsgSeqNo = 0;
 int gSource_HpnsshQfactor_Port = 5525; //default listening port
-
+int vShutdown = 0;
 enum workflow_phases current_phase = STARTING;
 
 const char *workflow_names[WORKFLOW_NAMES_MAX] = {
@@ -71,6 +71,27 @@ void gettimeWithMilli(time_t *clk, char *ctime_buf, char *ms_ctime_buf)
 return;
 }
 
+
+#define SIGINT_MSG "SIGINT received.\n"
+void sig_int_handler(int signum, siginfo_t *info, void *ptr)
+{
+        //write(STDERR_FILENO, SIGINT_MSG, sizeof(SIGINT_MSG));
+        fprintf(pHpnClientLogPtr,"Caught SIGINT, exiting...\n");
+	vShutdown = 1;
+}
+
+void catch_sigint()
+{
+        static struct sigaction _sigact;
+
+        memset(&_sigact, 0, sizeof(_sigact));
+        _sigact.sa_sigaction = sig_int_handler;
+        _sigact.sa_flags = SA_SIGINFO;
+
+        sigaction(SIGINT, &_sigact, NULL);
+}
+
+
 ssize_t                                         /* Read "n" bytes from a descriptor. */
 readn(int fd, void *vptr, size_t n)
 {
@@ -82,7 +103,7 @@ readn(int fd, void *vptr, size_t n)
         nleft = n;
         while (nleft > 0) {
                 if ( (nread = read(fd, ptr, nleft)) < 0) {
-                        if (errno == EINTR)
+                        if (errno == EINTR && !vShutdown)
                                 nread = 0;              /* and call read() again */
                         else
                                 return(-1);
@@ -170,7 +191,7 @@ void process_request_fs2(int sockfd)
                 return;         /* connection closed by other end */
         }
 
-	                gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+	        gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
                 if (ntohl(from_cli.msg_no) == HPNSSH_MSG)
                 {
                         if (vDebugLevel > 0)
@@ -316,6 +337,11 @@ int main(int argc, char *argv[])
         fprintf(pHpnClientLogPtr,"%s %s: ***Starting Client for testing with HPN-QFACTOR server thread...***\n", ms_ctime_buf, phase2str(current_phase));
         fflush(pHpnClientLogPtr);
 
+	catch_sigint();
+
+	memset(&hpnMsg2,0,sizeof(hpnMsg2));
+	hpnMsg2.value  = HPNSSH_START;
+
 cli_again:
         gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
@@ -323,6 +349,9 @@ cli_again:
         {
                 fprintf(pHpnClientLogPtr,"%s %s: ***Sending message %d to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase), sleep_count);
         }
+		hpnMsg2.msg_no = htonl(HPNSSH_MSG);
+		hpnMsgSeqNo++;
+                hpnMsg2.seq_no = htonl(hpnMsgSeqNo);	
 
 	        if (hpnMsg2.value == HPNSSH_START) //connect
         {
@@ -345,6 +374,7 @@ cli_again:
                 str_cli(sockfd, &hpnMsg2);         /* do it all */
                 fprintf(pHpnClientLogPtr,"%s %s: ***Finish sending Sending start message to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
                 process_request_fs(sockfd);
+		hpnMsg2.value = HPNSSH_READ;
         }
         else
                 if (hpnMsg2.value == HPNSSH_SHUTDOWN)
@@ -358,6 +388,11 @@ cli_again:
                                 read_sock(sockfd); //final read to wait on close from other end
                         else
                                 fprintf(pHpnClientLogPtr,"%s %s: ***shutdown failed to HPNSSN_QFACTOR server..., check = %d***\n", ms_ctime_buf, phase2str(current_phase), check);
+
+			if (pHpnClientLogPtr)
+                		fclose(pHpnClientLogPtr);
+
+        		exit(0);
                 }
                 else
                         if (hpnMsg2.value == HPNSSH_READ)
@@ -366,6 +401,11 @@ cli_again:
                                 hpnMsg2.value = htonl(hpnMsg2.value);
                                 str_cli(sockfd, &hpnMsg2);         /* do it all */
                                 process_request_fs2(sockfd);
+				if (vShutdown)
+				{
+					hpnMsg2.value = HPNSSH_SHUTDOWN;
+					vShutdown = 0;
+				}
                         }
                         else
                                 if (hpnMsg2.value == HPNSSH_READALL)
