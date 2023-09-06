@@ -77,6 +77,9 @@ void sig_int_handler(int signum, siginfo_t *info, void *ptr)
 {
         //write(STDERR_FILENO, SIGINT_MSG, sizeof(SIGINT_MSG));
         fprintf(pHpnClientLogPtr,"Caught SIGINT, exiting...\n");
+	fflush(pHpnClientLogPtr);
+        printf("Caught SIGINT, exiting...\n");
+
 	vShutdown = 1;
 }
 
@@ -103,8 +106,12 @@ readn(int fd, void *vptr, size_t n)
         nleft = n;
         while (nleft > 0) {
                 if ( (nread = read(fd, ptr, nleft)) < 0) {
-                        if (errno == EINTR && !vShutdown)
-                                nread = 0;              /* and call read() again */
+                        if (errno == EINTR)
+			{ 	if (vShutdown) //shutdown requested
+					return (-1);
+				else
+                                	nread = 0;              /* and call read() again */
+			}
                         else
                                 return(-1);
                 } else if (nread == 0)
@@ -123,8 +130,13 @@ Readn(int fd, void *ptr, size_t nbytes)
 {
         ssize_t         n;
 
-        if ( (n = readn(fd, ptr, nbytes)) < 0)
-                err_sys("readn error");
+       if ( (n = readn(fd, ptr, nbytes)) < 0)
+       {
+		if (vShutdown)
+			fprintf(pHpnClientLogPtr,"***INFO*** WARNING!!!!: Shutdown of Client requested*****\n");
+		else	
+			err_sys("readn error");
+       }
         return(n);
 }
 
@@ -176,41 +188,50 @@ return;
 
 void process_request_fs2(int sockfd)
 {
-        ssize_t n;
-        struct PeerMsg from_cli;
-        time_t clk;
-        char ctime_buf[27];
-        char ms_ctime_buf[MS_CTIME_BUF_LEN];
+	ssize_t n;
+	struct PeerMsg from_cli;
+	time_t clk;
+	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 
-        for ( ; ; )
-        {
-        if ( (n = Readn(sockfd, &from_cli, sizeof(from_cli))) == 0)
-        {
-                fprintf(pHpnClientLogPtr,"\n%s %s: ***Connection closed***\n", ms_ctime_buf, phase2str(current_phase));
-                fflush(pHpnClientLogPtr);
-                return;         /* connection closed by other end */
-        }
+	for ( ; ; )
+	{
+		if ( (n = Readn(sockfd, &from_cli, sizeof(from_cli))) == 0)
+		{
+			fprintf(pHpnClientLogPtr,"\n%s %s: ***Connection closed***\n", ms_ctime_buf, phase2str(current_phase));
+			fflush(pHpnClientLogPtr);
+			return;         /* connection closed by other end */
+		}
+		else
+			{
+				if (vShutdown)
+					return;
+			}
 
-	        gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-                if (ntohl(from_cli.msg_no) == HPNSSH_MSG)
-                {
-                        if (vDebugLevel > 0)
-                        {
-                                fprintf(pHpnClientLogPtr,"\n%s %s: ***Received Hpnssh message %u from Hpnssh Server...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
-                                fprintf(pHpnClientLogPtr,"%s %s: ***msg_no = %d, msg value = %u, msg buf = %s", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), ntohl(from_cli.value), from_cli.msg);
-                        }
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		if (ntohl(from_cli.msg_no) == HPNSSH_MSG)
+		{
+			if (vDebugLevel > 0)
+                	{
+                		fprintf(pHpnClientLogPtr,"\n%s %s: ***Received Hpnssh message %u from Hpnssh Server...***\n", 
+										ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
+                       		 fprintf(pHpnClientLogPtr,"%s %s: ***msg_no = %d, msg value = %u, msg buf = %s", 
+						ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), ntohl(from_cli.value), from_cli.msg);
+			}
 
-                                fDoHpnFromServer(ntohl(from_cli.value), sockfd, &from_cli);
-                }
-                else
-                        if (vDebugLevel > 0)
-                        {
-                                fprintf(pHpnClientLogPtr,"\n%s %s: ***Received Invalid message %u from Hpnssh Server...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
-                                fprintf(pHpnClientLogPtr,"%s %s: ***msg_no = %d, msg buf = %s", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), from_cli.msg);
-                        }
+			fDoHpnFromServer(ntohl(from_cli.value), sockfd, &from_cli);
+		}
+		else
+			if (vDebugLevel > 0)
+			{
+				fprintf(pHpnClientLogPtr,"\n%s %s: ***Received Invalid message %u from Hpnssh Server...***\n", 
+									ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
+				fprintf(pHpnClientLogPtr,"%s %s: ***msg_no = %d, msg buf = %s", 
+								ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), from_cli.msg);
+			}
 
-		                fflush(pHpnClientLogPtr);
-        }
+		fflush(pHpnClientLogPtr);
+	}
 }
 
 void
@@ -224,10 +245,16 @@ process_request_fs(int sockfd)
 
         if ( (n = Readn(sockfd, &from_cli, sizeof(from_cli))) == 0)
         {
-                fprintf(pHpnClientLogPtr,"\n%s %s: ***Connection closed***\n", ms_ctime_buf, phase2str(current_phase));
+                fprintf(pHpnClientLogPtr,"\n%s %s: ***Connnnection closed***\n", ms_ctime_buf, phase2str(current_phase));
                 fflush(pHpnClientLogPtr);
                 return;         /* connection closed by other end */
         }
+	 else
+                 {
+                 	if (vShutdown)
+                       	 return;
+                 }
+
 
 	                gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
                 if (ntohl(from_cli.msg_no) == HPNSSH_MSG)
@@ -307,10 +334,10 @@ void read_sock(int sockfd)
         }
 }
 
-void str_cli(int sockfd, struct PeerMsg *sThisMsg) //str_cli09
+int str_cli(int sockfd, struct PeerMsg *sThisMsg) //str_cli09
 {
         Writen(sockfd, sThisMsg, sizeof(struct PeerMsg));
-        return;
+        return 0;
 }
 
 
@@ -324,17 +351,23 @@ int main(int argc, char *argv[])
         struct PeerMsg hpnMsg2;
         int check = 0;
         char aMySrc_Ip[32];
+	pid_t mypid;
+	char aLogFile[256];
 
+	mypid = getpid();
+
+	system("rm -f /tmp/hpnClientLog.*");
+	sprintf(aLogFile,"/tmp/hpnClientLog.%u",mypid);
         gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
-	pHpnClientLogPtr = fopen("/tmp/hpnClientLog","w");
+	pHpnClientLogPtr = fopen(aLogFile,"w");
         if (!pHpnClientLogPtr)
         {
                 printf("%s %s: ***Couldn't open HPN Client log for testing, exiting...\n", ms_ctime_buf, phase2str(current_phase));
                 exit(1);
         }
 
-        fprintf(pHpnClientLogPtr,"%s %s: ***Starting Client for testing with HPN-QFACTOR server thread...***\n", ms_ctime_buf, phase2str(current_phase));
+        fprintf(pHpnClientLogPtr,"%s %s: ***Starting Client for testing with HPN-QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
         fflush(pHpnClientLogPtr);
 
 	catch_sigint();
@@ -356,6 +389,8 @@ cli_again:
 	        if (hpnMsg2.value == HPNSSH_START) //connect
         {
                 fprintf(pHpnClientLogPtr,"%s %s: ***Sending start message to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
+        	fflush(pHpnClientLogPtr);
+
                 hpnMsg2.value = htonl(hpnMsg2.value);
                 fflush(pHpnClientLogPtr);
                 sockfd = Socket(AF_INET, SOCK_STREAM, 0);
@@ -373,6 +408,8 @@ cli_again:
                 }
                 str_cli(sockfd, &hpnMsg2);         /* do it all */
                 fprintf(pHpnClientLogPtr,"%s %s: ***Finish sending Sending start message to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
+        	fflush(pHpnClientLogPtr);
+
                 process_request_fs(sockfd);
 		hpnMsg2.value = HPNSSH_READ;
         }
@@ -380,15 +417,20 @@ cli_again:
                 if (hpnMsg2.value == HPNSSH_SHUTDOWN)
                 {
                         fprintf(pHpnClientLogPtr,"%s %s: ***Sending shutdown message to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
+        		fflush(pHpnClientLogPtr);
+			Close(sockfd);
+#if 0
                         hpnMsg2.value = htonl(hpnMsg2.value);
                         str_cli(sockfd, &hpnMsg2);         /* do it all */
+                        fprintf(pHpnClientLogPtr,"%s %s: ***Shutdown message sent to server...***\n", ms_ctime_buf, phase2str(current_phase));
+        		fflush(pHpnClientLogPtr);
                         check = shutdown(sockfd, SHUT_WR);
                         //close(sockfd); //- use shutdown instead of close
                         if (!check)
                                 read_sock(sockfd); //final read to wait on close from other end
                         else
                                 fprintf(pHpnClientLogPtr,"%s %s: ***shutdown failed to HPNSSN_QFACTOR server..., check = %d***\n", ms_ctime_buf, phase2str(current_phase), check);
-
+#endif
 			if (pHpnClientLogPtr)
                 		fclose(pHpnClientLogPtr);
 
@@ -398,25 +440,24 @@ cli_again:
                         if (hpnMsg2.value == HPNSSH_READ)
                         {
                                 fprintf(pHpnClientLogPtr,"%s %s: ***Sending read message to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
+        			fflush(pHpnClientLogPtr);
+
                                 hpnMsg2.value = htonl(hpnMsg2.value);
                                 str_cli(sockfd, &hpnMsg2);         /* do it all */
-                                process_request_fs2(sockfd);
+                                process_request_fs(sockfd);
 				if (vShutdown)
 				{
 					hpnMsg2.value = HPNSSH_SHUTDOWN;
 					vShutdown = 0;
 				}
+				else
+					hpnMsg2.value = HPNSSH_READ;
                         }
                         else
-                                if (hpnMsg2.value == HPNSSH_READALL)
-                                {
-                                        fprintf(pHpnClientLogPtr,"%s %s: ***Sending readall message to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
-                                        hpnMsg2.value = htonl(hpnMsg2.value);
-                                        str_cli(sockfd, &hpnMsg2);         /* do it all */
-                                        process_request_fs(sockfd);
-                                }
-                                else
-                                        fprintf(pHpnClientLogPtr,"%s %s: ***Invalid hpnMsg2 value %d...***\n", ms_ctime_buf, phase2str(current_phase), hpnMsg2.value);
+			{
+				fprintf(pHpnClientLogPtr,"%s %s: ***Invalid hpnMsg2 value %d...***\n", ms_ctime_buf, phase2str(current_phase), hpnMsg2.value);
+				exit(1);
+			}
 
         sleep_count++;
         fflush(pHpnClientLogPtr);

@@ -82,7 +82,7 @@ struct PeerMsg {
 	char * pts;
 };
 /*****************/
-void str_cli(int sockfd, struct PeerMsg *sThisMsg);
+int str_cli(int sockfd, struct PeerMsg *sThisMsg);
 void     process_request(int);
 void     read_sock(int);
 //void     str_cli(FILE *, int);
@@ -98,7 +98,7 @@ void	 Bind(int, const SA *, socklen_t);
 int	 Connect(int, const SA *, socklen_t);
 void	 Listen(int, int);
 int	 Socket(int, int, int);
-void	 Writen(int, void *, size_t);
+int	 Writen(int, void *, size_t);
 
 int	 err_sys(const char *, ...);
 #endif	/* __unp_h */

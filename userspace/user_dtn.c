@@ -2095,6 +2095,7 @@ void fDoHpnRead(unsigned int val, int sockfd)
         char ctime_buf[27];
         char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	struct PeerMsg sRetMsg;
+	int y;
         
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
         fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
@@ -2109,12 +2110,20 @@ void fDoHpnRead(unsigned int val, int sockfd)
         sRetMsg.value = htonl(133);;
 
 read_again:
+        fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), 11111**\n", ms_ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
         Pthread_mutex_lock(&hpn_ret_mutex);
+        fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), 6666**\n", ms_ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
 
-        while(hpnretcdone == 0)
-                Pthread_cond_wait(&hpn_ret_cond, &hpn_ret_mutex);
+        //while(hpnretcdone == 0)
+         //      Pthread_cond_wait(&hpn_ret_cond, &hpn_ret_mutex);
+        fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), 7777**\n", ms_ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
         //memcpy(&sRetMsg,&sHpnRetMsg,sizeof(sRetMsg));
-        memcpy(sRetMsg.timestamp, sHpnRetMsg.pts, MS_CTIME_BUF_LEN);
+        //memcpy(sRetMsg.timestamp, sHpnRetMsg.pts, MS_CTIME_BUF_LEN);
+        memcpy(sRetMsg.timestamp, ms_ctime_buf, MS_CTIME_BUF_LEN);
+	
         sRetMsg.hop_latency = htonl(sHpnRetMsg.hop_latency);
         sRetMsg.queue_occupancy = htonl(sHpnRetMsg.queue_occupancy);
         sRetMsg.switch_id = htonl(sHpnRetMsg.switch_id);
@@ -2130,6 +2139,8 @@ read_again:
 #endif
         hpnretcdone = 0;
         Pthread_mutex_unlock(&hpn_ret_mutex);
+        fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), 2222**\n", ms_ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
 #if 0
 #ifdef HPNSSH_QFACTOR_TESTING
 	hpnMsgSeqNo++;
@@ -2145,8 +2156,15 @@ read_again:
 	if (vMetaDataClientCount == NUMMETAVALUES)
 		vMetaDataClientCount = 0;
 #endif
-	str_cli(sockfd, &sRetMsg);
-	goto read_again;
+#if 0	
+	if (!str_cli(sockfd, &sRetMsg))
+		goto read_again;
+#endif
+        fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), 3333**\n", ms_ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
+	y = str_cli(sockfd, &sRetMsg);
+        fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), 4444 y = %d**\n", ms_ctime_buf, phase2str(current_phase),y);
+	fflush(tunLogPtr);
 return;
 }
 
@@ -2180,13 +2198,14 @@ void fDoHpnShutdown(unsigned int val, int sockfd)
         
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
         fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnShutdown(), value is %u, Shutting down HPNSSH-QFACTOR  Server socket ***\n", ms_ctime_buf, phase2str(current_phase), val);
+#if 1
 	check = shutdown(sockfd, SHUT_WR);
         //close(sockfd); //- use shutdown instead of close
         if (!check)
         	read_sock(sockfd); //final read to wait on close from other end
         else
         	fprintf(tunLogPtr,"%s %s: ***shutdoooown failed to HPNSSN_QFACTOR server..., check = %d***\n", ms_ctime_buf, phase2str(current_phase), check);
-
+#endif
 return;
 }
 
@@ -3924,6 +3943,60 @@ process_request_fs(int sockfd)
 		fflush(pHpnClientLogPtr);
 }
 #endif
+#ifdef HPNSSH_QFACTOR
+void * doProcessHpnClientReq(void * arg)
+{
+	ssize_t	n;
+	struct PeerMsg	from_cli;
+	time_t clk;
+	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
+
+	int sockfd = (int)arg;
+
+	pthread_detach(pthread_self());
+
+	for ( ; ; ) 
+	{
+		fprintf(tunLogPtr,"\n%s %s: *** before Readn ***\n", ms_ctime_buf, phase2str(current_phase));
+		fflush(tunLogPtr);
+		if ( (n = Readn(sockfd, &from_cli, sizeof(from_cli))) == 0)
+		{
+			fprintf(tunLogPtr,"\n%s %s: ***Connection closed***\n", ms_ctime_buf, phase2str(current_phase));
+			fflush(tunLogPtr);
+
+			Close(sockfd);
+			return (NULL);         /* connection closed by other end */
+		}
+		fprintf(tunLogPtr,"\n%s %s: *** after Readn ***\n", ms_ctime_buf, phase2str(current_phase));
+		fflush(tunLogPtr);
+
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+#ifdef HPNSSH_QFACTOR
+		if (ntohl(from_cli.msg_no) == HPNSSH_MSG)
+		{
+			if (vDebugLevel > 0)
+			{
+				fprintf(tunLogPtr,"\n%s %s: ***Received Hpnssh message %u from Hpnssh Client...***\n", 
+									ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
+				fprintf(tunLogPtr,"%s %s: ***msg_no = %d, msg value = %u, msg buf = %s", 
+						ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), ntohl(from_cli.value), from_cli.msg);
+			}
+				
+			fDoHpnAssessment(ntohl(from_cli.value), sockfd);
+		}
+#endif
+			else
+				if (vDebugLevel > 0)
+				{
+					fprintf(tunLogPtr,"\n%s %s: ***Received a message %u from some client...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
+					fprintf(tunLogPtr,"%s %s: ***msg_no = %d, msg buf = %s", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), from_cli.msg);
+				}
+
+		fflush(tunLogPtr);
+	}
+}
+#endif
 
 void
 process_request(int sockfd)
@@ -3953,25 +4026,14 @@ process_request(int sockfd)
 
 			fDoQinfoAssessment(ntohl(from_cli.value));
 		}
-#ifdef HPNSSH_QFACTOR
 		else
-			if (ntohl(from_cli.msg_no) == HPNSSH_MSG)
+			if (vDebugLevel > 0)
 			{
-				if (vDebugLevel > 0)
-				{
-					fprintf(tunLogPtr,"\n%s %s: ***Received Hpnssh message %u from Hpnssh Client...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
-					fprintf(tunLogPtr,"%s %s: ***msg_no = %d, msg value = %u, msg buf = %s", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), ntohl(from_cli.value), from_cli.msg);
-				}
-				
-				fDoHpnAssessment(ntohl(from_cli.value), sockfd);
+				fprintf(tunLogPtr,"\n%s %s: ***Received a message %u from destination DTN...***\n", 
+								ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
+				fprintf(tunLogPtr,"%s %s: ***msg_no = %d, msg buf = %s", 
+								ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), from_cli.msg);
 			}
-#endif
-			else
-				if (vDebugLevel > 0)
-				{
-					fprintf(tunLogPtr,"\n%s %s: ***Received message %u from destination DTN...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
-					fprintf(tunLogPtr,"%s %s: ***msg_no = %d, msg buf = %s", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), from_cli.msg);
-				}
 
 		fflush(tunLogPtr);
 	}
@@ -3984,6 +4046,7 @@ void * doHandleHpnsshQfactorEnv(void * vargp)
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	int listenfd, connfd;
+	pthread_t tid;
 	socklen_t clilen;
 	struct sockaddr_in cliaddr, servaddr;
 	
@@ -4076,8 +4139,8 @@ void * doHandleHpnsshQfactorEnv(void * vargp)
 			exit(0);
 		}
 #endif	
-
-		process_request(connfd);/* process the request */
+		pthread_create(&tid, NULL, &doProcessHpnClientReq, (void *) connfd);
+		//process_request(connfd);/* process the request */
 		
 		//Close(connfd); /* parent closes connected socket */
 	}
@@ -4210,10 +4273,10 @@ void read_sock(int sockfd)
 	}
 }
 
-void str_cli(int sockfd, struct PeerMsg *sThisMsg) //str_cli09
+int str_cli(int sockfd, struct PeerMsg *sThisMsg) //str_cli09
 {
-	Writen(sockfd, sThisMsg, sizeof(struct PeerMsg));
-	return;
+	int y = Writen(sockfd, sThisMsg, sizeof(struct PeerMsg));
+	return y;
 }
 
 #ifdef HPNSSH_QFACTOR_TESTING
@@ -4239,7 +4302,7 @@ void * doRunSendMessageToHpnsshQfactorEnv(void * vargp)
 		exit(1);
 	}
 
-	fprintf(pHpnClientLogPtr,"%s %s: ***Starting Client for testing with HPN-QFACTOR server thread...***\n", ms_ctime_buf, phase2str(current_phase));
+	fprintf(pHpnClientLogPtr,"%s %s: ***HPN Client thread started...***\n", ms_ctime_buf, phase2str(current_phase));
 	fflush(pHpnClientLogPtr);
 
 cli_again:
@@ -4274,16 +4337,21 @@ cli_again:
 
 		if (Connect(sockfd, (SA *) &servaddr, sizeof(servaddr)))
 		{
+			fprintf(pHpnClientLogPtr,"%s %s: ***Connect to HPNSSN_QFACTOR server failed...***\n", ms_ctime_buf, phase2str(current_phase));
+			fflush(pHpnClientLogPtr);
 			goto cli_again;
 		}
 		str_cli(sockfd, &hpnMsg2);         /* do it all */
 		fprintf(pHpnClientLogPtr,"%s %s: ***Finish sending Sending start message to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
+		fflush(pHpnClientLogPtr);
 		process_request_fs(sockfd);
 	}
 	else
 		if (hpnMsg2.value == HPNSSH_SHUTDOWN)
 		{
 			fprintf(pHpnClientLogPtr,"%s %s: ***Sending shutdown message to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
+			fflush(pHpnClientLogPtr);
+
 			hpnMsg2.value = htonl(hpnMsg2.value);
 			str_cli(sockfd, &hpnMsg2);         /* do it all */
 			check = shutdown(sockfd, SHUT_WR);
@@ -4297,6 +4365,7 @@ cli_again:
 			if (hpnMsg2.value == HPNSSH_READ)
 			{
 				fprintf(pHpnClientLogPtr,"%s %s: ***Sending read message to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
+				fflush(pHpnClientLogPtr);
 				hpnMsg2.value = htonl(hpnMsg2.value);
 				str_cli(sockfd, &hpnMsg2);         /* do it all */
 				process_request_fs2(sockfd);
