@@ -69,6 +69,7 @@
 #define HPNSSH_READALL	44
 #define HPNSSH_SHUTDOWN	55
 #define	HPNSSH_START	99
+#define	HPNSSH_DUMMY	166
 
 struct PeerMsg {
 	unsigned int msg_no;

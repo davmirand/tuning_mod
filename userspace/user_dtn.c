@@ -193,6 +193,7 @@ pthread_cond_t hpn_ret_cond = PTHREAD_COND_INITIALIZER;
 static int hpnretcdone = 0;
 struct PeerMsg sHpnRetMsg;
 unsigned int hpnRetMsgSeqNo = 0;
+struct PeerMsg sDummyMsg;
 #ifdef HPNSSH_QFACTOR_TESTING
 pthread_mutex_t hpn_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t hpn_cond = PTHREAD_COND_INITIALIZER;
@@ -2091,14 +2092,17 @@ void fDoHpnAssessment(unsigned int val, int sockfd);
 
 void fDoHpnRead(unsigned int val, int sockfd)
 {
-        time_t clk;
-        char ctime_buf[27];
-        char ms_ctime_buf[MS_CTIME_BUF_LEN];
+	time_t clk;
+	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	struct PeerMsg sRetMsg;
-	int y;
-        
+	int y,n;
+	struct timeval tv;
+	struct timespec ts;
+	int saveerrno = 0;
+	
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-        fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
+	fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
 #if 0
 	fprintf(tunLogPtr, "\n%s %s: ***********************HPN_CLIENT************************",metaData[vMetaDataClientCount].timestamp, phase2str(current_phase));
 	fprintf(tunLogPtr, "\n%s %s: HPN_CLIENT    : hop_switch_id = %u\n",metaData[vMetaDataClientCount].timestamp, phase2str(current_phase), metaData[vMetaDataClientCount].switch_id);
@@ -2106,27 +2110,48 @@ void fDoHpnRead(unsigned int val, int sockfd)
 	fprintf(tunLogPtr, "%s %s: HPN_CLIENT    : hop_latency = %u\n",metaData[vMetaDataClientCount].timestamp, phase2str(current_phase), metaData[vMetaDataClientCount].hop_latency);
 #endif	
 	strcpy(sRetMsg.msg, "Hello there!!! Got your Read message..., Here's some data\n");
-        sRetMsg.msg_no = htonl(HPNSSH_MSG);
-        sRetMsg.value = htonl(133);;
+	sRetMsg.msg_no = htonl(HPNSSH_MSG);
+	sRetMsg.value = htonl(133);;
 
 read_again:
-        fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), 11111**\n", ms_ctime_buf, phase2str(current_phase));
+	fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), 11111**\n", ms_ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
-        Pthread_mutex_lock(&hpn_ret_mutex);
-        fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), 6666**\n", ms_ctime_buf, phase2str(current_phase));
+	Pthread_mutex_lock(&hpn_ret_mutex);
+	fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), 6666**\n", ms_ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
 
-        //while(hpnretcdone == 0)
-         //      Pthread_cond_wait(&hpn_ret_cond, &hpn_ret_mutex);
-        fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), 7777**\n", ms_ctime_buf, phase2str(current_phase));
-	fflush(tunLogPtr);
-        //memcpy(&sRetMsg,&sHpnRetMsg,sizeof(sRetMsg));
-        //memcpy(sRetMsg.timestamp, sHpnRetMsg.pts, MS_CTIME_BUF_LEN);
-        memcpy(sRetMsg.timestamp, ms_ctime_buf, MS_CTIME_BUF_LEN);
+	if (gettimeofday(&tv, NULL) < 0)
+		err_sys("gettimeofday error");
+	ts.tv_sec = tv.tv_sec + 5; //seconds in future
+	ts.tv_nsec = tv.tv_usec * 1000; //microsec to nanosec
+
+	while(hpnretcdone == 0)
+		if ( (n = pthread_cond_timedwait(&hpn_ret_cond, &hpn_ret_mutex, &ts)) != 0){
+			saveerrno = errno;
+			fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), 4343 errno = %d, n= %d**\n", ms_ctime_buf, phase2str(current_phase), saveerrno,n);
+			fflush(tunLogPtr);
+			if (n == ETIME || n == ETIMEDOUT) //apparently n could also be ETIMEDOUT although man notes only mention ETIME
+			{
+				fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), 4545 errno = %d, n= %d**\n", ms_ctime_buf, phase2str(current_phase), saveerrno,n);
+				fflush(tunLogPtr);
+				Pthread_mutex_unlock(&hpn_ret_mutex); //release the Kraken
+				y = str_cli(sockfd, &sDummyMsg);
+				return;
+			}
+                }	
+		//Pthread_cond_wait(&hpn_ret_cond, &hpn_ret_mutex);
 	
-        sRetMsg.hop_latency = htonl(sHpnRetMsg.hop_latency);
-        sRetMsg.queue_occupancy = htonl(sHpnRetMsg.queue_occupancy);
-        sRetMsg.switch_id = htonl(sHpnRetMsg.switch_id);
+	saveerrno = errno;
+	fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), 7777 errno = %d**\n", ms_ctime_buf, phase2str(current_phase), saveerrno);
+	fflush(tunLogPtr);
+
+        //memcpy(&sRetMsg,&sHpnRetMsg,sizeof(sRetMsg));
+	memcpy(sRetMsg.timestamp, sHpnRetMsg.pts, MS_CTIME_BUF_LEN);
+//	memcpy(sRetMsg.timestamp, ms_ctime_buf, MS_CTIME_BUF_LEN);
+	
+	sRetMsg.hop_latency = htonl(sHpnRetMsg.hop_latency);
+	sRetMsg.queue_occupancy = htonl(sHpnRetMsg.queue_occupancy);
+	sRetMsg.switch_id = htonl(sHpnRetMsg.switch_id);
 #if 0
 	fprintf(tunLogPtr, "\n%s %s: ***********************HPN_CLIENT************************",sRetMsg.timestamp, phase2str(current_phase));
 	fprintf(tunLogPtr, "\n%s %s: HPN_CLIENT    : hop_switch_id = %u\n",sRetMsg.timestamp, phase2str(current_phase), sRetMsg.switch_id);
@@ -2135,16 +2160,16 @@ read_again:
 #endif	
 #ifdef HPNSSH_QFACTOR_TESTING
 	hpnMsgSeqNo++;
-        sRetMsg.seq_no = htonl(hpnMsgSeqNo);
+	sRetMsg.seq_no = htonl(hpnMsgSeqNo);
 #endif
-        hpnretcdone = 0;
-        Pthread_mutex_unlock(&hpn_ret_mutex);
-        fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), 2222**\n", ms_ctime_buf, phase2str(current_phase));
+	hpnretcdone = 0;
+	Pthread_mutex_unlock(&hpn_ret_mutex);
+	fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), 2222**\n", ms_ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
 #if 0
 #ifdef HPNSSH_QFACTOR_TESTING
 	hpnMsgSeqNo++;
-        sRetMsg.seq_no = htonl(hpnMsgSeqNo);
+	sRetMsg.seq_no = htonl(hpnMsgSeqNo);
 #endif
 	memcpy(sRetMsg.timestamp,metaData[vMetaDataClientCount].timestamp,MS_CTIME_BUF_LEN);
 	sRetMsg.switch_id = htonl(metaData[vMetaDataClientCount].switch_id);
@@ -2163,8 +2188,8 @@ read_again:
         fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), 3333**\n", ms_ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
 	y = str_cli(sockfd, &sRetMsg);
-        fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), 4444 y = %d**\n", ms_ctime_buf, phase2str(current_phase),y);
-	fflush(tunLogPtr);
+fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), 4444 y = %d**\n", ms_ctime_buf, phase2str(current_phase),y);
+fflush(tunLogPtr);
 return;
 }
 
@@ -4655,6 +4680,17 @@ int main(int argc, char **argv)
 	memset(&sHpnRetMsg,0,sizeof(sHpnRetMsg));
 	strcpy(sHpnRetMsg.msg, "Hello there!!! This is a Hpn msg...\n");
 	sHpnRetMsg.msg_no = htonl(HPNSSH_MSG);
+
+	memset(&sDummyMsg,0,sizeof(sDummyMsg));
+	strcpy(sDummyMsg.msg, "Hello there!!! This is  a dummy message ..., Here's some data\n");
+        sDummyMsg.msg_no = htonl(HPNSSH_MSG);
+        sDummyMsg.value = htonl(HPNSSH_DUMMY);;
+        memcpy(sDummyMsg.timestamp, ms_ctime_buf, MS_CTIME_BUF_LEN);
+        sDummyMsg.hop_latency = htonl(1);
+        sDummyMsg.queue_occupancy = htonl(2);
+        sDummyMsg.switch_id = htonl(3);
+        sDummyMsg.seq_no = htonl(4);
+
 	//Send messages tp HpnsshQfactor server for simulated testing
 #ifdef HPNSSH_QFACTOR_TESTING
 	memset(&hpnMsg,0,sizeof(hpnMsg));
