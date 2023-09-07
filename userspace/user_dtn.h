@@ -5,9 +5,6 @@
 #define WORKFLOW_NAMES_MAX	4
 #if 1
 #define HPNSSH_QFACTOR  1
-#if 0
-#define HPNSSH_QFACTOR_TESTING 1 
-#endif
 #endif
 
 enum workflow_phases {
