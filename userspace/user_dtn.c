@@ -2046,6 +2046,7 @@ void fDoHpnRead(unsigned int val, int sockfd)
 	struct timeval tv;
 	struct timespec ts;
 	int saveerrno = 0;
+	char mychar;
 	
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	if (vDebugLevel > 6)
@@ -2079,8 +2080,21 @@ read_again:
 
 				Pthread_mutex_unlock(&hpn_ret_mutex); //release the Kraken
 				//goto read_again;
-				y = str_cli(sockfd, &sTimeoutMsg);
+				y = recv(sockfd, &mychar, 1, MSG_DONTWAIT|MSG_PEEK);
+				saveerrno = errno;
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: In d(), wait timed out errno = %d, y= %d**\n", ms_ctime_buf, phase2str(current_phase), saveerrno,y);
+				fflush(tunLogPtr);
+				if (saveerrno && !y) //cpnnection dropped on client side
+				{
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: client closed connection, returning from read ffDoHpnRead()****\n", ms_ctime_buf, phase2str(current_phase));
+				fflush(tunLogPtr);
 				return;
+				}
+				else
+					goto read_again;
+
+				//y = str_cli(sockfd, &sTimeoutMsg);
+				//return;
 			}
                 }	
 		//Pthread_cond_wait(&hpn_ret_cond, &hpn_ret_mutex);
@@ -3788,7 +3802,6 @@ process_request(int sockfd)
 	{
 		if ( (n = Readn(sockfd, &from_cli, sizeof(from_cli))) == 0)
 		{
-			fprintf(tunLogPtr,"\n%s %s: ***Connection closed***\n", ms_ctime_buf, phase2str(current_phase));
 			return;         /* connection closed by other end */
 		}
 
