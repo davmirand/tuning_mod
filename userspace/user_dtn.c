@@ -188,6 +188,7 @@ pthread_mutex_t hpn_ret_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t hpn_ret_cond = PTHREAD_COND_INITIALIZER;
 static int hpnretcdone = 0;
 struct PeerMsg sHpnRetMsg;
+struct PeerMsg sHpnRetMsg2;
 unsigned int hpnRetMsgSeqNo = 0;
 struct PeerMsg sTimeoutMsg;
 #endif
@@ -635,15 +636,15 @@ perf_event_loop: {
 							sHpnRetMsg.hop_latency = qinfo_hop_latency_min;
 							sHpnRetMsg.queue_occupancy = qinfo_min_value;
 							sHpnRetMsg.switch_id = qinfo_hop_switch_id_min;
-							hpnretcdone = 1;
-							Pthread_cond_signal(&hpn_ret_cond);
-							Pthread_mutex_unlock(&hpn_ret_mutex);
+							//hpnretcdone = 1;
+							//Pthread_cond_signal(&hpn_ret_cond);
+							//Pthread_mutex_unlock(&hpn_ret_mutex);
 ///****************************************************************************************************	We'll see if a better way after
-							Pthread_mutex_lock(&hpn_ret_mutex);
-							sHpnRetMsg.pts = qinfo_ms_ctime_buf_max;
-							sHpnRetMsg.hop_latency = qinfo_hop_latency_max;
-							sHpnRetMsg.queue_occupancy = qinfo_max_value;
-							sHpnRetMsg.switch_id = qinfo_hop_switch_id_max;
+							//Pthread_mutex_lock(&hpn_ret_mutex);
+							sHpnRetMsg2.pts = qinfo_ms_ctime_buf_max;
+							sHpnRetMsg2.hop_latency = qinfo_hop_latency_max;
+							sHpnRetMsg2.queue_occupancy = qinfo_max_value;
+							sHpnRetMsg2.switch_id = qinfo_hop_switch_id_max;
 							hpnretcdone = 1;
 							Pthread_cond_signal(&hpn_ret_cond);
 							Pthread_mutex_unlock(&hpn_ret_mutex);
@@ -687,15 +688,15 @@ perf_event_loop: {
 								sHpnRetMsg.hop_latency = qinfo_hop_latency_max;
 								sHpnRetMsg.queue_occupancy = qinfo_max_value;
 								sHpnRetMsg.switch_id = qinfo_hop_switch_id_max;
-								hpnretcdone = 1;
-								Pthread_cond_signal(&hpn_ret_cond);
-								Pthread_mutex_unlock(&hpn_ret_mutex);
+							//	hpnretcdone = 1;
+							//	Pthread_cond_signal(&hpn_ret_cond);
+							//	Pthread_mutex_unlock(&hpn_ret_mutex);
 ///****************************************************************************************************	We'll see if a better way after
-								Pthread_mutex_lock(&hpn_ret_mutex);
-								sHpnRetMsg.pts = qinfo_ms_ctime_buf_min;
-								sHpnRetMsg.hop_latency = qinfo_hop_latency_min;
-								sHpnRetMsg.queue_occupancy = qinfo_min_value;
-								sHpnRetMsg.switch_id = qinfo_hop_switch_id_min;
+							//	Pthread_mutex_lock(&hpn_ret_mutex);
+								sHpnRetMsg2.pts = qinfo_ms_ctime_buf_min;
+								sHpnRetMsg2.hop_latency = qinfo_hop_latency_min;
+								sHpnRetMsg2.queue_occupancy = qinfo_min_value;
+								sHpnRetMsg2.switch_id = qinfo_hop_switch_id_min;
 								hpnretcdone = 1;
 								Pthread_cond_signal(&hpn_ret_cond);
 								Pthread_mutex_unlock(&hpn_ret_mutex);
@@ -2042,11 +2043,13 @@ void fDoHpnRead(unsigned int val, int sockfd)
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	struct PeerMsg sRetMsg;
+	struct PeerMsg sRetMsg2;
 	int y,n;
 	struct timeval tv;
 	struct timespec ts;
 	int saveerrno = 0;
 	char mychar;
+	int two = 0;
 	
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	if (vDebugLevel > 6)
@@ -2055,6 +2058,10 @@ void fDoHpnRead(unsigned int val, int sockfd)
 	strcpy(sRetMsg.msg, "Hello there!!! Got your Read message..., Here's some data\n");
 	sRetMsg.msg_no = htonl(HPNSSH_MSG);
 	sRetMsg.value = htonl(133);;
+
+	strcpy(sRetMsg2.msg, "Hello there!!! Got your Read message..., Here's some data\n");
+	sRetMsg2.msg_no = htonl(HPNSSH_MSG);
+	sRetMsg2.value = htonl(133);;
 
 read_again:
 	Pthread_mutex_lock(&hpn_ret_mutex);
@@ -2103,6 +2110,17 @@ read_again:
 	sRetMsg.hop_latency = htonl(sHpnRetMsg.hop_latency);
 	sRetMsg.queue_occupancy = htonl(sHpnRetMsg.queue_occupancy);
 	sRetMsg.switch_id = htonl(sHpnRetMsg.switch_id);
+
+	if(sHpnRetMsg2.pts)
+	{
+		memcpy(sRetMsg2.timestamp, sHpnRetMsg2.pts, MS_CTIME_BUF_LEN);
+       		sRetMsg2.hop_latency = htonl(sHpnRetMsg2.hop_latency);
+        	sRetMsg2.queue_occupancy = htonl(sHpnRetMsg2.queue_occupancy);
+        	sRetMsg2.switch_id = htonl(sHpnRetMsg2.switch_id);
+
+		sHpnRetMsg2.pts = 0;
+		two = 1;
+	}
 	
 	hpnretcdone = 0;
 	Pthread_mutex_unlock(&hpn_ret_mutex);
@@ -2113,7 +2131,14 @@ read_again:
 	fprintf(tunLogPtr,"%s %s: ***WARNING***: client closed connection, EPIPE error???****\n", ms_ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
 #endif
-	y = str_cli(sockfd, &sRetMsg);
+	if (two)
+	{
+		two = 0;
+		y = str_cli(sockfd, &sRetMsg);
+		y = str_cli(sockfd, &sRetMsg2);
+	}
+	else
+		y = str_cli(sockfd, &sRetMsg);
 
 return;
 }
@@ -2124,11 +2149,13 @@ void fDoHpnReadAll(unsigned int val, int sockfd)
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	struct PeerMsg sRetMsg;
+	struct PeerMsg sRetMsg2;
 	int y,n;
 	struct timeval tv;
 	struct timespec ts;
 	int saveerrno = 0;
 	char mychar;
+	int two = 0;
 	
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	if (vDebugLevel > 6)
@@ -2137,6 +2164,10 @@ void fDoHpnReadAll(unsigned int val, int sockfd)
 	strcpy(sRetMsg.msg, "Hello there!!! Got your ReadAll message..., Here's some data\n");
 	sRetMsg.msg_no = htonl(HPNSSH_MSG);
 	sRetMsg.value = htonl(144);;
+
+	strcpy(sRetMsg2.msg, "Hello there!!! Got your ReadAll message..., Here's some data\n");
+	sRetMsg2.msg_no = htonl(HPNSSH_MSG);
+	sRetMsg2.value = htonl(144);;
 
 read_again:
 	Pthread_mutex_lock(&hpn_ret_mutex);
@@ -2189,11 +2220,31 @@ read_again:
 	sRetMsg.queue_occupancy = htonl(sHpnRetMsg.queue_occupancy);
 	sRetMsg.switch_id = htonl(sHpnRetMsg.switch_id);
 	
+	if(sHpnRetMsg2.pts)
+	{
+		memcpy(sRetMsg2.timestamp, sHpnRetMsg2.pts, MS_CTIME_BUF_LEN);
+       		sRetMsg2.hop_latency = htonl(sHpnRetMsg2.hop_latency);
+        	sRetMsg2.queue_occupancy = htonl(sHpnRetMsg2.queue_occupancy);
+        	sRetMsg2.switch_id = htonl(sHpnRetMsg2.switch_id);
+
+		sHpnRetMsg2.pts = 0;
+		two = 1;
+	}
+
 	hpnretcdone = 0;
 	Pthread_mutex_unlock(&hpn_ret_mutex);
 #if 1	
-	if (!str_cli(sockfd, &sRetMsg))
-		goto read_again;
+	if (two)
+	{
+		two = 0;
+		if ((!str_cli(sockfd, &sRetMsg)) && (!str_cli(sockfd, &sRetMsg2)))
+			goto read_again;
+	}
+	else
+		{	
+			if (!str_cli(sockfd, &sRetMsg))
+				goto read_again;
+		}
 	
 	fprintf(tunLogPtr,"%s %s: ***WARNING***: client closed connection, EPIPE error???****\n", ms_ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
@@ -4393,6 +4444,10 @@ int main(int argc, char **argv)
 	memset(&sHpnRetMsg,0,sizeof(sHpnRetMsg));
 	strcpy(sHpnRetMsg.msg, "Hello there!!! This is a Hpn msg...\n");
 	sHpnRetMsg.msg_no = htonl(HPNSSH_MSG);
+
+	memset(&sHpnRetMsg2,0,sizeof(sHpnRetMsg));
+	strcpy(sHpnRetMsg2.msg, "Hello there!!! This is a Hpn msg...\n");
+	sHpnRetMsg2.msg_no = htonl(HPNSSH_MSG);
 
 	memset(&sTimeoutMsg,0,sizeof(sTimeoutMsg));
 	strcpy(sTimeoutMsg.msg, "Hello there!!! This is  a dummy message ..., Here's some data\n");
