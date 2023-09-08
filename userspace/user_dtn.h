@@ -3,9 +3,6 @@
 //extern enum workflow_phases;
 
 #define WORKFLOW_NAMES_MAX	4
-#if 1
-#define HPNSSH_QFACTOR  1
-#endif
 
 enum workflow_phases {
         STARTING,

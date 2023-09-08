@@ -60,6 +60,10 @@
 #define CTIME_BUF_LEN		27
 #define MS_CTIME_BUF_LEN	48
 
+#if 1
+#define HPNSSH_QFACTOR  1
+#endif
+
 #define TEST_MSG	0
 #define QINFO_MSG	1
 #define HPNSSH_MSG 	2

@@ -117,9 +117,9 @@ $(USER_TARGETS): %: %.c  $(OBJECT_LIBBPF) Makefile $(COMMON_MK) $(COMMON_OBJS) $
 	$(CC) -Wall -Wno-unused-label $(CFLAGS) $(LDFLAGS) -o $@ $(COMMON_OBJS) $(OTHER_OBJS) $(FACILIO_OBJS) -lm -lpthread \
 	 $< $(LIBS)
 
-$(MY_TARGETS): %: %.c  Makefile $(COMMON_MK) $(MY_OBJS) $(EXTRA_DEPS)
-	$(CC) -Wall -Wno-unused-label $(CFLAGS) $(LDFLAGS) -o $@ $(MY_OBJS) -lm -lpthread \
-	 $< $(LIBS)
+$(MY_TARGETS): %: %.c  Makefile $(COMMON_MK) $(MY_OBJS) $(EXTRA_DEPS) 
+	$(CC) -Wall -Wno-unused-label $(CFLAGS) $(LDFLAGS)  -o $@ $(MY_OBJS) \
+	 $< $(LIBS) 
 
 $(XDP_OBJ): %.o: %.c  Makefile $(COMMON_MK) $(KERN_USER_H) $(EXTRA_DEPS) $(OBJECT_LIBBPF)
 	$(CLANG) -S \
