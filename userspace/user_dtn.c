@@ -2082,7 +2082,7 @@ read_again:
 				//goto read_again;
 				y = recv(sockfd, &mychar, 1, MSG_DONTWAIT|MSG_PEEK);
 				saveerrno = errno;
-				fprintf(tunLogPtr,"%s %s: ***WARNING***: In d(), wait timed out errno = %d, y= %d**\n", ms_ctime_buf, phase2str(current_phase), saveerrno,y);
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: In fDoHpnRead(), wait timed out errno = %d, y= %d**\n", ms_ctime_buf, phase2str(current_phase), saveerrno,y);
 				fflush(tunLogPtr);
 				if (saveerrno && !y) //cpnnection dropped on client side
 				{
@@ -2109,24 +2109,96 @@ read_again:
 #if 0	
 	if (!str_cli(sockfd, &sRetMsg))
 		goto read_again;
+	
+	fprintf(tunLogPtr,"%s %s: ***WARNING***: client closed connection, EPIPE error???****\n", ms_ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
 #endif
 	y = str_cli(sockfd, &sRetMsg);
+
 return;
 }
 
 void fDoHpnReadAll(unsigned int val, int sockfd)
 {
-        time_t clk;
-        char ctime_buf[27];
-        char ms_ctime_buf[MS_CTIME_BUF_LEN];
+	time_t clk;
+	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	struct PeerMsg sRetMsg;
-        
+	int y,n;
+	struct timeval tv;
+	struct timespec ts;
+	int saveerrno = 0;
+	char mychar;
+	
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-        fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnReadAll(), value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
+	if (vDebugLevel > 6)
+		fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnReadAll(), value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
 	
 	strcpy(sRetMsg.msg, "Hello there!!! Got your ReadAll message..., Here's some data\n");
-        sRetMsg.msg_no = htonl(HPNSSH_MSG);
-        sRetMsg.value = htonl(144);;
+	sRetMsg.msg_no = htonl(HPNSSH_MSG);
+	sRetMsg.value = htonl(144);;
+
+read_again:
+	Pthread_mutex_lock(&hpn_ret_mutex);
+	if (gettimeofday(&tv, NULL) < 0)
+		err_sys("gettimeofday error");
+	ts.tv_sec = tv.tv_sec + 5; //seconds in future
+	ts.tv_nsec = tv.tv_usec * 1000; //microsec to nanosec
+
+	while(hpnretcdone == 0)
+		if ( (n = pthread_cond_timedwait(&hpn_ret_cond, &hpn_ret_mutex, &ts)) != 0)
+		{
+			saveerrno = errno;
+			if (vDebugLevel > 6)
+				fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnReadAll(),  errno = %d, n= %d**\n", 
+									ms_ctime_buf, phase2str(current_phase), saveerrno,n);
+
+			if (n == ETIME || n == ETIMEDOUT) //apparently n could also be ETIME although man notes only mention ETIMEDOUT
+			{
+				if (vDebugLevel > 5)
+				{
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: In fDoHpnReadAll(), wait condition timed out errno = %d, n= %d**\n", 
+													ms_ctime_buf, phase2str(current_phase), saveerrno,n);
+					fflush(tunLogPtr);
+				}
+
+				Pthread_mutex_unlock(&hpn_ret_mutex); //release the Kraken
+				//goto read_again;
+				y = recv(sockfd, &mychar, 1, MSG_DONTWAIT|MSG_PEEK);
+				saveerrno = errno;
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: In fDoHpnReadAll(), wait timed out errno = %d, y= %d**\n", 
+											ms_ctime_buf, phase2str(current_phase), saveerrno,y);
+				fflush(tunLogPtr);
+				if (saveerrno && !y) //cpnnection dropped on client side
+				{
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: client closed connection, returning from read fDoHpnReadAll()****\n", 
+													ms_ctime_buf, phase2str(current_phase));
+				fflush(tunLogPtr);
+				return;
+				}
+				else
+					goto read_again;
+
+				//y = str_cli(sockfd, &sTimeoutMsg);
+				//return;
+			}
+                }	
+	
+	memcpy(sRetMsg.timestamp, sHpnRetMsg.pts, MS_CTIME_BUF_LEN);
+	sRetMsg.hop_latency = htonl(sHpnRetMsg.hop_latency);
+	sRetMsg.queue_occupancy = htonl(sHpnRetMsg.queue_occupancy);
+	sRetMsg.switch_id = htonl(sHpnRetMsg.switch_id);
+	
+	hpnretcdone = 0;
+	Pthread_mutex_unlock(&hpn_ret_mutex);
+#if 1	
+	if (!str_cli(sockfd, &sRetMsg))
+		goto read_again;
+	
+	fprintf(tunLogPtr,"%s %s: ***WARNING***: client closed connection, EPIPE error???****\n", ms_ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
+#endif
+//	y = str_cli(sockfd, &sRetMsg);
 return;
 }
 
