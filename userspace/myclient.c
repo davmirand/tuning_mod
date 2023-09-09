@@ -494,6 +494,7 @@ int main(int argc, char *argv[])
 	memset(&hpnMsg2,0,sizeof(hpnMsg2));
 	hpnMsg2.value  = HPNSSH_START;
 
+
 cli_again:
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
@@ -511,6 +512,9 @@ cli_again:
 			}
 
 			hpnMsg2.value = htonl(hpnMsg2.value);
+#ifdef HPNSSH_QFACTOR 
+			hpnMsg2.obj = binn_object();
+#endif
 		
 			sockfd = Socket(AF_INET, SOCK_STREAM, 0);
 			bzero(&servaddr, sizeof(servaddr));

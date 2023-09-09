@@ -72,6 +72,12 @@ Pthread_mutex_unlock(pthread_mutex_t *mptr)
         err_sys("pthread_mutex_unlock error");
 }
 
+void fMake_Binn_Object(struct PeerMsg *msg, binn * obj)
+{
+
+	return;
+}
+
 int             daemon_proc;            /* set nonzero by daemon_init() */
 
 static void     err_doit(int, int, const char *, va_list);

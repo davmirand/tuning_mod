@@ -62,6 +62,7 @@
 
 #if 1
 #define HPNSSH_QFACTOR  1
+#include "/usr/local/include/binn.h"
 #endif
 
 #define TEST_MSG	0
@@ -85,6 +86,7 @@ struct PeerMsg {
 	char timestamp[MS_CTIME_BUF_LEN];
 	char msg[80];
 	char * pts;
+	binn *obj;
 };
 /*****************/
 int str_cli(int sockfd, struct PeerMsg *sThisMsg);
