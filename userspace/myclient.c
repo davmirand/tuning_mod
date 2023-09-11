@@ -46,7 +46,7 @@ return NULL;
 }
 
 
-int vDebugLevel = 1;
+int vDebugLevel = 2;
 
 FILE * pHpnClientLogPtr = 0;
 
@@ -504,7 +504,7 @@ cli_again:
 
 	switch (hpnMsg2.value) {
 		case  HPNSSH_START: //connect
-			if (vDebugLevel > 1)
+			if (vDebugLevel > 0)
 			{
 				fprintf(pHpnClientLogPtr,"%s %s: ***Sending START message to HPNSSN_QFACTOR server, seqno = %u...***\n", 
 											ms_ctime_buf, phase2str(current_phase), hpnMsgSeqNo);
@@ -512,9 +512,6 @@ cli_again:
 			}
 
 			hpnMsg2.value = htonl(hpnMsg2.value);
-#ifdef HPNSSH_QFACTOR 
-			hpnMsg2.obj = binn_object();
-#endif
 		
 			sockfd = Socket(AF_INET, SOCK_STREAM, 0);
 			bzero(&servaddr, sizeof(servaddr));

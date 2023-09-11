@@ -72,12 +72,6 @@ Pthread_mutex_unlock(pthread_mutex_t *mptr)
         err_sys("pthread_mutex_unlock error");
 }
 
-void fMake_Binn_Object(struct PeerMsg *msg, binn * obj)
-{
-
-	return;
-}
-
 int             daemon_proc;            /* set nonzero by daemon_init() */
 
 static void     err_doit(int, int, const char *, va_list);
@@ -171,7 +165,9 @@ writen(int fd, const void *vptr, size_t n)
         while (nleft > 0) {
                 if ( (nwritten = write(fd, ptr, nleft)) <= 0) {
                         if (nwritten < 0 && errno == EINTR)
+			{
                                 nwritten = 0;           /* and call write() again */
+			}
                         else
                                 return(-1);                     /* error */
                 }

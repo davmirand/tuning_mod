@@ -26,6 +26,8 @@
 #include "unp.h"
 #include "user_dtn.h"
 
+#include "./mybinn.c"
+
 FILE * tunLogPtr = 0;
 FILE * csvLogPtr = 0;
 

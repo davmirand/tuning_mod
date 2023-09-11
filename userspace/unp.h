@@ -86,7 +86,6 @@ struct PeerMsg {
 	char timestamp[MS_CTIME_BUF_LEN];
 	char msg[80];
 	char * pts;
-	binn *obj;
 };
 /*****************/
 int str_cli(int sockfd, struct PeerMsg *sThisMsg);

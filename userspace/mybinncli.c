@@ -14,7 +14,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 
-#include <linux/bpf.h>
+//#include <linux/bpf.h>
 #include <arpa/inet.h>
 #include <sys/ipc.h>
 
@@ -37,6 +37,8 @@ const char *workflow_names[WORKFLOW_NAMES_MAX] = {
 "LEARNING",
 "TUNING",
 };
+
+#include "./mybinn.c"
 
 const char *phase2str(enum workflow_phases phase)
 {
@@ -450,6 +452,12 @@ int main(int argc, char *argv[])
 	pid_t mypid;
 	char aLogFile[256];
 
+	binn * myobj;
+
+	myobj = binn_object();
+	binn_object_set_uint32(myobj, "msg_no", 26);
+
+
 	mypid = getpid();
 
 	//system("rm -f /tmp/hpnClientLog.*");
@@ -512,9 +520,6 @@ cli_again:
 			}
 
 			hpnMsg2.value = htonl(hpnMsg2.value);
-#ifdef HPNSSH_QFACTOR 
-			hpnMsg2.obj = binn_object();
-#endif
 		
 			sockfd = Socket(AF_INET, SOCK_STREAM, 0);
 			bzero(&servaddr, sizeof(servaddr));

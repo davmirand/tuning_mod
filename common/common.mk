@@ -117,13 +117,13 @@ $(COMMON_OBJS): %.o: %.h
 
 $(USER_TARGETS): %: %.c  $(OBJECT_LIBBPF) Makefile $(COMMON_MK) $(COMMON_OBJS) $(OTHER_OBJS) $(FACILIO_OBJS) $(KERN_USER_H) $(EXTRA_DEPS)
 	$(CC) -Wall -Wno-unused-label $(CFLAGS) $(LDFLAGS) -o $@ $(COMMON_OBJS) $(OTHER_OBJS) $(FACILIO_OBJS) -lm -lpthread \
-	 $< $(LIBS)
+	 $< $(LIBS) ../../binn/libbinn.a
 
 $(MY_TARGETS): %: %.c  Makefile $(COMMON_MK) $(MY_OBJS) $(EXTRA_DEPS) 
 	$(CC) -Wall -Wno-unused-label $(CFLAGS) $(LDFLAGS)  -o $@ $(MY_OBJS) \
 	 $< $(LIBS) ../../binn/libbinn.a
 
-$(MYBINN_TARGETS): %: %.c  Makefile $(COMMON_MK) $(MY_OBJS) $(EXTRA_DEPS) 
+$(MYBINN_TARGETS): %: %.c  Makefile $(COMMON_MK) $(MY_OBJS) $(EXTRA_DEPS)
 	$(CC) -Wall -Wno-unused-label $(CFLAGS) $(LDFLAGS)  -o $@ $(MY_OBJS) \
 	 $< $(LIBS) ../../binn/libbinn.a
 
