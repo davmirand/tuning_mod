@@ -153,6 +153,11 @@ Close(int fd)
                 err_sys("close error");
 }
 
+#ifdef HPNSSH_QFACTOR_BINN
+extern int IamClient;
+extern FILE * tunLogPtr;
+extern FILE * pHpnClientLogPtr;
+#endif
 ssize_t                                         /* Write "n" bytes to a descriptor. */
 writen(int fd, const void *vptr, size_t n)
 {
@@ -175,6 +180,13 @@ writen(int fd, const void *vptr, size_t n)
                 nleft -= nwritten;
                 ptr   += nwritten;
         }
+
+#ifdef HPNSSH_QFACTOR_BINN
+	if (IamClient)
+		fprintf(pHpnClientLogPtr,"bytes to write is %lu and bytes written is %lu****\n",n, n-nleft);
+	else
+		fprintf(tunLogPtr,"bytes to write is %lu and bytes written is %lu****\n",n, n-nleft);
+#endif
         return(n);
 }
 /* end writen */

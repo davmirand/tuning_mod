@@ -14,11 +14,10 @@ void fMake_Binn_Object(struct PeerMsg *pMsg, binn * obj)
         char * pm;
 	
 	FILE * thisptr = 0;
-#ifdef HPNSSH_QFACTOR_BINN
-	thisptr = pHpnClientLogPtr;
-#else
-	thisptr = tunLogPtr;
-#endif
+	if (IamClient)
+		thisptr = pHpnClientLogPtr;
+	else
+		thisptr = tunLogPtr;
 	
         binn_object_set_uint32(obj, "msg_no", pMsg->msg_no);
         binn_object_set_uint32(obj, "seq_no", pMsg->seq_no);
@@ -27,7 +26,6 @@ void fMake_Binn_Object(struct PeerMsg *pMsg, binn * obj)
         binn_object_set_uint32(obj, "queue_occupancy", pMsg->queue_occupancy);
         binn_object_set_uint32(obj, "switch_id", pMsg->switch_id);
         binn_object_set_str(obj, "timestamp", pMsg->timestamp);
-        binn_object_set_str(obj, "msg", pMsg->msg);
         binn_object_set_str(obj, "msg", pMsg->msg);
 
 

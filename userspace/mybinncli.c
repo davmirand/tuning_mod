@@ -38,8 +38,11 @@ const char *workflow_names[WORKFLOW_NAMES_MAX] = {
 "TUNING",
 };
 
+FILE * pHpnClientLogPtr = 0;
+FILE * tunLogPtr = 0;
+int IamClient = 1;
 #include "./mybinn.c"
-
+binn *myobj;
 const char *phase2str(enum workflow_phases phase)
 {
 	if (phase < WORKFLOW_NAMES_MAX)
@@ -48,9 +51,8 @@ return NULL;
 }
 
 
-int vDebugLevel = 1;
+int vDebugLevel = 3;
 
-FILE * pHpnClientLogPtr = 0;
 
 void gettime(time_t *clk, char *ctime_buf)
 {
@@ -194,13 +196,13 @@ void fDoHpnTimeoutFS(unsigned int val, int sockfd, struct PeerMsg *from_server)
 	if (vDebugLevel > 2)
 	{
 		fprintf(pHpnClientLogPtr, "\n%s %s: ***********************HPN_CLIENT_TIMEOUT************************",
-								from_server->timestamp, phase2str(current_phase));
+								from_server->ptimes, phase2str(current_phase));
 		fprintf(pHpnClientLogPtr, "\n%s %s: HPN_CLIENT    : hop_switch_id = %u\n",
-								from_server->timestamp, phase2str(current_phase), ntohl(from_server->switch_id));
+								from_server->ptimes, phase2str(current_phase), ntohl(from_server->switch_id));
 		fprintf(pHpnClientLogPtr, "%s %s: HPN_CLIENT    : queue_occupancy = %u\n",
-								from_server->timestamp, phase2str(current_phase), ntohl(from_server->queue_occupancy));
+								from_server->ptimes, phase2str(current_phase), ntohl(from_server->queue_occupancy));
 		fprintf(pHpnClientLogPtr, "%s %s: HPN_CLIENT    : hop_latency = %u\n",
-								from_server->timestamp, phase2str(current_phase), ntohl(from_server->hop_latency));
+								from_server->ptimes, phase2str(current_phase), ntohl(from_server->hop_latency));
 	}
 return;
 }
@@ -217,13 +219,13 @@ void fDoHpnReadFS(unsigned int val, int sockfd, struct PeerMsg *from_server)
 		fprintf(pHpnClientLogPtr,"\n%s %s: ***INFO***: In fDoHpnReadFS(), value is %u***", ms_ctime_buf, phase2str(current_phase), val);
 
 		fprintf(pHpnClientLogPtr, "\n%s %s: ***********************HPN_CLIENT************************",
-								from_server->timestamp, phase2str(current_phase));
+								from_server->ptimes, phase2str(current_phase));
 		fprintf(pHpnClientLogPtr, "\n%s %s: HPN_CLIENT    : hop_switch_id = %u\n",
-								from_server->timestamp, phase2str(current_phase), ntohl(from_server->switch_id));
+								from_server->ptimes, phase2str(current_phase), ntohl(from_server->switch_id));
 		fprintf(pHpnClientLogPtr, "%s %s: HPN_CLIENT    : queue_occupancy = %u\n",
-								from_server->timestamp, phase2str(current_phase), ntohl(from_server->queue_occupancy));
+								from_server->ptimes, phase2str(current_phase), ntohl(from_server->queue_occupancy));
 		fprintf(pHpnClientLogPtr, "%s %s: HPN_CLIENT    : hop_latency = %u\n",
-								from_server->timestamp, phase2str(current_phase), ntohl(from_server->hop_latency));
+								from_server->ptimes, phase2str(current_phase), ntohl(from_server->hop_latency));
 	}
 return;
 }
@@ -240,13 +242,13 @@ void fDoHpnReadAllFS(unsigned int val, int sockfd, struct PeerMsg *from_server)
 		fprintf(pHpnClientLogPtr,"\n%s %s: ***INFO***: In fDoHpnReadAllFS(), value is %u***", ms_ctime_buf, phase2str(current_phase), val);
 
 		fprintf(pHpnClientLogPtr, "\n%s %s: ***********************HPN_CLIENT************************",
-								from_server->timestamp, phase2str(current_phase));
+								from_server->ptimes, phase2str(current_phase));
 		fprintf(pHpnClientLogPtr, "\n%s %s: HPN_CLIENT    : hop_switch_id = %u\n",
-								from_server->timestamp, phase2str(current_phase), ntohl(from_server->switch_id));
+								from_server->ptimes, phase2str(current_phase), ntohl(from_server->switch_id));
 		fprintf(pHpnClientLogPtr, "%s %s: HPN_CLIENT    : queue_occupancy = %u\n",
-								from_server->timestamp, phase2str(current_phase), ntohl(from_server->queue_occupancy));
+								from_server->ptimes, phase2str(current_phase), ntohl(from_server->queue_occupancy));
 		fprintf(pHpnClientLogPtr, "%s %s: HPN_CLIENT    : hop_latency = %u\n",
-								from_server->timestamp, phase2str(current_phase), ntohl(from_server->hop_latency));
+								from_server->ptimes, phase2str(current_phase), ntohl(from_server->hop_latency));
 	}
 return;
 }
@@ -285,14 +287,20 @@ return;
 void process_request_fs2(int sockfd)
 {
 	ssize_t n;
-	struct PeerMsg from_cli;
+//	struct binn_struct from_cli;
+	//binn * from_cli = myobj;
+	struct PeerMsg sMsg;
+	//struct PeerMsg from_cli;
+	char from_cli[204];;
 	time_t clk;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 
 	for ( ; ; )
 	{
-		if ( (n = Readn(sockfd, &from_cli, sizeof(from_cli))) == 0)
+	//	struct binn_struct from_cli;
+		if ( (n = Readn(sockfd, from_cli, sizeof(from_cli))) == 0)
+		//if ( (n = Readn(sockfd, from_cli, binn_size(myobj))) == 0)
 		{
 			if (vDebugLevel > 0)
 			{
@@ -308,25 +316,31 @@ void process_request_fs2(int sockfd)
 					return;
 			}
 
+		fprintf(pHpnClientLogPtr,"\n%s %s: ***number of bytes to read is  %lu ***\n", ms_ctime_buf, phase2str(current_phase),sizeof(from_cli));
+		fprintf(pHpnClientLogPtr,"\n%s %s: ***read %lu bytes read ***\n", ms_ctime_buf, phase2str(current_phase),n);
+		fflush(pHpnClientLogPtr);
+		fRead_Binn_Object(&sMsg, (binn *)&from_cli);
+
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-		if (ntohl(from_cli.msg_no) == HPNSSH_MSG)
+		//if (ntohl(from_cli.msg_no) == HPNSSH_MSG)
+		if (ntohl(sMsg.msg_no) == HPNSSH_MSG)
 		{
 			if (vDebugLevel > 2)
                 	{
                 		fprintf(pHpnClientLogPtr,"\n%s %s: ***Received Hpnssh message %u from Hpnssh Server...***\n", 
-										ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
+										ms_ctime_buf, phase2str(current_phase), ntohl(sMsg.seq_no));
                        		 fprintf(pHpnClientLogPtr,"%s %s: ***msg_no = %d, msg value = %u, msg buf = %s", 
-						ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), ntohl(from_cli.value), from_cli.msg);
+						ms_ctime_buf, phase2str(current_phase), ntohl(sMsg.msg_no), ntohl(sMsg.value), sMsg.pm);
 			}
-
-			fDoHpnFromServer(ntohl(from_cli.value), sockfd, &from_cli);
+		
+			fDoHpnFromServer(ntohl(sMsg.value), sockfd, &sMsg);
 		}
 		else
 			{
 				fprintf(pHpnClientLogPtr,"\n%s %s: ***Received Invalid message %u from Hpnssh Server...***\n", 
-									ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
+									ms_ctime_buf, phase2str(current_phase), ntohl(sMsg.seq_no));
 				fprintf(pHpnClientLogPtr,"%s %s: ***msg_no = %d, msg buf = %s", 
-								ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), from_cli.msg);
+								ms_ctime_buf, phase2str(current_phase), ntohl(sMsg.msg_no), sMsg.pm);
 			}
 		
 		fflush(pHpnClientLogPtr);
@@ -336,7 +350,8 @@ void process_request_fs2(int sockfd)
 int process_request_fs(int sockfd)
 {
 	ssize_t n;
-	struct PeerMsg from_cli;
+	struct binn_struct from_cli;
+	struct PeerMsg sMsg;
 	time_t clk;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
@@ -356,26 +371,28 @@ int process_request_fs(int sockfd)
  				return 0;
 		}
 
+	fRead_Binn_Object(&sMsg, &from_cli);
+
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-	if (ntohl(from_cli.msg_no) == HPNSSH_MSG)
+	if (ntohl(sMsg.msg_no) == HPNSSH_MSG)
 	{
 		if (vDebugLevel > 2)
 		{
-			fprintf(pHpnClientLogPtr,"\n%s %s: ***Received Hpnssh message %u from Hpnssh Server...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
-			fprintf(pHpnClientLogPtr,"%s %s: ***msg_no = %d, msg value = %u, msg buf = %s", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), ntohl(from_cli.value), from_cli.msg);
+			fprintf(pHpnClientLogPtr,"\n%s %s: ***Received Hpnssh message %u from Hpnssh Server...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg.seq_no));
+			fprintf(pHpnClientLogPtr,"%s %s: ***msg_no = %d, msg value = %u, msg buf = %s", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg.msg_no), ntohl(sMsg.value), sMsg.pm);
 		}
 
-		fDoHpnFromServer(ntohl(from_cli.value), sockfd, &from_cli);
+		fDoHpnFromServer(ntohl(sMsg.value), sockfd, &sMsg);
 	}
 	else
 		{
-			fprintf(pHpnClientLogPtr,"\n%s %s: ***Received Invalid message %u from Hpnssh Server...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
-			fprintf(pHpnClientLogPtr,"%s %s: ***msg_no = %d, msg buf = %s", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), from_cli.msg);
+			fprintf(pHpnClientLogPtr,"\n%s %s: ***Received Invalid message %u from Hpnssh Server...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg.seq_no));
+			fprintf(pHpnClientLogPtr,"%s %s: ***msg_no = %d, msg buf = %s", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg.msg_no), sMsg.pm);
 		}
 
 	fflush(pHpnClientLogPtr);
 
-return (ntohl(from_cli.value));
+return (ntohl(sMsg.value));
 }
 
 int msleep(long msec)
@@ -436,8 +453,19 @@ void read_sock(int sockfd)
 
 int str_cli(int sockfd, struct PeerMsg *sThisMsg) //str_cli09
 {
+#ifdef HPNSSH_QFACTOR
+	myobj = binn_object();
+	fMake_Binn_Object(sThisMsg, myobj);
+	fprintf(pHpnClientLogPtr,"***!!!!!!!Size of binn object = %u...***\n", binn_size(myobj));
+	fflush(pHpnClientLogPtr);
+	Writen(sockfd, binn_ptr(myobj), binn_size(myobj));
+	//Writen(sockfd, binn_ptr(myobj), binn_size(myobj));
+	binn_free(myobj);
+#else
 	Writen(sockfd, sThisMsg, sizeof(struct PeerMsg));
-return 0;
+#endif
+	
+	return 0;
 }
 
 int main(int argc, char *argv[])
@@ -451,12 +479,6 @@ int main(int argc, char *argv[])
 	char aMySrc_Ip[32];
 	pid_t mypid;
 	char aLogFile[256];
-
-	binn * myobj;
-
-	myobj = binn_object();
-	binn_object_set_uint32(myobj, "msg_no", 26);
-
 
 	mypid = getpid();
 
@@ -502,6 +524,9 @@ int main(int argc, char *argv[])
 	memset(&hpnMsg2,0,sizeof(hpnMsg2));
 	hpnMsg2.value  = HPNSSH_START;
 
+	strcpy(hpnMsg2.msg, "This is a start message");
+
+
 
 cli_again:
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
@@ -532,6 +557,11 @@ cli_again:
 			{
 				goto cli_again;
 			}
+#if 1
+			hpnMsg2.value = HPNSSH_READALL; //next state
+			current_phase = LEARNING;
+			goto cli_again;
+#endif
 		
 			str_cli(sockfd, &hpnMsg2);       
 
@@ -592,6 +622,7 @@ cli_again:
 			}
 
 			hpnMsg2.value = htonl(hpnMsg2.value);
+			strcpy(hpnMsg2.msg, "This is a readall message");
 			str_cli(sockfd, &hpnMsg2);        
 				
 			if (vDebugLevel > 1)

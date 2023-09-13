@@ -21,6 +21,10 @@
 #include "unp.h"
 #include "user_dtn.h"
 
+#ifdef HPNSSH_QFACTOR_BINN
+#undef HPNSSH_QFACTOR_BINN
+#endif
+
 struct PeerMsg sHpnRetMsg;
 unsigned int hpnRetMsgSeqNo = 0;
 struct PeerMsg hpnMsg;
@@ -46,7 +50,7 @@ return NULL;
 }
 
 
-int vDebugLevel = 2;
+int vDebugLevel = 1;
 
 FILE * pHpnClientLogPtr = 0;
 
@@ -183,13 +187,13 @@ void fDoHpnTimeoutFS(unsigned int val, int sockfd, struct PeerMsg *from_server)
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 
-	if (vDebugLevel > 1)
+	if (vDebugLevel > 0)
 	{
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		fprintf(pHpnClientLogPtr,"%s %s: ***INFO***: In fDoHpnTimeoutFS(), value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
 	}
 
-	if (vDebugLevel > 2)
+	if (vDebugLevel > 1)
 	{
 		fprintf(pHpnClientLogPtr, "\n%s %s: ***********************HPN_CLIENT_TIMEOUT************************",
 								from_server->timestamp, phase2str(current_phase));
@@ -232,11 +236,15 @@ void fDoHpnReadAllFS(unsigned int val, int sockfd, struct PeerMsg *from_server)
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 
-	if (vDebugLevel > 0)
+	if (vDebugLevel > 1)
 	{
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		fprintf(pHpnClientLogPtr,"\n%s %s: ***INFO***: In fDoHpnReadAllFS(), value is %u***", ms_ctime_buf, phase2str(current_phase), val);
+	}
 
+	if (vDebugLevel > 0)
+	{
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		fprintf(pHpnClientLogPtr, "\n%s %s: ***********************HPN_CLIENT************************",
 								from_server->timestamp, phase2str(current_phase));
 		fprintf(pHpnClientLogPtr, "\n%s %s: HPN_CLIENT    : hop_switch_id = %u\n",
@@ -248,6 +256,7 @@ void fDoHpnReadAllFS(unsigned int val, int sockfd, struct PeerMsg *from_server)
 	}
 return;
 }
+
 
 void fDoHpnFromServer(unsigned int val, int sockfd, struct PeerMsg *from_server)
 {
@@ -501,6 +510,7 @@ cli_again:
 	hpnMsg2.msg_no = htonl(HPNSSH_MSG);
 	hpnMsgSeqNo++;
 	hpnMsg2.seq_no = htonl(hpnMsgSeqNo);	
+	strcpy(hpnMsg2.msg,"This is a START message");
 
 	switch (hpnMsg2.value) {
 		case  HPNSSH_START: //connect
@@ -584,6 +594,7 @@ cli_again:
 			}
 
 			hpnMsg2.value = htonl(hpnMsg2.value);
+			strcpy(hpnMsg2.msg,"This is a READALL message");
 			str_cli(sockfd, &hpnMsg2);        
 				
 			if (vDebugLevel > 1)
