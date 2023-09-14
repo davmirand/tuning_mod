@@ -182,10 +182,12 @@ writen(int fd, const void *vptr, size_t n)
         }
 
 #ifdef HPNSSH_QFACTOR_BINN
+#if 0
 	if (IamClient)
 		fprintf(pHpnClientLogPtr,"bytes to write is %lu and bytes written is %lu****\n",n, n-nleft);
 	else
 		fprintf(tunLogPtr,"bytes to write is %lu and bytes written is %lu****\n",n, n-nleft);
+#endif
 #endif
         return(n);
 }

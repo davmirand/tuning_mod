@@ -3925,7 +3925,7 @@ void * doProcessHpnClientReq(void * arg)
 		}
 			
 #ifdef HPNSSH_QFACTOR_BINN
-#if 1
+#if 0
 		if (vDebugLevel > 1)
 		{
 			fprintf(tunLogPtr,"\n%s %s: ***num bytes read from Hpn Client = %lu***\n", ms_ctime_buf, phase2str(current_phase),n);
@@ -4264,8 +4264,10 @@ int str_cli(int sockfd, struct PeerMsg *sThisMsg) //str_cli09
 #ifdef HPNSSH_QFACTOR_BINN
         binn *myobj = binn_object();
         fMake_Binn_Object(sThisMsg, myobj);
+#if 0
 	fprintf(tunLogPtr,"***!!!!!!!Size of binn object = %u...***\n", binn_size(myobj));
 	fflush(tunLogPtr);
+#endif
         y = Writen(sockfd, binn_ptr(myobj), binn_size(myobj));
 	binn_free(myobj);
 #else

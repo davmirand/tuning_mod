@@ -1,6 +1,6 @@
 void fMake_Binn_Object(struct PeerMsg *pMsg, binn * obj)
 {
-
+#if 0
 	unsigned int msg_no;
         unsigned int seq_no;
         unsigned int value;
@@ -12,7 +12,7 @@ void fMake_Binn_Object(struct PeerMsg *pMsg, binn * obj)
         char * pts;
         char * ptimes;
         char * pm;
-	
+#endif	
 	FILE * thisptr = 0;
 	if (IamClient)
 		thisptr = pHpnClientLogPtr;
@@ -28,10 +28,10 @@ void fMake_Binn_Object(struct PeerMsg *pMsg, binn * obj)
         binn_object_set_str(obj, "timestamp", pMsg->timestamp);
         binn_object_set_str(obj, "msg", pMsg->msg);
 
-
+#if 0
 	fprintf(thisptr,"msg no = %u, seq_no = %u, value = %u, hop_latency= %u, msg = %s***\n", pMsg->msg_no, pMsg->seq_no, pMsg->value, pMsg->hop_latency, pMsg->msg);
 	fflush (thisptr);
-
+	
 	msg_no = binn_object_uint32 (obj,"msg_no");
         seq_no = binn_object_uint32 (obj,"seq_no");
         value = binn_object_uint32 (obj,"value");
@@ -42,6 +42,7 @@ void fMake_Binn_Object(struct PeerMsg *pMsg, binn * obj)
 	
 	fprintf(thisptr,"***NEXT msg no = %u, seq_no = %u, value = %u, hop_latency= %u, msg = %s***\n", msg_no, seq_no, value, hop_latency, pm);
 	fflush (thisptr);
+#endif
        	return;
 }
 

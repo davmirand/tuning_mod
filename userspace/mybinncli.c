@@ -51,7 +51,7 @@ return NULL;
 }
 
 
-int vDebugLevel = 3;
+int vDebugLevel = 1;
 
 
 void gettime(time_t *clk, char *ctime_buf)
@@ -236,11 +236,14 @@ void fDoHpnReadAllFS(unsigned int val, int sockfd, struct PeerMsg *from_server)
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 
-	if (vDebugLevel > 0)
+	if (vDebugLevel > 1)
 	{
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		fprintf(pHpnClientLogPtr,"\n%s %s: ***INFO***: In fDoHpnReadAllFS(), value is %u***", ms_ctime_buf, phase2str(current_phase), val);
+	}
 
+	if (vDebugLevel > 0)
+	{
 		fprintf(pHpnClientLogPtr, "\n%s %s: ***********************HPN_CLIENT************************",
 								from_server->ptimes, phase2str(current_phase));
 		fprintf(pHpnClientLogPtr, "\n%s %s: HPN_CLIENT    : hop_switch_id = %u\n",
@@ -315,9 +318,10 @@ void process_request_fs2(int sockfd)
 				if (vShutdown)
 					return;
 			}
-
+#if 0
 		fprintf(pHpnClientLogPtr,"\n%s %s: ***number of bytes to read is  %lu ***\n", ms_ctime_buf, phase2str(current_phase),sizeof(from_cli));
-		fprintf(pHpnClientLogPtr,"\n%s %s: ***read %lu bytes read ***\n", ms_ctime_buf, phase2str(current_phase),n);
+		fprintf(pHpnClientLogPtr,"\n%s %s: ***%lu bytes read ***\n", ms_ctime_buf, phase2str(current_phase),n);
+#endif
 		fflush(pHpnClientLogPtr);
 		fRead_Binn_Object(&sMsg, (binn *)&from_cli);
 
@@ -453,11 +457,13 @@ void read_sock(int sockfd)
 
 int str_cli(int sockfd, struct PeerMsg *sThisMsg) //str_cli09
 {
-#ifdef HPNSSH_QFACTOR
+#ifdef HPNSSH_QFACTOR_BINN
 	myobj = binn_object();
 	fMake_Binn_Object(sThisMsg, myobj);
+#if 0
 	fprintf(pHpnClientLogPtr,"***!!!!!!!Size of binn object = %u...***\n", binn_size(myobj));
 	fflush(pHpnClientLogPtr);
+#endif
 	Writen(sockfd, binn_ptr(myobj), binn_size(myobj));
 	//Writen(sockfd, binn_ptr(myobj), binn_size(myobj));
 	binn_free(myobj);
