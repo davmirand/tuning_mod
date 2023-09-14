@@ -121,7 +121,7 @@ $(USER_TARGETS): %: %.c  $(OBJECT_LIBBPF) Makefile $(COMMON_MK) $(COMMON_OBJS) $
 
 $(MY_TARGETS): %: %.c  Makefile $(COMMON_MK) $(MY_OBJS) $(EXTRA_DEPS) 
 	$(CC) -Wall -Wno-unused-label $(CFLAGS) $(LDFLAGS)  -o $@ $(MY_OBJS) \
-	 $< $(LIBS) ../../binn/libbinn.a
+	 $< $(LIBS) 
 
 $(MYBINN_TARGETS): %: %.c  Makefile $(COMMON_MK) $(MY_OBJS) $(EXTRA_DEPS)
 	$(CC) -Wall -Wno-unused-label $(CFLAGS) $(LDFLAGS)  -o $@ $(MY_OBJS) \

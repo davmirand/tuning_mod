@@ -633,13 +633,14 @@ perf_event_loop: {
 				Pthread_cond_signal(&hpn_ret_cond);
 				Pthread_mutex_unlock(&hpn_ret_mutex);
 #endif
-
 					if ((qinfo_min_value != QINFO_START_MIN_VALUE) && (qinfo_max_value != 0))
 					{
 						if (qinfo_clk_min <= qinfo_clk_max)
 						{ 	
 							Pthread_mutex_lock(&hpn_ret_mutex);
-							sHpnRetMsg.pts = qinfo_ms_ctime_buf_min;
+							
+//							sHpnRetMsg.pts = qinfo_ms_ctime_buf_min;
+							memcpy(sHpnRetMsg.timestamp,qinfo_ms_ctime_buf_min,MS_CTIME_BUF_LEN);
 							sHpnRetMsg.hop_latency = qinfo_hop_latency_min;
 							sHpnRetMsg.queue_occupancy = qinfo_min_value;
 							sHpnRetMsg.switch_id = qinfo_hop_switch_id_min;
@@ -653,6 +654,7 @@ perf_event_loop: {
 							sHpnRetMsg2.queue_occupancy = qinfo_max_value;
 							sHpnRetMsg2.switch_id = qinfo_hop_switch_id_max;
 							hpnretcdone = 1;
+
 							Pthread_cond_signal(&hpn_ret_cond);
 							Pthread_mutex_unlock(&hpn_ret_mutex);
 #if 0
@@ -691,7 +693,8 @@ perf_event_loop: {
 						else
 							{
 								Pthread_mutex_lock(&hpn_ret_mutex);
-								sHpnRetMsg.pts = qinfo_ms_ctime_buf_max;
+								//sHpnRetMsg.pts = qinfo_ms_ctime_buf_max;
+								memcpy(sHpnRetMsg.timestamp,qinfo_ms_ctime_buf_max,MS_CTIME_BUF_LEN);
 								sHpnRetMsg.hop_latency = qinfo_hop_latency_max;
 								sHpnRetMsg.queue_occupancy = qinfo_max_value;
 								sHpnRetMsg.switch_id = qinfo_hop_switch_id_max;
@@ -745,7 +748,8 @@ perf_event_loop: {
 							if (qinfo_min_value != QINFO_START_MIN_VALUE)
 							{
 								Pthread_mutex_lock(&hpn_ret_mutex);
-								sHpnRetMsg.pts = qinfo_ms_ctime_buf_min;
+								//sHpnRetMsg.pts = qinfo_ms_ctime_buf_min;
+								memcpy(sHpnRetMsg.timestamp,qinfo_ms_ctime_buf_min,MS_CTIME_BUF_LEN);
 								sHpnRetMsg.hop_latency = qinfo_hop_latency_min;
 								sHpnRetMsg.queue_occupancy = qinfo_min_value;
 								sHpnRetMsg.switch_id = qinfo_hop_switch_id_min;
@@ -773,7 +777,8 @@ perf_event_loop: {
 							else
 								{ //must be this
 									Pthread_mutex_lock(&hpn_ret_mutex);
-									sHpnRetMsg.pts = qinfo_ms_ctime_buf_max;
+									//sHpnRetMsg.pts = qinfo_ms_ctime_buf_max;
+									memcpy(sHpnRetMsg.timestamp,qinfo_ms_ctime_buf_max,MS_CTIME_BUF_LEN);
 									sHpnRetMsg.hop_latency = qinfo_hop_latency_max;
 									sHpnRetMsg.queue_occupancy = qinfo_max_value;
 									sHpnRetMsg.switch_id = qinfo_hop_switch_id_max;
@@ -2064,11 +2069,11 @@ void fDoHpnRead(unsigned int val, int sockfd)
 	
 	strcpy(sRetMsg.msg, "Hello there!!! Got your Read message..., Here's some data\n");
 	sRetMsg.msg_no = htonl(HPNSSH_MSG);
-	sRetMsg.value = htonl(133);;
+	sRetMsg.value = htonl(133);
 
 	strcpy(sRetMsg2.msg, "Hello there!!! Got your Read message..., Here's some data\n");
 	sRetMsg2.msg_no = htonl(HPNSSH_MSG);
-	sRetMsg2.value = htonl(133);;
+	sRetMsg2.value = htonl(133);
 
 read_again:
 	Pthread_mutex_lock(&hpn_ret_mutex);
@@ -2081,6 +2086,7 @@ read_again:
 		if ( (n = pthread_cond_timedwait(&hpn_ret_cond, &hpn_ret_mutex, &ts)) != 0)
 		{
 			saveerrno = errno;
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			if (vDebugLevel > 8)
 				fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnRead(),  errno = %d, n= %d**\n", ms_ctime_buf, phase2str(current_phase), saveerrno,n);
 
@@ -2121,10 +2127,12 @@ read_again:
                 }	
 		//Pthread_cond_wait(&hpn_ret_cond, &hpn_ret_mutex);
 	
-	memcpy(sRetMsg.timestamp, sHpnRetMsg.pts, MS_CTIME_BUF_LEN);
+	//memcpy(sRetMsg.timestamp, sHpnRetMsg.pts, MS_CTIME_BUF_LEN);
+	memcpy(sRetMsg.timestamp, sHpnRetMsg.timestamp, MS_CTIME_BUF_LEN);
 	sRetMsg.hop_latency = htonl(sHpnRetMsg.hop_latency);
 	sRetMsg.queue_occupancy = htonl(sHpnRetMsg.queue_occupancy);
 	sRetMsg.switch_id = htonl(sHpnRetMsg.switch_id);
+	sHpnRetMsg.pts = 0;
 
 	if(sHpnRetMsg2.pts)
 	{
@@ -2178,11 +2186,11 @@ void fDoHpnReadAll(unsigned int val, int sockfd)
 	
 	strcpy(sRetMsg.msg, "Hello there!!! Got your ReadAll message..., Here's some data\n");
 	sRetMsg.msg_no = htonl(HPNSSH_MSG);
-	sRetMsg.value = htonl(144);;
+	sRetMsg.value = htonl(144);
 
 	strcpy(sRetMsg2.msg, "Hello there!!! Got your ReadAll message..., Here's some data\n");
 	sRetMsg2.msg_no = htonl(HPNSSH_MSG);
-	sRetMsg2.value = htonl(144);;
+	sRetMsg2.value = htonl(144);
 
 read_again:
 	Pthread_mutex_lock(&hpn_ret_mutex);
@@ -2195,6 +2203,7 @@ read_again:
 		if ( (n = pthread_cond_timedwait(&hpn_ret_cond, &hpn_ret_mutex, &ts)) != 0)
 		{
 			saveerrno = errno;
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			if (vDebugLevel > 8)
 				fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnReadAll(),  errno = %d, n= %d**\n", 
 									ms_ctime_buf, phase2str(current_phase), saveerrno,n);
@@ -2237,12 +2246,16 @@ read_again:
 				//return;
 			}
                 }	
-	
-	memcpy(sRetMsg.timestamp, sHpnRetMsg.pts, MS_CTIME_BUF_LEN);
+
+//check here	
+	//memcpy(sRetMsg.timestamp, sHpnRetMsg.pts, MS_CTIME_BUF_LEN);
+	memcpy(sRetMsg.timestamp, sHpnRetMsg.timestamp, MS_CTIME_BUF_LEN);
 	sRetMsg.hop_latency = htonl(sHpnRetMsg.hop_latency);
 	sRetMsg.queue_occupancy = htonl(sHpnRetMsg.queue_occupancy);
 	sRetMsg.switch_id = htonl(sHpnRetMsg.switch_id);
-	sRetMsg.seq_no = htonl(++sMsgSeqNo);	
+	sRetMsg.seq_no = htonl(++sMsgSeqNo);
+
+	sHpnRetMsg.pts = 0;	
 
 	if(sHpnRetMsg2.pts)
 	{
@@ -2271,8 +2284,13 @@ read_again:
 				goto read_again;
 		}
 	
-	fprintf(tunLogPtr,"%s %s: ***WARNING***: client closed connection, EPIPE error???****\n", ms_ctime_buf, phase2str(current_phase));
-	fflush(tunLogPtr);
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+	if (vDebugLevel > 0)
+	{
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***WARNING***: client closed connection, EPIPE error???****\n", ms_ctime_buf, phase2str(current_phase));
+		fflush(tunLogPtr);
+	}
 #endif
 //	y = str_cli(sockfd, &sRetMsg);
 return;
@@ -2431,7 +2449,7 @@ void * fDoRunGetThresholds(void * vargp)
 	char best_wmem_val[MAX_SIZE_SYSTEM_SETTING_STRING];
 	FILE *pipe;
 	unsigned long last_tx_bytes = 0, last_rx_bytes = 0;	
-	int check_bitrate_interval = 0, keep_bitrate_interval = 0;
+	int check_bitrate_interval = 0;
 	unsigned long rx_before, rx_now, rx_bytes_tot;
 	unsigned long tx_before, tx_now, tx_bytes_tot;
 	double average_tx_kbits_per_sec = 0.0;
@@ -2612,7 +2630,6 @@ start:
 	
 	average_tx_kbits_per_sec += tx_kbits_per_sec;	
 	average_rx_kbits_per_sec += rx_kbits_per_sec;
-	keep_bitrate_interval = check_bitrate_interval;
 	if (check_bitrate_interval >= BITRATE_INTERVAL) 
 	{
 		//average_tx_bits_per_sec = average_tx_bits_per_sec/check_bitrate_interval;
@@ -2692,7 +2709,8 @@ start:
 	{
 		if (!check_bitrate_interval)
 		{
-			fprintf(tunLogPtr,"%s %s: average_tx_Gbits_per_sec = %.2f Gb/s, average_rx_Gbits_per_sec = %.2f Gb/s, BITRATE_INTERVAL = %d \n",ms_ctime_buf, phase2str(current_phase), average_tx_Gbits_per_sec, average_rx_Gbits_per_sec, keep_bitrate_interval);
+			fprintf(tunLogPtr,"%s %s: average_tx_Gbits_per_sec = %.2f Gb/s, average_rx_Gbits_per_sec = %.2f Gb/s\n",
+							ms_ctime_buf, phase2str(current_phase), average_tx_Gbits_per_sec, average_rx_Gbits_per_sec);
 		}
 	}
 
@@ -2831,7 +2849,7 @@ start:
 				else
 					if (nothing_done) //no change to tuning
 					{
-						if (vDebugLevel > 2)
+						if (vDebugLevel > 4)
 						{
 							fprintf(tunLogPtr, "%s %s: ***What is nothing_done??? and nothing_done is %d ...***\n", ms_ctime_buf, phase2str(current_phase), nothing_done);
 						}
@@ -4535,7 +4553,7 @@ int main(int argc, char **argv)
 	memset(&sHpnRetMsg,0,sizeof(sHpnRetMsg));
 	strcpy(sHpnRetMsg.msg, "Hello there!!! This is a Hpn msg...\n");
 	sHpnRetMsg.msg_no = htonl(HPNSSH_MSG);
-
+	
 	memset(&sHpnRetMsg2,0,sizeof(sHpnRetMsg));
 	strcpy(sHpnRetMsg2.msg, "Hello there!!! This is a Hpn msg...\n");
 	sHpnRetMsg2.msg_no = htonl(HPNSSH_MSG);
