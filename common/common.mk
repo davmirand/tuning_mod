@@ -123,8 +123,8 @@ $(MY_TARGETS): %: %.c  Makefile $(COMMON_MK) $(MY_OBJS) $(EXTRA_DEPS)
 	$(CC) -Wall -Wno-unused-label $(CFLAGS) $(LDFLAGS)  -o $@ $(MY_OBJS) \
 	 $< $(LIBS) 
 
-$(MYBINN_TARGETS): %: %.c  Makefile $(COMMON_MK) $(MY_OBJS) $(EXTRA_DEPS)
-	$(CC) -Wall -Wno-unused-label $(CFLAGS) $(LDFLAGS)  -o $@ $(MY_OBJS) \
+$(MYBINN_TARGETS): %: %.c  Makefile $(COMMON_MK) $(EXTRA_DEPS)
+	$(CC) -Wall -Wno-unused-label $(CFLAGS) $(LDFLAGS)  -o $@ \
 	 $< $(LIBS) ../../binn/libbinn.a
 
 $(XDP_OBJ): %.o: %.c  Makefile $(COMMON_MK) $(KERN_USER_H) $(EXTRA_DEPS) $(OBJECT_LIBBPF)

@@ -12,8 +12,126 @@
 #include <signal.h>
 #include <arpa/inet.h>
 #include <sys/ipc.h>
+#include <time.h>
 
-#include "unp.h"
+//#include "unp.h"
+#include "binncli.h"
+
+#if 1
+/* Following shortens all the typecasts of pointer arguments: */
+#define SA      struct sockaddr
+
+/* prototypes for our socket wrapper functions: see {Sec errors} */
+int      Accept(int, SA *, socklen_t *);
+void     Bind(int, const SA *, socklen_t);
+int      Connect(int, const SA *, socklen_t);
+void     Listen(int, int);
+int      Socket(int, int, int);
+int      Writen(int, void *, size_t);
+
+/* include Socket */
+int
+Socket(int family, int type, int protocol)
+{
+        int             n;
+
+        if ( (n = socket(family, type, protocol)) < 0)
+	{
+                printf("socket error\n");
+		exit(2);
+	}
+        return(n);
+}
+/* end Socket */
+
+
+ssize_t                                         /* Write "n" bytes to a descriptor. */
+writen(int fd, const void *vptr, size_t n)
+{
+        size_t          nleft;
+        ssize_t         nwritten;
+        const char      *ptr;
+
+        ptr = vptr;
+        nleft = n;
+        while (nleft > 0) {
+                if ( (nwritten = write(fd, ptr, nleft)) <= 0) {
+                        if (nwritten < 0 && errno == EINTR)
+                        {
+                                nwritten = 0;           /* and call write() again */
+                        }
+                        else
+                                return(-1);                     /* error */
+                }
+
+                nleft -= nwritten;
+                ptr   += nwritten;
+        }
+
+        return(n);
+}
+/* end writen */
+
+
+int
+Writen(int fd, void *ptr, size_t nbytes)
+{
+        if (writen(fd, ptr, nbytes) != nbytes)
+        {
+                if (errno == EPIPE)
+                        return(1);
+                else
+		{
+                        printf("writen error\n");
+			return 1;
+		}
+        }
+
+        return 0;
+}
+
+void
+Inet_pton(int family, const char *strptr, void *addrptr)
+{
+        int             n;
+
+        if ( (n = inet_pton(family, strptr, addrptr)) < 0)
+                printf("inet_pton error for %s", strptr);      /* errno set */
+        else if (n == 0)
+	{
+                printf("inet_pton error for %s", strptr);     /* errno not set */
+		exit(1);
+	}
+
+        /* nothing to return */
+}
+
+void
+Bind(int fd, const struct sockaddr *sa, socklen_t salen)
+{
+        if (bind(fd, sa, salen) < 0)
+                printf("bind error\n");
+}
+
+int
+Connect(int fd, const struct sockaddr *sa, socklen_t salen)
+{
+        if (connect(fd, sa, salen) < 0)
+	{
+                printf("connect error\n");
+		return 1;
+	}
+	return 0;
+}
+
+void
+Close(int fd)
+{
+        if (close(fd) == -1)
+                printf("close error\n");
+}
+#endif
+
 
 struct PeerMsg sHpnRetMsg;
 unsigned int hpnRetMsgSeqNo = 0;
@@ -192,7 +310,7 @@ Readn(int fd, void *ptr, size_t nbytes)
 		if (vShutdown)
 			fprintf(pHpnClientLogPtr,"***INFO*** WARNING!!!!: Shutdown of Client requested*****\n");
 		else	
-			err_sys("readn error");
+			printf("readn error\n");
 	}
 return(n);
 }
