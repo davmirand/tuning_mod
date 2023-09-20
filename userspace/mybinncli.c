@@ -312,7 +312,7 @@ void fDoHpnFromServer(unsigned int val, int sockfd, struct ServerBinnMsg *from_s
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 
 	switch (val) {
-		case 144:
+		case HPNSSH_READALL_FS:
 			fDoHpnReadAllFS(val, sockfd, from_server);
 			break;
 		default:
@@ -350,11 +350,7 @@ void process_request(int sockfd)
 				if (vShutdown)
 					return;
 			}
-#if 0
-		fprintf(pHpnClientLogPtr,"\n%s %s: ***number of bytes to read is  %lu ***\n", ms_ctime_buf, phase2str(current_phase),sizeof(from_cli));
-		fprintf(pHpnClientLogPtr,"\n%s %s: ***%lu bytes read ***\n", ms_ctime_buf, phase2str(current_phase),n);
-#endif
-		fflush(pHpnClientLogPtr);
+		
 		fRead_Binn_Server_Object(&sMsg, (binn *)&from_cli);
 
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
@@ -378,7 +374,7 @@ void process_request(int sockfd)
 	}
 }
 
-int str_cli(int sockfd, struct ClientBinnMsg *sThisMsg) //str_cli09
+int str_cli(int sockfd, struct ClientBinnMsg *sThisMsg) 
 {
 	binn *myobj = binn_object();
 	fMake_Binn_Client_Object(sThisMsg, myobj);

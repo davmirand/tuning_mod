@@ -12,6 +12,7 @@
 #define HPNSSH_READALL  44
 #define HPNSSH_SHUTDOWN 55
 #define HPNSSH_START    99
+#define HPNSSH_READALL_FS  144  //from server
 
 struct ServerBinnMsg {
 	unsigned int msg_type;

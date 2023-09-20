@@ -2206,14 +2206,14 @@ void fDoHpnReadAll(unsigned int val, int sockfd)
 #ifdef HPNSSH_QFACTOR_BINN 
 	//BINN objects are cross platform - no need for big endian, littl endian worries - so sayeth the binn repo
 	sRetMsg.msg_no = HPNSSH_MSG;
-	sRetMsg.value = 144;
+	sRetMsg.value = HPNSSH_READALL_FS;
 	sRetMsg2.msg_no = HPNSSH_MSG;
-	sRetMsg2.value = 144;
+	sRetMsg2.value = HPNSSH_READALL_FS;
 #else
 	sRetMsg.msg_no = htonl(HPNSSH_MSG);
-	sRetMsg.value = htonl(144);
+	sRetMsg.value = htonl(HPNSSH_READALL_FS);
 	sRetMsg2.msg_no = htonl(HPNSSH_MSG);
-	sRetMsg2.value = htonl(144);
+	sRetMsg2.value = htonl(HPNSSH_READALL_FS);
 #endif
 read_again:
 	Pthread_mutex_lock(&hpn_ret_mutex);
@@ -3945,8 +3945,6 @@ void * doProcessHpnClientReq(void * arg)
 	ssize_t	n;
 #ifdef HPNSSH_QFACTOR_BINN
         struct ClientBinnMsg sMsg;
-	//char from_cli[25];
-	//char from_cli[22];
 	char from_cli[BUFFER_SIZE_FROM_CLIENT];
 #else
 	struct PeerMsg	from_cli;
