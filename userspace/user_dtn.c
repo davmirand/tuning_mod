@@ -31,16 +31,14 @@
 #include "binncli.h"
 void fMake_Binn_Server_Object(struct PeerMsg *pMsg, binn * obj)
 {
-        binn_object_set_uint32(obj, "msg_no", pMsg->msg_no);
-        binn_object_set_uint32(obj, "seq_no", pMsg->seq_no);
-        binn_object_set_uint32(obj, "value", pMsg->value);
-        binn_object_set_uint32(obj, "hop_latency", pMsg->hop_latency);
-        binn_object_set_uint32(obj, "queue_occupancy", pMsg->queue_occupancy);
-        binn_object_set_uint32(obj, "switch_id", pMsg->switch_id);
-        binn_object_set_str(obj, "timestamp", pMsg->timestamp);
-        binn_object_set_str(obj, "msg", pMsg->msg);
-
-        return;
+	binn_object_set_uint32(obj, "msg_type", pMsg->msg_no);
+	binn_object_set_uint32(obj, "op", pMsg->value);
+	binn_object_set_uint32(obj, "hop_latency", pMsg->hop_latency);
+	binn_object_set_uint32(obj, "queue_occupancy", pMsg->queue_occupancy);
+	binn_object_set_uint32(obj, "switch_id", pMsg->switch_id);
+	binn_object_set_str(obj, "timestamp", pMsg->timestamp);
+        
+	return;
 }
 
 void fRead_Binn_Client_Object(struct ClientBinnMsg *pMsg, binn * obj)
