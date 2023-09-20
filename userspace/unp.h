@@ -62,10 +62,9 @@
 
 #if 1
 #define HPNSSH_QFACTOR  1
-#if 0
+#if 1
 #define HPNSSH_QFACTOR_BINN  1
 #endif
-#include "/usr/local/include/binn.h"
 #endif
 
 #define TEST_MSG	0

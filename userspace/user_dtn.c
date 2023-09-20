@@ -2202,13 +2202,19 @@ void fDoHpnReadAll(unsigned int val, int sockfd)
 		fprintf(tunLogPtr,"%s %s: ***INFO***: In fDoHpnReadAll(), value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
 	
 	strcpy(sRetMsg.msg, "Hello there!!! Got your ReadAll message..., Here's some data\n");
+	strcpy(sRetMsg2.msg, "Hello there!!! Got your ReadAll message..., Here's some data\n");
+#ifdef HPNSSH_QFACTOR_BINN 
+	//BINN objects are cross platform - no need for big endian, littl endian worries - so sayeth the binn repo
+	sRetMsg.msg_no = HPNSSH_MSG;
+	sRetMsg.value = 144;
+	sRetMsg2.msg_no = HPNSSH_MSG;
+	sRetMsg2.value = 144;
+#else
 	sRetMsg.msg_no = htonl(HPNSSH_MSG);
 	sRetMsg.value = htonl(144);
-
-	strcpy(sRetMsg2.msg, "Hello there!!! Got your ReadAll message..., Here's some data\n");
 	sRetMsg2.msg_no = htonl(HPNSSH_MSG);
 	sRetMsg2.value = htonl(144);
-
+#endif
 read_again:
 	Pthread_mutex_lock(&hpn_ret_mutex);
 	if (gettimeofday(&tv, NULL) < 0)
@@ -2267,21 +2273,33 @@ read_again:
 //check here	
 	//memcpy(sRetMsg.timestamp, sHpnRetMsg.pts, MS_CTIME_BUF_LEN);
 	memcpy(sRetMsg.timestamp, sHpnRetMsg.timestamp, MS_CTIME_BUF_LEN);
+#ifdef HPNSSH_QFACTOR_BINN 
+	sRetMsg.hop_latency = sHpnRetMsg.hop_latency;
+	sRetMsg.queue_occupancy = sHpnRetMsg.queue_occupancy;
+	sRetMsg.switch_id = sHpnRetMsg.switch_id;
+	sRetMsg.seq_no = ++sMsgSeqNo;
+#else
 	sRetMsg.hop_latency = htonl(sHpnRetMsg.hop_latency);
 	sRetMsg.queue_occupancy = htonl(sHpnRetMsg.queue_occupancy);
 	sRetMsg.switch_id = htonl(sHpnRetMsg.switch_id);
 	sRetMsg.seq_no = htonl(++sMsgSeqNo);
-
+#endif
 	sHpnRetMsg.pts = 0;	
 
 	if(sHpnRetMsg2.pts)
 	{
 		memcpy(sRetMsg2.timestamp, sHpnRetMsg2.pts, MS_CTIME_BUF_LEN);
+#ifdef HPNSSH_QFACTOR_BINN 
+       		sRetMsg2.hop_latency = sHpnRetMsg2.hop_latency;
+        	sRetMsg2.queue_occupancy = sHpnRetMsg2.queue_occupancy;
+        	sRetMsg2.switch_id = sHpnRetMsg2.switch_id;
+		sRetMsg2.seq_no = ++sMsgSeqNo;	
+#else
        		sRetMsg2.hop_latency = htonl(sHpnRetMsg2.hop_latency);
         	sRetMsg2.queue_occupancy = htonl(sHpnRetMsg2.queue_occupancy);
         	sRetMsg2.switch_id = htonl(sHpnRetMsg2.switch_id);
 		sRetMsg2.seq_no = htonl(++sMsgSeqNo);	
-
+#endif
 		sHpnRetMsg2.pts = 0;
 		two = 1;
 	}
@@ -3927,7 +3945,9 @@ void * doProcessHpnClientReq(void * arg)
 	ssize_t	n;
 #ifdef HPNSSH_QFACTOR_BINN
         struct ClientBinnMsg sMsg;
-	char from_cli[25];
+	//char from_cli[25];
+	//char from_cli[22];
+	char from_cli[BUFFER_SIZE_FROM_CLIENT];
 #else
 	struct PeerMsg	from_cli;
 #endif
@@ -3960,7 +3980,7 @@ void * doProcessHpnClientReq(void * arg)
 		}
 			
 #ifdef HPNSSH_QFACTOR_BINN
-#if 1
+#if 0
 		if (vDebugLevel > 1)
 		{
 			fprintf(tunLogPtr,"\n%s %s: ***num bytes read from Hpn Client = %lu***\n", ms_ctime_buf, phase2str(current_phase),n);
@@ -3971,15 +3991,16 @@ void * doProcessHpnClientReq(void * arg)
 #endif
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 #ifdef HPNSSH_QFACTOR_BINN
-		if (ntohl(sMsg.msg_type) == HPNSSH_MSG)
+		//if (ntohl(sMsg.msg_type) == HPNSSH_MSG)
+		if (sMsg.msg_type == HPNSSH_MSG)
 		{
-			if (vDebugLevel > 1)
+			if (vDebugLevel > 0)
 			{
 				fprintf(tunLogPtr,"\n%s %s: ***Received Hpnssh message from Hpnssh Client...***\n", ms_ctime_buf, phase2str(current_phase));
-				fprintf(tunLogPtr,"%s %s: ***msg type = %d, msg op = %u\n", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg.msg_type), ntohl(sMsg.op));
+				fprintf(tunLogPtr,"%s %s: ***msg type = %d, msg op = %u\n", ms_ctime_buf, phase2str(current_phase), sMsg.msg_type, sMsg.op);
 			}
 				
-			fDoHpnAssessment(ntohl(sMsg.op), sockfd);
+			fDoHpnAssessment(sMsg.op, sockfd);
 		}
 			else
 				if (vDebugLevel > 0)

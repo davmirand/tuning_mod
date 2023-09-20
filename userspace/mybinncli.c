@@ -1,145 +1,131 @@
 #include <stdio.h>
 #include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
-#include <bits/stdint-uintn.h>
-#include <bits/types.h>
-#include <ctype.h>
 #include <signal.h>
 #include <arpa/inet.h>
-#include <sys/ipc.h>
 #include <time.h>
+#include "binncli.h"
 
 #define CTIME_BUF_LEN           27
 #define MS_CTIME_BUF_LEN        48
-#include "binncli.h"
 
-#if 1
+int vDebugLevel = 1;
+int vPort = 5525; //default listening port
+int vShutdown = 0;
+FILE * pHpnClientLogPtr = 0;
+
 #define SA      struct sockaddr
-
 /* prototypes for socket wrapper functions */
-int      Accept(int, SA *, socklen_t *);
-void     Bind(int, const SA *, socklen_t);
-int      Connect(int, const SA *, socklen_t);
-void     Listen(int, int);
-int      Socket(int, int, int);
-int      Writen(int, void *, size_t);
+int	Accept(int, SA *, socklen_t *);
+void	Bind(int, const SA *, socklen_t);
+int	Connect(int, const SA *, socklen_t);
+void	Listen(int, int);
+int	Socket(int, int, int);
+int	Writen(int, void *, size_t);
 
-/* include Socket */
-int
-Socket(int family, int type, int protocol)
+int Socket(int family, int type, int protocol)
 {
-        int             n;
+	int             n;
 
-        if ( (n = socket(family, type, protocol)) < 0)
+	if ( (n = socket(family, type, protocol)) < 0)
 	{
-                printf("socket error\n");
+		printf("socket error\n");
 		exit(2);
 	}
-        return(n);
+	return(n);
 }
-/* end Socket */
 
-
-ssize_t                                         /* Write "n" bytes to a descriptor. */
-writen(int fd, const void *vptr, size_t n)
+ssize_t	writen(int fd, const void *vptr, size_t n)
 {
-        size_t          nleft;
-        ssize_t         nwritten;
-        const char      *ptr;
+	size_t nleft;
+	ssize_t	nwritten;
+	const char *ptr;
 
-        ptr = vptr;
-        nleft = n;
-        while (nleft > 0) {
-                if ( (nwritten = write(fd, ptr, nleft)) <= 0) {
-                        if (nwritten < 0 && errno == EINTR)
-                        {
-                                nwritten = 0;           /* and call write() again */
-                        }
-                        else
-                                return(-1);                     /* error */
-                }
-
-                nleft -= nwritten;
-                ptr   += nwritten;
-        }
-
-        return(n);
-}
-/* end writen */
-
-
-int
-Writen(int fd, void *ptr, size_t nbytes)
-{
-        if (writen(fd, ptr, nbytes) != nbytes)
-        {
-                if (errno == EPIPE)
-                        return(1);
-                else
+	ptr = vptr;
+	nleft = n;
+	while (nleft > 0) 
+	{
+		if ( (nwritten = write(fd, ptr, nleft)) <= 0) 
 		{
-                        printf("writen error\n");
-			return 1;
+			if (nwritten < 0 && errno == EINTR)
+			{
+				nwritten = 0;	/* and call write() again */
+			}
+			else
+				return(-1);	/* error */
 		}
-        }
 
-        return 0;
-}
-
-void
-Inet_pton(int family, const char *strptr, void *addrptr)
-{
-        int             n;
-
-        if ( (n = inet_pton(family, strptr, addrptr)) < 0)
-                printf("inet_pton error for %s", strptr);      /* errno set */
-        else if (n == 0)
-	{
-                printf("inet_pton error for %s", strptr);     /* errno not set */
-		exit(1);
+		nleft -= nwritten;
+		ptr   += nwritten;
 	}
 
-        /* nothing to return */
+	return(n);
 }
 
-void
-Bind(int fd, const struct sockaddr *sa, socklen_t salen)
+int Writen(int fd, void *ptr, size_t nbytes)
 {
-        if (bind(fd, sa, salen) < 0)
-                printf("bind error\n");
-}
-
-int
-Connect(int fd, const struct sockaddr *sa, socklen_t salen)
-{
-        if (connect(fd, sa, salen) < 0)
+	if (writen(fd, ptr, nbytes) != nbytes)
 	{
-                printf("connect error\n");
-		return 1;
+		if (errno == EPIPE)
+			return(1);
+		else
+			{
+				printf("writen error\n");
+				return 1;
+			}
 	}
+
 	return 0;
 }
 
-void
-Close(int fd)
+void Inet_pton(int family, const char *strptr, void *addrptr)
 {
-        if (close(fd) == -1)
-                printf("close error\n");
+	int             n;
+
+	if ( (n = inet_pton(family, strptr, addrptr)) < 0)
+		printf("inet_pton error for %s", strptr);      /* errno set */
+	else 
+		if (n == 0)
+		{
+			printf("inet_pton error for %s", strptr);     /* errno not set */
+			exit(1);
+		}
+	return;
 }
-#endif
 
+void Bind(int fd, const struct sockaddr *sa, socklen_t salen)
+{
+	if (bind(fd, sa, salen) < 0)
+		printf("bind error\n");
 
-int vPort = 5525; //default listening port
-int vShutdown = 0;
+	return;
+}
+
+int Connect(int fd, const struct sockaddr *sa, socklen_t salen)
+{
+	if (connect(fd, sa, salen) < 0)
+	{
+		printf("connect error\n");
+		return 1;
+	}
+
+	return 0;
+}
+
+void Close(int fd)
+{
+	if (close(fd) == -1)
+		printf("close error\n");
+
+	return;
+}
 
 enum work_phases {
-        STARTING,
+	STARTING,
 	RUNNING,
-        SHUTDOWN
+	SHUTDOWN
 };
 
 enum work_phases current_phase = STARTING;
@@ -149,25 +135,24 @@ const char *workflow_names[NUM_NAMES_MAX] = {
 	"STARTING", "RUNNING", "SHUTDOWN"
 };
 
-FILE * pHpnClientLogPtr = 0;
-
 const char *phase2str(enum work_phases phase)
 {
 	if (phase < NUM_NAMES_MAX)
 		return workflow_names[phase];
-return NULL;
+
+	return NULL;
 }
 
 void fMake_Binn_Client_Object(struct ClientBinnMsg *pMsg, binn * obj)
 {
 	binn_object_set_uint32(obj, "msg_type", pMsg->msg_type);
 	binn_object_set_uint32(obj, "op", pMsg->op);
-return;
+
+	return;
 }
 
 void fRead_Binn_Server_Object(struct ServerBinnMsg *pMsg, binn * obj)
 {
-
 	pMsg->msg_type = binn_object_uint32(obj, "msg_type");
 	pMsg->op = binn_object_uint32(obj, "op");
 	pMsg->hop_latency = binn_object_uint32(obj, "hop_latency");
@@ -177,12 +162,6 @@ void fRead_Binn_Server_Object(struct ServerBinnMsg *pMsg, binn * obj)
 	
 	return;
 }
-
-
-
-
-int vDebugLevel = 1;
-
 
 void gettime(time_t *clk, char *ctime_buf)
 {
@@ -251,8 +230,7 @@ void catch_sigusr1()
 }
 
 
-ssize_t                                         /* Read "n" bytes from a descriptor. */
-readn(int fd, void *vptr, size_t n)
+ssize_t readn(int fd, void *vptr, size_t n)
 {
 	size_t  nleft;
 	ssize_t nread;
@@ -282,11 +260,8 @@ readn(int fd, void *vptr, size_t n)
 	}
 	return(n - nleft);              /* return >= 0 */
 }
-/* end readn */
 
-
-ssize_t
-Readn(int fd, void *ptr, size_t nbytes)
+ssize_t Readn(int fd, void *ptr, size_t nbytes)
 {
 	ssize_t         n;
 
@@ -297,7 +272,8 @@ Readn(int fd, void *ptr, size_t nbytes)
 		else	
 			printf("readn error\n");
 	}
-return(n);
+
+	return(n);
 }
 
 void fDoHpnReadAllFS(unsigned int val, int sockfd, struct ServerBinnMsg *from_server);
@@ -306,7 +282,7 @@ void fDoHpnFromserver(unsigned int val, int sockfd, struct ServerBinnMsg *from_s
 void fDoHpnReadAllFS(unsigned int val, int sockfd, struct ServerBinnMsg *from_server)
 {
 	time_t clk;
-	char ctime_buf[27];
+	char ctime_buf[CTIME_BUF_LEN];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 
 	if (vDebugLevel > 1)
@@ -320,11 +296,11 @@ void fDoHpnReadAllFS(unsigned int val, int sockfd, struct ServerBinnMsg *from_se
 		fprintf(pHpnClientLogPtr, "\n%s %s: ***********************HPN_CLIENT************************",
 								from_server->timestamp, phase2str(current_phase));
 		fprintf(pHpnClientLogPtr, "\n%s %s: HPN_CLIENT    : hop_switch_id = %u\n",
-								from_server->timestamp, phase2str(current_phase), ntohl(from_server->switch_id));
+								from_server->timestamp, phase2str(current_phase), from_server->switch_id);
 		fprintf(pHpnClientLogPtr, "%s %s: HPN_CLIENT    : queue_occupancy = %u\n",
-								from_server->timestamp, phase2str(current_phase), ntohl(from_server->queue_occupancy));
+								from_server->timestamp, phase2str(current_phase), from_server->queue_occupancy);
 		fprintf(pHpnClientLogPtr, "%s %s: HPN_CLIENT    : hop_latency = %u\n",
-								from_server->timestamp, phase2str(current_phase), ntohl(from_server->hop_latency));
+								from_server->timestamp, phase2str(current_phase), from_server->hop_latency);
 	}
 return;
 }
@@ -332,7 +308,7 @@ return;
 void fDoHpnFromServer(unsigned int val, int sockfd, struct ServerBinnMsg *from_server)
 {
 	time_t clk;
-	char ctime_buf[27];
+	char ctime_buf[CTIME_BUF_LEN];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 
 	switch (val) {
@@ -345,15 +321,14 @@ void fDoHpnFromServer(unsigned int val, int sockfd, struct ServerBinnMsg *from_s
 			break;
 	}
 
-return;
+	return;
 }
 
 void process_request(int sockfd)
 {
 	ssize_t n;
 	struct ServerBinnMsg sMsg;
-	//struct PeerMsg sMsg;
-	char from_cli[120];;
+	char from_cli[BUFFER_SIZE_FROM_SERVER];;
 	time_t clk;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
@@ -383,21 +358,20 @@ void process_request(int sockfd)
 		fRead_Binn_Server_Object(&sMsg, (binn *)&from_cli);
 
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-		//if (ntohl(from_cli.msg_no) == HPNSSH_MSG)
-		if (ntohl(sMsg.msg_type) == HPNSSH_MSG)
+		if (sMsg.msg_type == HPNSSH_MSG)
 		{
 			if (vDebugLevel > 2)
                 	{
 				fprintf(pHpnClientLogPtr,"\n%s %s: ***Received Hpnssh message from Hpnssh Server...***\n", ms_ctime_buf, phase2str(current_phase));
-				fprintf(pHpnClientLogPtr,"%s %s: ***msg_type = %d, msg op = %u...", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg.msg_type), ntohl(sMsg.op));
+				fprintf(pHpnClientLogPtr,"%s %s: ***msg_type = %d, msg op = %u...", ms_ctime_buf, phase2str(current_phase), sMsg.msg_type, sMsg.op);
 			}
 		
-			fDoHpnFromServer(ntohl(sMsg.op), sockfd, &sMsg);
+			fDoHpnFromServer(sMsg.op, sockfd, &sMsg);
 		}
 		else
 			{
 				fprintf(pHpnClientLogPtr,"\n%s %s: ***Received Invalid message from Hpnssh Server...***\n", ms_ctime_buf, phase2str(current_phase));
-				fprintf(pHpnClientLogPtr,"%s %s: ***msg_type = %d", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg.msg_type));
+				fprintf(pHpnClientLogPtr,"%s %s: ***msg_type = %d", ms_ctime_buf, phase2str(current_phase), sMsg.msg_type);
 			}
 		
 		fflush(pHpnClientLogPtr);
@@ -429,8 +403,6 @@ int main(int argc, char *argv[])
 	char aMySrc_Ip[32];
 	char aLogFile[256];
 
-	//mypid = getpid();
-	//sprintf(aLogFile,"/tmp/hpnClientLog.%u",mypid);
 	sprintf(aLogFile,"/tmp/hpnClientLog");
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
@@ -474,8 +446,7 @@ int main(int argc, char *argv[])
 
 cli_again:
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-
-	cliHpnBinnMsg.msg_type = htonl(HPNSSH_MSG);
+	cliHpnBinnMsg.msg_type = HPNSSH_MSG; //BTW - binn repo mentions that code is cross-platform so no need to worrk aout endianess
 
 	switch (cliHpnBinnMsg.op) {
 		case  HPNSSH_START: //connect
@@ -485,8 +456,6 @@ cli_again:
 				fflush(pHpnClientLogPtr);
 			}
 
-			cliHpnBinnMsg.op = htonl(cliHpnBinnMsg.op);
-		
 			sockfd = Socket(AF_INET, SOCK_STREAM, 0);
 			bzero(&servaddr, sizeof(servaddr));
 			servaddr.sin_family = AF_INET;
@@ -520,7 +489,7 @@ cli_again:
 				fflush(pHpnClientLogPtr);
 			}
 
-			cliHpnBinnMsg.op = htonl(cliHpnBinnMsg.op);
+			cliHpnBinnMsg.op = cliHpnBinnMsg.op;
 			str_cli(sockfd, &cliHpnBinnMsg);        
 				
 			if (vDebugLevel > 1)

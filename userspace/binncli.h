@@ -2,6 +2,8 @@
 #define __binncli_h
 
 #include "/usr/local/include/binn.h"
+#define BUFFER_SIZE_FROM_SERVER 106
+#define BUFFER_SIZE_FROM_CLIENT 19
 
 #ifndef HPNSSH_QFACTOR_BINN
 #define HPNSSH_MSG      2
