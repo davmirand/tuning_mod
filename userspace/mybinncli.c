@@ -14,7 +14,8 @@
 #include <sys/ipc.h>
 #include <time.h>
 
-//#include "unp.h"
+#define CTIME_BUF_LEN           27
+#define MS_CTIME_BUF_LEN        48
 #include "binncli.h"
 
 #if 1
@@ -133,12 +134,6 @@ Close(int fd)
 #endif
 
 
-struct PeerMsg sHpnRetMsg;
-unsigned int hpnRetMsgSeqNo = 0;
-struct PeerMsg hpnMsg;
-unsigned int hpnMsgSeqNo = 0;
-struct PeerMsg sMsg;
-unsigned int sMsgSeqNo = 0;
 int vPort = 5525; //default listening port
 int vShutdown = 0;
 
@@ -164,17 +159,10 @@ const char *phase2str(enum work_phases phase)
 return NULL;
 }
 
-void fMake_Binn_Object(struct PeerMsg *pMsg, binn * obj)
+void fMake_Binn_Client_Object(struct ClientBinnMsg *pMsg, binn * obj)
 {
-	binn_object_set_uint32(obj, "msg_no", pMsg->msg_no);
-	binn_object_set_uint32(obj, "seq_no", pMsg->seq_no);
-	binn_object_set_uint32(obj, "value", pMsg->value);
-	binn_object_set_uint32(obj, "hop_latency", pMsg->hop_latency);
-	binn_object_set_uint32(obj, "queue_occupancy", pMsg->queue_occupancy);
-	binn_object_set_uint32(obj, "switch_id", pMsg->switch_id);
-	binn_object_set_str(obj, "timestamp", pMsg->timestamp);
-	binn_object_set_str(obj, "msg", pMsg->msg);
-
+	binn_object_set_uint32(obj, "msg_type", pMsg->msg_type);
+	binn_object_set_uint32(obj, "op", pMsg->op);
 return;
 }
 
@@ -399,7 +387,7 @@ void fDoHpnFromServer(unsigned int val, int sockfd, struct PeerMsg *from_server)
 return;
 }
 
-void process_request_fs2(int sockfd)
+void process_request(int sockfd)
 {
 	ssize_t n;
 	struct PeerMsg sMsg;
@@ -458,18 +446,17 @@ void process_request_fs2(int sockfd)
 	}
 }
 
-int str_cli(int sockfd, struct PeerMsg *sThisMsg) //str_cli09
+int str_cli(int sockfd, struct ClientBinnMsg *sThisMsg) //str_cli09
 {
 	binn *myobj = binn_object();
-	fMake_Binn_Object(sThisMsg, myobj);
+	fMake_Binn_Client_Object(sThisMsg, myobj);
 #if 0
 	fprintf(pHpnClientLogPtr,"***!!!!!!!Size of binn object = %u...***\n", binn_size(myobj));
 	fflush(pHpnClientLogPtr);
 #endif
 	Writen(sockfd, binn_ptr(myobj), binn_size(myobj));
-	//Writen(sockfd, binn_ptr(myobj), binn_size(myobj));
 	binn_free(myobj);
-	
+
 	return 0;
 }
 
@@ -480,7 +467,7 @@ int main(int argc, char *argv[])
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	int sockfd;
 	struct sockaddr_in servaddr;
-	struct PeerMsg hpnMsg2;
+	struct ClientBinnMsg cliHpnBinnMsg;
 	char aMySrc_Ip[32];
 	char aLogFile[256];
 
@@ -524,30 +511,23 @@ int main(int argc, char *argv[])
 	catch_sigint();
 	catch_sigusr1();
 
-	memset(&hpnMsg2,0,sizeof(hpnMsg2));
-	hpnMsg2.value  = HPNSSH_START;
-
-	strcpy(hpnMsg2.msg, "This is a start message");
-
-
+	memset(&cliHpnBinnMsg,0,sizeof(cliHpnBinnMsg));
+	cliHpnBinnMsg.op  = HPNSSH_START;
 
 cli_again:
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
-	hpnMsg2.msg_no = htonl(HPNSSH_MSG);
-	hpnMsgSeqNo++;
-	hpnMsg2.seq_no = htonl(hpnMsgSeqNo);	
+	cliHpnBinnMsg.msg_type = htonl(HPNSSH_MSG);
 
-	switch (hpnMsg2.value) {
+	switch (cliHpnBinnMsg.op) {
 		case  HPNSSH_START: //connect
 			if (vDebugLevel > 1)
 			{
-				fprintf(pHpnClientLogPtr,"%s %s: ***Connecting to HPNSSN_QFACTOR server, seqno = %u...***\n", 
-											ms_ctime_buf, phase2str(current_phase), hpnMsgSeqNo);
+				fprintf(pHpnClientLogPtr,"%s %s: ***Connecting to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
 				fflush(pHpnClientLogPtr);
 			}
 
-			hpnMsg2.value = htonl(hpnMsg2.value);
+			cliHpnBinnMsg.op = htonl(cliHpnBinnMsg.op);
 		
 			sockfd = Socket(AF_INET, SOCK_STREAM, 0);
 			bzero(&servaddr, sizeof(servaddr));
@@ -561,7 +541,7 @@ cli_again:
 				goto cli_again;
 			}
 
-			hpnMsg2.value = HPNSSH_READALL; //next state
+			cliHpnBinnMsg.op = HPNSSH_READALL; //next state
 			current_phase = RUNNING;
 			goto cli_again;
 
@@ -578,36 +558,33 @@ cli_again:
 		case HPNSSH_READALL:		
 			if (vDebugLevel > 1)
 			{
-				fprintf(pHpnClientLogPtr,"%s %s: ***Sending READALL message to HPNSSN_QFACTOR server, seqno = %u...***\n", 
-											ms_ctime_buf, phase2str(current_phase), hpnMsgSeqNo);
+				fprintf(pHpnClientLogPtr,"%s %s: ***Sending READALL message to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
 				fflush(pHpnClientLogPtr);
 			}
 
-			hpnMsg2.value = htonl(hpnMsg2.value);
-			strcpy(hpnMsg2.msg, "This is a readall message");
-			str_cli(sockfd, &hpnMsg2);        
+			cliHpnBinnMsg.op = htonl(cliHpnBinnMsg.op);
+			str_cli(sockfd, &cliHpnBinnMsg);        
 				
 			if (vDebugLevel > 1)
 			{
-				fprintf(pHpnClientLogPtr,"%s %s: ***Finished sending READALL message to HPNSSN_QFACTOR server, seqno = %u...***\n", 
-												ms_ctime_buf, phase2str(current_phase), hpnMsgSeqNo);
+				fprintf(pHpnClientLogPtr,"%s %s: ***Finished sending READALL message to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
 				fflush(pHpnClientLogPtr);
 			}
 
-			process_request_fs2(sockfd);
+			process_request(sockfd);
 				
 			if (vShutdown)
 			{
-				hpnMsg2.value = HPNSSH_SHUTDOWN;
+				cliHpnBinnMsg.op = HPNSSH_SHUTDOWN;
 				vShutdown = 0;
 			}
 			else
-				hpnMsg2.value = HPNSSH_READALL;
+				cliHpnBinnMsg.op = HPNSSH_READALL;
 			break;
 			
 			default:
-				fprintf(pHpnClientLogPtr,"%s %s: ***Invalid hpnMsg2 value %d...***\n", 
-								ms_ctime_buf, phase2str(current_phase), hpnMsg2.value);
+				fprintf(pHpnClientLogPtr,"%s %s: ***Invalid cliHpnBinnMsg op %d...***\n", 
+								ms_ctime_buf, phase2str(current_phase), cliHpnBinnMsg.op);
 				fflush(pHpnClientLogPtr);
 				exit(1);
 				break;

@@ -456,13 +456,14 @@ int main(int argc, char *argv[])
 	struct sockaddr_in servaddr;
 	struct PeerMsg hpnMsg2;
 	char aMySrc_Ip[32];
-	pid_t mypid;
+	//pid_t mypid;
 	char aLogFile[256];
 
-	mypid = getpid();
+	//mypid = getpid();
 
 	//system("rm -f /tmp/hpnClientLog.*");
-	sprintf(aLogFile,"/tmp/hpnClientLog.%u",mypid);
+	//sprintf(aLogFile,"/tmp/hpnClientLog.%u",mypid);
+	sprintf(aLogFile,"/tmp/hpnClientLog");
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
 	pHpnClientLogPtr = fopen(aLogFile,"w");

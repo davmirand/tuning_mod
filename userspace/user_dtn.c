@@ -28,7 +28,8 @@
 
 
 #ifdef HPNSSH_QFACTOR_BINN
-void fMake_Binn_Object(struct PeerMsg *pMsg, binn * obj)
+#include "binncli.h"
+void fMake_Binn_Server_Object(struct PeerMsg *pMsg, binn * obj)
 {
         binn_object_set_uint32(obj, "msg_no", pMsg->msg_no);
         binn_object_set_uint32(obj, "seq_no", pMsg->seq_no);
@@ -42,21 +43,12 @@ void fMake_Binn_Object(struct PeerMsg *pMsg, binn * obj)
         return;
 }
 
-void fRead_Binn_Object(struct PeerMsg *pMsg, binn * obj)
+void fRead_Binn_Client_Object(struct ClientBinnMsg *pMsg, binn * obj)
 {
-
-        pMsg->msg_no = binn_object_uint32(obj, "msg_no");
-        pMsg->seq_no = binn_object_uint32(obj, "seq_no");
-        pMsg->value = binn_object_uint32(obj, "value");
-        pMsg->hop_latency = binn_object_uint32(obj, "hop_latency");
-        pMsg->queue_occupancy = binn_object_uint32(obj, "queue_occupancy");
-        pMsg->switch_id = binn_object_uint32(obj, "switch_id");
-        pMsg->ptimes = binn_object_str(obj, "timestamp");
-        //strcpy(pMsg->timestamp, pMsg->ptimes);
-        pMsg->pm = binn_object_str(obj, "msg");
-        //strcpy(pMsg->msg, pMsg->pm);
-
-        return;
+	pMsg->msg_type = binn_object_uint32(obj, "msg_type");
+	pMsg->op = binn_object_uint32(obj, "op");
+	
+	return;
 }
 #endif
 
@@ -3936,8 +3928,8 @@ void * doProcessHpnClientReq(void * arg)
 {
 	ssize_t	n;
 #ifdef HPNSSH_QFACTOR_BINN
-        struct PeerMsg sMsg;
-	char from_cli[127];
+        struct ClientBinnMsg sMsg;
+	char from_cli[25];
 #else
 	struct PeerMsg	from_cli;
 #endif
@@ -3970,34 +3962,32 @@ void * doProcessHpnClientReq(void * arg)
 		}
 			
 #ifdef HPNSSH_QFACTOR_BINN
-#if 0
+#if 1
 		if (vDebugLevel > 1)
 		{
 			fprintf(tunLogPtr,"\n%s %s: ***num bytes read from Hpn Client = %lu***\n", ms_ctime_buf, phase2str(current_phase),n);
 			fflush(tunLogPtr);
 		}
 #endif
-		fRead_Binn_Object(&sMsg, (binn *)&from_cli);
+		fRead_Binn_Client_Object(&sMsg, (binn *)&from_cli);
 #endif
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 #ifdef HPNSSH_QFACTOR_BINN
-		if (ntohl(sMsg.msg_no) == HPNSSH_MSG)
+		if (ntohl(sMsg.msg_type) == HPNSSH_MSG)
 		{
 			if (vDebugLevel > 1)
 			{
-				fprintf(tunLogPtr,"\n%s %s: ***Received Hpnssh message %u from Hpnssh Client...***\n", 
-									ms_ctime_buf, phase2str(current_phase), ntohl(sMsg.seq_no));
-				fprintf(tunLogPtr,"%s %s: ***msg_no = %d, msg value = %u, msg buf = %s\n", 
-						ms_ctime_buf, phase2str(current_phase), ntohl(sMsg.msg_no), ntohl(sMsg.value), sMsg.pm);
+				fprintf(tunLogPtr,"\n%s %s: ***Received Hpnssh message from Hpnssh Client...***\n", ms_ctime_buf, phase2str(current_phase));
+				fprintf(tunLogPtr,"%s %s: ***msg type = %d, msg op = %u\n", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg.msg_type), ntohl(sMsg.op));
 			}
 				
-			fDoHpnAssessment(ntohl(sMsg.value), sockfd);
+			fDoHpnAssessment(ntohl(sMsg.op), sockfd);
 		}
 			else
 				if (vDebugLevel > 0)
 				{
-					fprintf(tunLogPtr,"\n%s %s: ***Received a message %u from some Hpn client???...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg.seq_no));
-					fprintf(tunLogPtr,"%s %s: ***msg_no = %d, msg buf = %s", ms_ctime_buf, phase2str(current_phase), sMsg.msg_no, sMsg.pm);
+					fprintf(tunLogPtr,"\n%s %s: ***Received unknown message from some Hpn client???...***\n", ms_ctime_buf, phase2str(current_phase));
+					fprintf(tunLogPtr,"%s %s: ***msg_type = %d", ms_ctime_buf, phase2str(current_phase), sMsg.msg_type);
 				}
 
 		fflush(tunLogPtr);
@@ -4308,7 +4298,7 @@ int str_cli(int sockfd, struct PeerMsg *sThisMsg) //str_cli09
 	int y;
 #ifdef HPNSSH_QFACTOR_BINN
         binn *myobj = binn_object();
-        fMake_Binn_Object(sThisMsg, myobj);
+        fMake_Binn_Server_Object(sThisMsg, myobj);
 #if 0
 	fprintf(tunLogPtr,"***!!!!!!!Size of binn object = %u...***\n", binn_size(myobj));
 	fflush(tunLogPtr);

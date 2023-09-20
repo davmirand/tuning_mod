@@ -1,17 +1,9 @@
 #ifndef __binncli_h
 #define __binncli_h
-//Added for Q-Factor
-#define CTIME_BUF_LEN           27
-#define MS_CTIME_BUF_LEN        48
 
-#if 1
-#define HPNSSH_QFACTOR  1
-#if 1
-#define HPNSSH_QFACTOR_BINN  1
-#endif
 #include "/usr/local/include/binn.h"
-#endif
 
+#ifndef HPNSSH_QFACTOR_BINN
 #define TEST_MSG        0
 #define QINFO_MSG       1
 #define HPNSSH_MSG      2
@@ -36,15 +28,16 @@ struct PeerMsg {
         char * ptimes;
         char * pm;
 };
+#endif
 
 struct ClientBinnMsg {
-        unsigned int msg_no;
-        unsigned int value;
+        unsigned int msg_type;
+        unsigned int op;
 };
 
 struct ServerBinnMsg {
-        unsigned int msg_no;
-        unsigned int value;
+        unsigned int msg_type;
+        unsigned int op;
         unsigned int hop_latency;
         unsigned int queue_occupancy;
         unsigned int switch_id;
