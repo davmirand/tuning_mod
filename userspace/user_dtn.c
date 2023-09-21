@@ -1096,7 +1096,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 			new_traffic = 0;
 			src_ip_addr.y = ntohl(hop_key.flow_key.src_ip);
 		//	src_ip_addr.y = hop_key.flow_key.src_ip;
-			if (vDebugLevel > 1)
+			if (vDebugLevel > 4)
 			{
 				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 				fprintf(tunLogPtr, "%s %s: ***new traffic???***\n", ms_ctime_buf, phase2str(current_phase));
