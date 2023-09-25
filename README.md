@@ -1,4 +1,8 @@
 # Q-Factor: A Framework to Enable Ultra High-Speed Data Transfer Optimization based on Real-Time Network State
+- 	Q-Factor is a response to the high-cost of manual and time-consuming tuning of data transfer parameters 
+	applied to data-transfer optimization processes.
+
+
 This repo is comprised of basically two parts:
 
 -	**part 1** deals with creating an assessment package that a DTN operator
@@ -91,3 +95,9 @@ In order to compile and work with the Tuning Module, do the following:
 -	follow the instructions to install the package 
 
 **Note: Please see <install_directory>/readme.txt for information on how to start the Tuning Module**
+
+**Some notes on mechanism of the Tuning Module**
+-	Uses a HTTP client and server to dynamically change settings on the fly, for example:
+	* The Debug level
+	* Retransmission rate
+	* Queue Occuoancy Delta
