@@ -109,3 +109,6 @@ In order to compile and work with the Tuning Module, do the following:
 -	If Queue Occupancy on one node gets above some threshold and the retransmission rate on the other node gets too high
 	the Tuning Module will lower the pacing (if in Tuning mode) or suggest some value to lower it too. It will then put 
 	back the pacing to its original state after the transfer is over.
+-	Monitors RTT use bpf trace tools and also with the use of "ping".
+-	Added the ability for clients (hpnssh, etc.) to connect to the Tuning Module in order to receive data
+	for monitoring purposes.
