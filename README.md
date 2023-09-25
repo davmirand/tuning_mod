@@ -1,4 +1,4 @@
-# Relates to the ongoing XDP/eBPF project at FIU
+# Q-Factor: A Framework to Enable Ultra High-Speed Data Transfer Optimization based on Real-Time Network State
 This repo is comprised of basically two parts:
 
 -	**part 1** deals with creating an assessment package that a DTN operator
