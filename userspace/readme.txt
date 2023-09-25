@@ -4,19 +4,22 @@
 - Before starting the Tuning Module, edit the file "user_config.txt" and specify the 
 - name of the NIC you are going to use on the line marked 'nic_to_use'
 
+- To install the Tuning Module type 'sudo sh ./install.sh'
 - To start the Tuning Module type 'sudo ./userdtn_adm start'
 - To stop the Tuning Module type 'sudo ./userdtn_adm stop'
 
 - To see what options can be changed dynamically, including debug levels,  type "./tuncli"
 
 Additional Notes:
-There are 6 files that are used in conjunction with the Tuning Module: 
+There are 8 files that are used in conjunction with the Tuning Module: 
 i.    readme.txt
 ii.   user_config.txt 
 iii.  gdv.sh 
 iv.   gdv_100.sh
 v.    /tmp/tuningLog 
 vi.   /tmp/csvTuningLog
+vii.  SATuning_Module.zip
+viii. install.sh
 
 readme.txt
 ==========
@@ -80,6 +83,10 @@ The name of the NIC that the Tuning Module will be working with. Eg. enp6s0.
 
 k. nic_attach_type
 The bpf program will attach to  network interface using this type
+
+l. source_hpnssh_qfactor_port
+The port that a hpnssh client will attach to retrieve metadata information 
+about the traffic flow.
 
 gdv.sh 
 ======
@@ -175,33 +182,16 @@ The csvTuningLog file contains a list of comma separated values which
 shows any tuning that was applied. This file can be later used to
 create JSON formatted data.
 
+SATuning_Module.zip
+===================
+This file contains all the files that are needed for the installation of the package.
+Unzip with "unzip SATuning_Module.zip
+
+install.sh
+==========
+This is the script to install the Tuning Module package.
+Please type "sudo sh ./install.sh" to install pkg.
+
 ==============================================
 ==============================================
 ==============================================
-Additional specs that may be worth checking out. 
-
-/***
- ***Maximum number of microseconds in one NAPI polling cycle. 
- ***Polling will exit when either netdev_budget_usecs have elapsed during 
- ***the poll cycle or the number of packets processed reaches netdev_budget.
- ***
- ***/
-net.core.netdev_budget = 300 
-net.core.netdev_budget_usecs = 8000 
-
-
-/***
- ***Maximum number of packets, queued on the INPUT side, when the interface 
- ***receives packets faster than kernel can process them.
- ***
- ***/
-net.core.netdev_max_backlog = 1000 
-
-/***
- ***Increase transmission queue of interface. 
- ***Example provided here. Probably can increase more.
- ***
- ***/
-ifconfig ethXXX txqueuelen 10000 
-
-
