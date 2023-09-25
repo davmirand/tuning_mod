@@ -100,8 +100,12 @@ In order to compile and work with the Tuning Module, do the following:
 -	Uses a HTTP client and server to dynamically change settings on the fly, for example:
 	* The Debug level
 	* Retransmission rate
-	* Queue Occupancy Delta
+	* Queue Occupancy Threshold
 	* Has a Learning mode and a Tuning mode
 -	When set to Tuning mode, will dynmically set the the suggested tuning changes without manual intervention
 	* Learning mode will only make suggestions which can be found in the log
-	* ny changes to teh system are automaticallly logged.
+	* Any changes to the system are automaticallly logged.
+-	Uses "ethtool" to manipulate buffer rings of a network device in order to get petter performance
+-	If Queue Occupancy on one node gets above some threshold and the retransmission rate on the other node gets too high
+	the Tuning Module will lower the pacing (if in Tuning mode) or suggest some value to lower it too. It will then put 
+	back the pacing to its original state after the transfer is over.
