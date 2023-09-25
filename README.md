@@ -100,4 +100,8 @@ In order to compile and work with the Tuning Module, do the following:
 -	Uses a HTTP client and server to dynamically change settings on the fly, for example:
 	* The Debug level
 	* Retransmission rate
-	* Queue Occuoancy Delta
+	* Queue Occupancy Delta
+	* Has a Learning mode and a Tuning mode
+-	When set to Tuning mode, will dynmically set the the suggested tuning changes without manual intervention
+	* Learning mode will only make suggestions which can be found in the log
+	* ny changes to teh system are automaticallly logged.
