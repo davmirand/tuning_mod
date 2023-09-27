@@ -2441,7 +2441,7 @@ void fDoQinfoAssessment(unsigned int val)
         if (vRetransmissionRate > vRetransmissionRateThreshold)
         {
                 fprintf(tunLogPtr,"%s %s: ***WARNING***: the retransmission rate of %.5f is higher that the retansmission threshold of %.5f.\n", ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
-                sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, aQdiscVal, netDevice, (vGlobal_average_tx_Gbits_per_sec/4.0)*3.0);
+                sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, aQdiscVal, netDevice, (vGlobal_average_tx_Gbits_per_sec/10.0)*9.0); //90%
 
                 if (gTuningMode && (current_phase == LEARNING))
                 {
