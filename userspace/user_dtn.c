@@ -1397,6 +1397,37 @@ void check_req(http_s *h, char aResp[])
 		fprintf(tunLogPtr,"%s %s: ***New retransmission rate allowed is *%.5f***\n", ms_ctime_buf, phase2str(current_phase), vRetransmissionRateThreshold);
 		goto after_check;
 	}
+	
+	if (strstr(pReqData,"GET /-ct#pacing_rate#"))
+	{
+		/* Change the value of the retransmits allwoed per sec */
+		double vNewPacingRate = 0.0;
+		int countdots = 0;
+
+		char *p = (pReqData + sizeof("GET /-ct#retrans_rate#")) - 1;
+
+		while ((isdigit(*p) || (*p == '.')) && countdots <= 1)
+		{
+			if (*p == '.') countdots++;
+			aNumber[count++] = *p;
+			p++;
+		}
+        
+		if (countdots > 1)
+        	{
+			fprintf(tunLogPtr,"%s %s: ***Received **INVALID** request from Http Client to change maximum retransmission rate. Number is invalid: *%s***\n", ms_ctime_buf, phase2str(current_phase), aNumber);
+			sprintf(aResp,"***ERROR: Number is invalid for retransmission rate: *%s***\n", aNumber);
+			goto after_check;
+		}
+
+        	sscanf(aNumber,"%lf", &vNewPacingRate);
+		sprintf(aResp,"Changed  maximum pacing rate allowed from %.5f to %.5f!\n", vRetransmissionRateThreshold, vNewRetransRate);
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change maximum retransmission rate allowed from %.5f to %.5f***\n", ms_ctime_buf, phase2str(current_phase), vRetransmissionRateThreshold, vNewRetransRate);
+		vMaxPacingRate = vNewPacingRate/100.0;
+		fprintf(tunLogPtr,"%s %s: ***New retransmission rate allowed is *%.5f***\n", ms_ctime_buf, phase2str(current_phase), vRetransmissionRateThreshold);
+		goto after_check;
+	}
 			
 	if (strstr(pReqData,"GET /-ct#hop_late#"))
 	{
