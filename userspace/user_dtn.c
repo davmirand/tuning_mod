@@ -1421,11 +1421,11 @@ void check_req(http_s *h, char aResp[])
 		}
 
         	sscanf(aNumber,"%lf", &vNewPacingRate);
-		sprintf(aResp,"Changed  maximum pacing rate allowed from %.2f to %.2f!\n", vMaxPacingRate*100.0, vNewPacingRate);
+		sprintf(aResp,"Changed  maximum pacing rate from %.2f to %.2f%!\n", vMaxPacingRate*100.0, vNewPacingRate);
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change maximum pacing rate allowed from %.2f to %.2f***\n", ms_ctime_buf, phase2str(current_phase), vMaxPacingRate, vNewPacingRate);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change maximum pacing rate allowed from %.2f to %.2f***\n", ms_ctime_buf, phase2str(current_phase), vMaxPacingRate*100.0, vNewPacingRate);
 		vMaxPacingRate = vNewPacingRate/100.0;
-		fprintf(tunLogPtr,"%s %s: ***New pacing rate allowed is *%.2f***\n", ms_ctime_buf, phase2str(current_phase), vMaxPacingRate);
+		fprintf(tunLogPtr,"%s %s: ***New pacing rate is %.2f%\n", ms_ctime_buf, phase2str(current_phase), vMaxPacingRate*100.0);
 		goto after_check;
 	}
 			
