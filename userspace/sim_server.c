@@ -19,8 +19,8 @@
 #define	MAXLINE		4096	/* max text line length */
 
 typedef struct {
-        int argc;
-        char ** argv;
+	int argc;
+	char ** argv;
 } sArgv_t;
 
 int vDebugLevel = 7;
@@ -28,8 +28,8 @@ int vPort = 5525; //default listening port
 int vShutdown = 0;
 FILE * pHpnServerLogPtr = 0;
 
-#define SA      struct sockaddr
-#define	LISTENQ		1024	/* 2nd argument to listen() */
+#define SA struct sockaddr
+#define	LISTENQ	1024	/* 2nd argument to listen() */
 /* prototypes for socket wrapper functions */
 int     Accept(int, SA *, socklen_t *);
 void    Bind(int, const SA *, socklen_t);
@@ -38,215 +38,174 @@ int     Socket(int, int, int);
 int     Writen(int, void *, size_t);
 int	err_sys(const char *, ...);
 
-int             daemon_proc;            /* set nonzero by daemon_init() */
-static void     err_doit(int, int, const char *, va_list);
+int	daemon_proc;            /* set nonzero by daemon_init() */
+static void err_doit(int, int, const char *, va_list);
 
 /* Print message and return to caller
  * Caller specifies "errnoflag" and "level" */
 static void
 err_doit(int errnoflag, int level, const char *fmt, va_list ap)
 {
-        int             errno_save, n;
-        char    buf[MAXLINE + 1];
+	int errno_save, n;
+	char buf[MAXLINE + 1];
 
-        errno_save = errno;             /* value caller might want printed */
+	errno_save = errno;             /* value caller might want printed */
 #ifdef  HAVE_VSNPRINTF
-        vsnprintf(buf, MAXLINE, fmt, ap);       /* safe */
+	vsnprintf(buf, MAXLINE, fmt, ap);       /* safe */
 #else
-        vsprintf(buf, fmt, ap);                                 /* not safe */
+	vsprintf(buf, fmt, ap);                                 /* not safe */
 #endif
-        n = strlen(buf);
-        if (errnoflag)
-                snprintf(buf + n, MAXLINE - n, ": %s", strerror(errno_save));
-        strcat(buf, "\n");
+	n = strlen(buf);
+	if (errnoflag)
+		snprintf(buf + n, MAXLINE - n, ": %s", strerror(errno_save));
+	
+	strcat(buf, "\n");
 
-        if (daemon_proc) {
-                syslog(level, "%s", buf);
-        } else {
-                fflush(stdout);         /* in case stdout and stderr are the same */
-                fputs(buf, stderr);
-                fflush(stderr);
-        }
-        return;
+	if (daemon_proc) 
+	{
+		syslog(level, "%s", buf);
+	} 
+	else 
+		{
+			fflush(stdout);         /* in case stdout and stderr are the same */
+			fputs(buf, stderr);
+			fflush(stderr);
+		}
+	
+	return;
 }
 
 int
 err_sys(const char *fmt, ...)
 {
-        va_list         ap;
+	va_list ap;
 
-        va_start(ap, fmt);
-        err_doit(1, LOG_ERR, fmt, ap);
-        va_end(ap);
-//        exit(1);
-return 1;
-}
+	va_start(ap, fmt);
+	err_doit(1, LOG_ERR, fmt, ap);
+	va_end(ap);
 
-void Pthread_mutex_lock(pthread_mutex_t *);
-void Pthread_mutex_unlock(pthread_mutex_t *);
-void Pthread_cond_signal(pthread_cond_t *cptr);
-void Pthread_cond_wait(pthread_cond_t *cptr, pthread_mutex_t *mptr);
-
-void
-Pthread_cond_signal(pthread_cond_t *cptr)
-{
-        int             n;
-
-        if ( (n = pthread_cond_signal(cptr)) == 0)
-                return;
-        errno = n;
-        err_sys("pthread_cond_signal error");
-}
-
-void
-Pthread_cond_wait(pthread_cond_t *cptr, pthread_mutex_t *mptr)
-{
-        int             n;
-
-        if ( (n = pthread_cond_wait(cptr, mptr)) == 0)
-                return;
-        errno = n;
-        err_sys("pthread_cond_wait error");
-}
-
-/* include Pthread_mutex_lock */
-void
-Pthread_mutex_lock(pthread_mutex_t *mptr)
-{
-        int             n;
-
-        if ( (n = pthread_mutex_lock(mptr)) == 0)
-                return;
-        errno = n;
-        err_sys("pthread_mutex_lock error");
-}
-/* end Pthread_mutex_lock */
-
-void
-Pthread_mutex_unlock(pthread_mutex_t *mptr)
-{
-        int             n;
-
-        if ( (n = pthread_mutex_unlock(mptr)) == 0)
-                return;
-        errno = n;
-        err_sys("pthread_mutex_unlock error");
+	return 1;
 }
 
 void Close(int fd)
 {
-        if (close(fd) == -1)
-                printf("close error\n");
+	if (close(fd) == -1)
+		printf("close error\n");
 
-        return;
+	return;
 }
 
 int Socket(int family, int type, int protocol)
 {
-        int             n;
+	int             n;
 
-        if ( (n = socket(family, type, protocol)) < 0)
-        {
-                printf("socket error\n");
-                exit(2);
+	if ( (n = socket(family, type, protocol)) < 0)
+	{
+		printf("socket error\n");
+		exit(2);
         }
-        return(n);
+	
+	return(n);
 }
 
 ssize_t writen(int fd, const void *vptr, size_t n)
 {
-        size_t nleft;
-        ssize_t nwritten;
-        const char *ptr;
+	size_t nleft;
+	ssize_t nwritten;
+	const char *ptr;
 
-        ptr = vptr;
-        nleft = n;
-        while (nleft > 0)
-        {
-                if ( (nwritten = write(fd, ptr, nleft)) <= 0)
-                {
-                        if (nwritten < 0 && errno == EINTR)
-                        {
-                                nwritten = 0;   /* and call write() again */
-                        }
-                        else
-                                return(-1);     /* error */
-                }
+	ptr = vptr;
+	nleft = n;
+	while (nleft > 0)
+	{
+		if ( (nwritten = write(fd, ptr, nleft)) <= 0)
+		{
+			if (nwritten < 0 && errno == EINTR)
+			{
+				nwritten = 0;   /* and call write() again */
+			}
+			else
+				return(-1);     /* error */
+		}
 
-                nleft -= nwritten;
-                ptr   += nwritten;
-        }
+		nleft -= nwritten;
+		ptr   += nwritten;
+	}
 
-        return(n);
+	return(n);
 }
 
 /* include Listen */
 void
 Listen(int fd, int backlog)
 {
-        char    *ptr;
+	char    *ptr;
 
-                /*4can override 2nd argument with environment variable */
-        if ( (ptr = getenv("LISTENQ")) != NULL)
-                backlog = atoi(ptr);
+	/*4can override 2nd argument with environment variable */
+	if ( (ptr = getenv("LISTENQ")) != NULL)
+		backlog = atoi(ptr);
 
-        if (listen(fd, backlog) < 0)
-                err_sys("listen error");
+	if (listen(fd, backlog) < 0)
+		err_sys("listen error");
 }
 /* end Listen */
 
 void gettime(time_t *clk, char *ctime_buf)
 {
-        *clk = time(NULL);
-        ctime_r(clk,ctime_buf);
-        ctime_buf[24] = ':';
+	*clk = time(NULL);
+	ctime_r(clk,ctime_buf);
+	ctime_buf[24] = ':';
+
+	return;
 }
 void gettimeWithMilli(time_t *clk, char *ctime_buf, char *ms_ctime_buf)
 {
-        struct timespec ts;
-        timespec_get(&ts, TIME_UTC);
-        *clk = ts.tv_sec;
-        struct tm *t = localtime(clk);
-        ctime_r(clk,ctime_buf);
-        ctime_buf[19] = '.';
-        ctime_buf[20] = '\0';
-        sprintf(ms_ctime_buf,"%s%03ld %04d:", ctime_buf, ts.tv_nsec/1000000, t->tm_year+1900);
-return;
+	struct timespec ts;
+	timespec_get(&ts, TIME_UTC);
+	*clk = ts.tv_sec;
+	struct tm *t = localtime(clk);
+	ctime_r(clk,ctime_buf);
+	ctime_buf[19] = '.';
+	ctime_buf[20] = '\0';
+	sprintf(ms_ctime_buf,"%s%03ld %04d:", ctime_buf, ts.tv_nsec/1000000, t->tm_year+1900);
+
+	return;
 }
 
 enum work_phases {
-        STARTING,
-        RUNNING,
-        SHUTDOWN
+	STARTING,
+	RUNNING,
+	SHUTDOWN
 };
 
 enum work_phases current_phase = STARTING;
 
 #define NUM_NAMES_MAX 3
 const char *workflow_names[NUM_NAMES_MAX] = {
-        "STARTING", "RUNNING", "SHUTDOWN"
+	"STARTING", "RUNNING", "SHUTDOWN"
 };
 
 
 const char *phase2str(enum work_phases phase)
 {
-        if (phase < WORKFLOW_NAMES_MAX)
-                return workflow_names[phase];
-        return NULL;
+	if (phase < WORKFLOW_NAMES_MAX)
+		return workflow_names[phase];
+
+	return NULL;
 }
 
 struct PeerMsg {
-        unsigned int msg_no;
-        unsigned int seq_no;
-        unsigned int value;
-        unsigned int hop_latency;
-        unsigned int queue_occupancy;
-        unsigned int switch_id;
-        char timestamp[MS_CTIME_BUF_LEN];
-        char msg[80];
-        char * pts;
-        char * ptimes;
-        char * pm;
+	unsigned int msg_no;
+	unsigned int seq_no;
+	unsigned int value;
+	unsigned int hop_latency;
+	unsigned int queue_occupancy;
+	unsigned int switch_id;
+	char timestamp[MS_CTIME_BUF_LEN];
+	char msg[80];
+	char * pts;
+	char * ptimes;
+	char * pm;
 };
 
 int str_cli(int sockfd, struct PeerMsg *sThisMsg);
@@ -257,11 +216,7 @@ int str_cli(int sockfd, struct PeerMsg *sThisMsg);
 
 //For HPNSSH_MSGs value will be whether to do a read or readall or shutdown
 #define HPNSSH_READ             33
-#define HPNSSH_READALL          44
-#define HPNSSH_SHUTDOWN         55
-#define HPNSSH_START            99
 #define HPNSSH_READ_FS          133
-#define HPNSSH_READALL_FS       144
 #define HPNSSH_DUMMY            166
 
 void fDoHpnRead(unsigned int val, int sockfd);
@@ -269,130 +224,121 @@ void fDoHpnRead(unsigned int val, int sockfd);
 ssize_t                                         /* Read "n" bytes from a descriptor. */
 readn(int fd, void *vptr, size_t n)
 {
-        size_t  nleft;
-        ssize_t nread;
-        char    *ptr;
+	size_t  nleft;
+	ssize_t nread;
+	char    *ptr;
 
-        ptr = vptr;
-        nleft = n;
-        while (nleft > 0) {
-                if ( (nread = read(fd, ptr, nleft)) < 0) {
-                        if (errno == EINTR)
-                                nread = 0;              /* and call read() again */
-                        else
-                                return(-1);
-                } else if (nread == 0)
-                        break;                          /* EOF */
+	ptr = vptr;
+	nleft = n;
+	
+	while (nleft > 0) {
+		if ( (nread = read(fd, ptr, nleft)) < 0) {
+			if (errno == EINTR)
+				nread = 0;              /* and call read() again */
+			else
+				return(-1);
+		} else if (nread == 0)
+				break;                          /* EOF */
 
-                nleft -= nread;
-                ptr   += nread;
-        }
-        return(n - nleft);              /* return >= 0 */
+		nleft -= nread;
+		ptr   += nread;
+	}
+
+	return(n - nleft);              /* return >= 0 */
 }
 /* end readn */
 
 ssize_t
 Readn(int fd, void *ptr, size_t nbytes)
 {
-        ssize_t         n;
+	ssize_t         n;
 
-        if ( (n = readn(fd, ptr, nbytes)) < 0)
-                err_sys("readn error");
-        return(n);
+	if ( (n = readn(fd, ptr, nbytes)) < 0)
+		err_sys("readn error");
+
+	return(n);
 }
 
 void fRead_Binn_Client_Object(struct ClientBinnMsg *pMsg, binn * obj)
 {
-        pMsg->msg_type = binn_object_uint32(obj, "msg_type");
-        pMsg->op = binn_object_uint32(obj, "op");
+	pMsg->msg_type = binn_object_uint32(obj, "msg_type");
+	pMsg->op = binn_object_uint32(obj, "op");
 
-        return;
+	return;
 }
 
 
-#ifdef HPNSSH_QFACTOR
 void * doProcessHpnClientReq(void * arg)
 {
-        ssize_t n;
-#ifdef HPNSSH_QFACTOR_BINN
-        struct ClientBinnMsg sMsg;
-        char from_cli[BUFFER_SIZE_FROM_CLIENT];
+	ssize_t n;
+	struct ClientBinnMsg sMsg;
+	char from_cli[BUFFER_SIZE_FROM_CLIENT];
+	time_t clk;
+	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
+
+	int sockfd = (int)arg;
+
+	pthread_detach(pthread_self());
+
+	for ( ; ; )
+	{
+		if ( (n = Readn(sockfd, from_cli, sizeof(from_cli))) == 0)
+		{
+			if (vDebugLevel > 0)
+			{
+				fprintf(pHpnServerLogPtr,"\n%s %s: ***Hpn Client Connection closed***\n", ms_ctime_buf, phase2str(current_phase));
+				fflush(pHpnServerLogPtr);
+			}
+
+			Close(sockfd);
+			return (NULL);         /* connection closed by other end */
+		}
+
+#if 0
+		if (vDebugLevel > 1)
+		{
+			fprintf(pHpnServerLogPtr,"\n%s %s: ***num bytes read from Hpn Client = %lu***\n", ms_ctime_buf, phase2str(current_phase),n);
+			fflush(pHpnServerLogPtr);
+		}
 #endif
-        time_t clk;
-        char ctime_buf[27];
-        char ms_ctime_buf[MS_CTIME_BUF_LEN];
+		fRead_Binn_Client_Object(&sMsg, (binn *)&from_cli);
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+                
+		if (sMsg.msg_type == HPNSSH_MSG)
+		{
+			if (vDebugLevel > 0)
+			{
+				fprintf(pHpnServerLogPtr,"\n%s %s: ***Received Hpnssh message from Hpnssh Client...***\n", ms_ctime_buf, phase2str(current_phase));
+				fprintf(pHpnServerLogPtr,"%s %s: ***msg type = %d, msg op = %u\n", ms_ctime_buf, phase2str(current_phase), sMsg.msg_type, sMsg.op);
+			}
 
-        int sockfd = (int)arg;
+			fDoHpnAssessment(sMsg.op, sockfd);
+		}
+		else
+			if (vDebugLevel > 0)
+			{
+				fprintf(pHpnServerLogPtr,"\n%s %s: ***Received unknown message from some Hpn client???...***\n", ms_ctime_buf, phase2str(current_phase));
+				fprintf(pHpnServerLogPtr,"%s %s: ***msg_type = %d", ms_ctime_buf, phase2str(current_phase), sMsg.msg_type);
+			}
 
-        pthread_detach(pthread_self());
+		fflush(pHpnServerLogPtr);
+	}
 
-        for ( ; ; )
-        {
-                //struct binn_struct from_cli;
-
-#ifdef HPNSSH_QFACTOR_BINN
-                if ( (n = Readn(sockfd, from_cli, sizeof(from_cli))) == 0)
-#endif
-                {
-                        if (vDebugLevel > 0)
-                        {
-                                fprintf(pHpnServerLogPtr,"\n%s %s: ***Hpn Client Connection closed***\n", ms_ctime_buf, phase2str(current_phase));
-                                fflush(pHpnServerLogPtr);
-                        }
-
-                        Close(sockfd);
-                        return (NULL);         /* connection closed by other end */
-                }
-
-#ifdef HPNSSH_QFACTOR_BINN
-#if 1
-                if (vDebugLevel > 1)
-                {
-                        fprintf(pHpnServerLogPtr,"\n%s %s: ***num bytes read from Hpn Client = %lu***\n", ms_ctime_buf, phase2str(current_phase),n);
-                        fflush(pHpnServerLogPtr);
-                }
-#endif
-                fRead_Binn_Client_Object(&sMsg, (binn *)&from_cli);
-#endif
-                gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-#ifdef HPNSSH_QFACTOR_BINN
-                if (sMsg.msg_type == HPNSSH_MSG)
-                {
-                        if (vDebugLevel > 0)
-                        {
-                                fprintf(pHpnServerLogPtr,"\n%s %s: ***Received Hpnssh message from Hpnssh Client...***\n", ms_ctime_buf, phase2str(current_phase));
-                                fprintf(pHpnServerLogPtr,"%s %s: ***msg type = %d, msg op = %u\n", ms_ctime_buf, phase2str(current_phase), sMsg.msg_type, sMsg.op);
-                        }
-
-                        fDoHpnAssessment(sMsg.op, sockfd);
-                }
-                        else
-                                if (vDebugLevel > 0)
-                                {
-                                        fprintf(pHpnServerLogPtr,"\n%s %s: ***Received unknown message from some Hpn client???...***\n", ms_ctime_buf, phase2str(current_phase));
-                                        fprintf(pHpnServerLogPtr,"%s %s: ***msg_type = %d", ms_ctime_buf, phase2str(current_phase), sMsg.msg_type);
-                                }
-
-                fflush(pHpnServerLogPtr);
-        }
 }
-#endif
-
-
 
 void fMake_Binn_Server_Object(struct PeerMsg *pMsg, binn * obj)
 {
-        binn_object_set_uint32(obj, "msg_type", pMsg->msg_no);
-        binn_object_set_uint32(obj, "op", pMsg->value);
-        binn_object_set_uint32(obj, "hop_latency", pMsg->hop_latency);
-        binn_object_set_uint32(obj, "queue_occupancy", pMsg->queue_occupancy);
-        binn_object_set_uint32(obj, "switch_id", pMsg->switch_id);
-        binn_object_set_str(obj, "timestamp", pMsg->timestamp);
+	binn_object_set_uint32(obj, "msg_type", pMsg->msg_no);
+	binn_object_set_uint32(obj, "op", pMsg->value);
+	binn_object_set_uint32(obj, "hop_latency", pMsg->hop_latency);
+	binn_object_set_uint32(obj, "queue_occupancy", pMsg->queue_occupancy);
+	binn_object_set_uint32(obj, "switch_id", pMsg->switch_id);
+	binn_object_set_str(obj, "timestamp", pMsg->timestamp);
 
-        return;
+	return;
 }
 
-#ifdef HPNSSH_QFACTOR
 pthread_mutex_t hpn_ret_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t hpn_ret_cond = PTHREAD_COND_INITIALIZER;
 static int hpnretcdone = 0;
@@ -400,34 +346,31 @@ struct PeerMsg sHpnRetMsg;
 struct PeerMsg sHpnRetMsg2;
 unsigned int hpnRetMsgSeqNo = 0;
 char aDest_Ip2_Binary[32];
-#endif
 
 void fDoHpnRead(unsigned int val, int sockfd)
 {
-        time_t clk;
-        char ctime_buf[27];
-        char ms_ctime_buf[MS_CTIME_BUF_LEN];
-        struct PeerMsg sRetMsg;
-        int y,n;
-        struct timeval tv;
-        struct timespec ts;
-        int saveerrno = 0;
-        char mychar;
+	time_t clk;
+	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
+	struct PeerMsg sRetMsg;
+	int y,n;
+	struct timeval tv;
+	struct timespec ts;
+	int saveerrno = 0;
+	char mychar;
 	static unsigned int count = 1111;
 
-        gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-        if (vDebugLevel > 6)
-                fprintf(pHpnServerLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+	if (vDebugLevel > 6)
+		fprintf(pHpnServerLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
 
-#ifdef HPNSSH_QFACTOR_BINN
-        //BINN objects are cross platform - no need for big endian, littl endian worries - so sayeth the binn repo
-        sRetMsg.msg_no = HPNSSH_MSG;
-        sRetMsg.value = HPNSSH_READ_FS;
-#endif
+	//BINN objects are cross platform - no need for big endian, little endian worries 
+	sRetMsg.msg_no = HPNSSH_MSG;
+	sRetMsg.value = HPNSSH_READ_FS;
 
 read_again:
 #if 0
-        Pthread_mutex_lock(&hpn_ret_mutex);
+	Pthread_mutex_lock(&hpn_ret_mutex);
         if (gettimeofday(&tv, NULL) < 0)
                 err_sys("gettimeofday error");
         ts.tv_sec = tv.tv_sec + 5; //seconds in future
@@ -473,10 +416,10 @@ read_again:
                         }
                 }
 #endif
-        memcpy(sRetMsg.timestamp, ms_ctime_buf, MS_CTIME_BUF_LEN);
-        sRetMsg.hop_latency = count++;
-        sRetMsg.queue_occupancy = count++;
-        sRetMsg.switch_id = count++;
+	memcpy(sRetMsg.timestamp, ms_ctime_buf, MS_CTIME_BUF_LEN);
+	sRetMsg.hop_latency = count++;
+	sRetMsg.queue_occupancy = count++;
+	sRetMsg.switch_id = count++;
 #if 0
         hpnretcdone = 0;
         Pthread_mutex_unlock(&hpn_ret_mutex);
@@ -490,141 +433,119 @@ read_again:
 #endif
 	y = str_cli(sockfd, &sRetMsg);
 
-return;
+	return;
 }
 
 void fDoHpnAssessment(unsigned int val, int sockfd)
 {
-        time_t clk;
-        char ctime_buf[27];
-        char ms_ctime_buf[MS_CTIME_BUF_LEN];
+	time_t clk;
+	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 
-        switch (val) {
-                case  HPNSSH_READ:
-                        fDoHpnRead(val, sockfd);
-                        break;
-                default:
-                        gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-                        fprintf(pHpnServerLogPtr,"%s %s: ***WARNING***: Invalid Hpnmessage value from client. Value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
-                        break;
-        }
+	switch (val) {
+		case  HPNSSH_READ:
+			fDoHpnRead(val, sockfd);
+			break;
+		default:
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+			fprintf(pHpnServerLogPtr,"%s %s: ***WARNING***: Invalid Hpnmessage value from client. Value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
+			break;
+	}
 
-return;
+	return;
 }
-#endif	
 	
-#ifdef HPNSSH_QFACTOR
 void * doHandleHpnsshQfactorEnv(void * vargp)
 {
-        time_t clk;
-        char ctime_buf[27];
-        char ms_ctime_buf[MS_CTIME_BUF_LEN];
-        int listenfd, connfd;
-        pthread_t tid;
-        socklen_t clilen;
-        struct sockaddr_in cliaddr, servaddr;
+	time_t clk;
+	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
+	int listenfd, connfd;
+	pthread_t tid;
+	socklen_t clilen;
+	struct sockaddr_in cliaddr, servaddr;
+	struct sockaddr_in peeraddr;
+	socklen_t peeraddrlen;
+	struct sockaddr_in localaddr;
+	socklen_t localaddrlen;
 
-#if 1
-                        struct sockaddr_in peeraddr;
-                        socklen_t peeraddrlen;
-                        struct sockaddr_in localaddr;
-                        socklen_t localaddrlen;
+	peeraddrlen = sizeof(peeraddr);
+	localaddrlen = sizeof(localaddr);
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+	
+	fprintf(pHpnServerLogPtr,"%s %s: ***Starting Listener for receiving messages from HPNSSH...***\n", ms_ctime_buf, phase2str(current_phase));
+	fflush(pHpnServerLogPtr);
 
-                        peeraddrlen = sizeof(peeraddr);
-                        localaddrlen = sizeof(localaddr);
-#endif
-			        gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-        fprintf(pHpnServerLogPtr,"%s %s: ***Starting Listener for receiving messages from HPNSSH...***\n", ms_ctime_buf, phase2str(current_phase));
-        fflush(pHpnServerLogPtr);
+	listenfd = Socket(AF_INET, SOCK_STREAM, 0);
 
-        listenfd = Socket(AF_INET, SOCK_STREAM, 0);
+	bzero(&servaddr, sizeof(servaddr));
+	servaddr.sin_family      = AF_INET;
+	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	servaddr.sin_port        = htons(vPort);
 
-        bzero(&servaddr, sizeof(servaddr));
-        servaddr.sin_family      = AF_INET;
-        servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-        servaddr.sin_port        = htons(vPort);
+	Bind(listenfd, (SA *) &servaddr, sizeof(servaddr));
+	Listen(listenfd, LISTENQ);
 
-        Bind(listenfd, (SA *) &servaddr, sizeof(servaddr));
-        Listen(listenfd, LISTENQ);
+	for ( ; ; )
+	{
+		clilen = sizeof(cliaddr);
+		if ( (connfd = accept(listenfd, (SA *) &cliaddr, &clilen)) < 0)
+		{
+			if (errno == EINTR)
+				continue;  /* back to for() */
+			else
+				err_sys("accept error");
+		}
+	
+		fprintf(pHpnServerLogPtr,"%s %s: ***Accepted connection with Listener for receiving messages from HPNSSH...***\n", ms_ctime_buf, phase2str(current_phase));
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
-        for ( ; ; )
-        {
-                clilen = sizeof(cliaddr);
-                if ( (connfd = accept(listenfd, (SA *) &cliaddr, &clilen)) < 0)
-                {
-                        if (errno == EINTR)
-                                continue;  /* back to for() */
-                        else
-                                err_sys("accept error");
-                }
-#if 1
-                fprintf(pHpnServerLogPtr,"%s %s: ***Accepted connection with Listener for receiving messages from HPNSSH...***\n", ms_ctime_buf, phase2str(current_phase));
-                gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-
-                int retval = getpeername(connfd, (struct sockaddr *) &peeraddr, &peeraddrlen);
-                if (retval == -1)
-                {
-                        fprintf(pHpnServerLogPtr,"%s %s: ***Peer error:***\n", ms_ctime_buf, phase2str(current_phase));
-                //      perror("getpeername()");
-                }
-                else
-                        {
-                                char *peeraddrpresn = inet_ntoa(peeraddr.sin_addr);
+		int retval = getpeername(connfd, (struct sockaddr *) &peeraddr, &peeraddrlen);
+		if (retval == -1)
+		{
+			fprintf(pHpnServerLogPtr,"%s %s: ***Peer error:***\n", ms_ctime_buf, phase2str(current_phase));
+			//      perror("getpeername()");
+		}
+		else
+			{
+				char *peeraddrpresn = inet_ntoa(peeraddr.sin_addr);
 				sprintf(aDest_Ip2_Binary,"%02X",peeraddr.sin_addr.s_addr);
-                                //total_time_passed = 0;
-                                if (vDebugLevel > 1)
-                                {
-                                        fprintf(pHpnServerLogPtr,"%s %s: ***Peer information: ip long %s\n", ms_ctime_buf, phase2str(current_phase), aDest_Ip2_Binary);
-                                        fprintf(pHpnServerLogPtr,"%s %s: ***Peer information:\n", ms_ctime_buf, phase2str(current_phase));
-                                        fprintf(pHpnServerLogPtr,"%s %s: ***Peer Address Family: %d\n", ms_ctime_buf, phase2str(current_phase), peeraddr.sin_family);
-                                        fprintf(pHpnServerLogPtr,"%s %s: ***Peer Port: %d\n", ms_ctime_buf, phase2str(current_phase), peeraddr.sin_port);
-                                        fprintf(pHpnServerLogPtr,"%s %s: ***Peer IP Address: %s***\n\n", ms_ctime_buf, phase2str(current_phase), peeraddrpresn);
-                                }
-                        }
+				//total_time_passed = 0;
+				if (vDebugLevel > 1)
+				{
+					fprintf(pHpnServerLogPtr,"%s %s: ***Peer information: ip long %s\n", ms_ctime_buf, phase2str(current_phase), aDest_Ip2_Binary);
+					fprintf(pHpnServerLogPtr,"%s %s: ***Peer information:\n", ms_ctime_buf, phase2str(current_phase));
+					fprintf(pHpnServerLogPtr,"%s %s: ***Peer Address Family: %d\n", ms_ctime_buf, phase2str(current_phase), peeraddr.sin_family);
+					fprintf(pHpnServerLogPtr,"%s %s: ***Peer Port: %d\n", ms_ctime_buf, phase2str(current_phase), peeraddr.sin_port);
+					fprintf(pHpnServerLogPtr,"%s %s: ***Peer IP Address: %s***\n\n", ms_ctime_buf, phase2str(current_phase), peeraddrpresn);
+				}
+			}
 
-                retval = getsockname(connfd, (struct sockaddr *) &localaddr, &localaddrlen);
-                if (retval == -1)
-                {
-                        fprintf(pHpnServerLogPtr,"%s %s: ***sock error:***\n", ms_ctime_buf, phase2str(current_phase));
-                }
-                else
-                        {
-                                char *localaddrpresn = inet_ntoa(localaddr.sin_addr);
+		retval = getsockname(connfd, (struct sockaddr *) &localaddr, &localaddrlen);
+		if (retval == -1)
+		{
+			fprintf(pHpnServerLogPtr,"%s %s: ***sock error:***\n", ms_ctime_buf, phase2str(current_phase));
+		}
+		else
+			{
+				char *localaddrpresn = inet_ntoa(localaddr.sin_addr);
 
-                                if (vDebugLevel > 1)
-                                {
-                                        fprintf(pHpnServerLogPtr,"%s %s: ***Socket information:\n", ms_ctime_buf, phase2str(current_phase));
-                                        fprintf(pHpnServerLogPtr,"%s %s: ***Local Address Family: %d\n", ms_ctime_buf, phase2str(current_phase), localaddr.sin_family);
-                                        fprintf(pHpnServerLogPtr,"%s %s: ***Local Port: %d\n", ms_ctime_buf, phase2str(current_phase), ntohs(localaddr.sin_port));
-                                        fprintf(pHpnServerLogPtr,"%s %s: ***Local IP Address: %s***\n\n", ms_ctime_buf, phase2str(current_phase), localaddrpresn);
-                                }
-                                //strcpy(aLocal_Ip,localaddrpresn);
-                        }
+				if (vDebugLevel > 1)
+				{
+					fprintf(pHpnServerLogPtr,"%s %s: ***Socket information:\n", ms_ctime_buf, phase2str(current_phase));
+					fprintf(pHpnServerLogPtr,"%s %s: ***Local Address Family: %d\n", ms_ctime_buf, phase2str(current_phase), localaddr.sin_family);
+					fprintf(pHpnServerLogPtr,"%s %s: ***Local Port: %d\n", ms_ctime_buf, phase2str(current_phase), ntohs(localaddr.sin_port));
+					fprintf(pHpnServerLogPtr,"%s %s: ***Local IP Address: %s***\n\n", ms_ctime_buf, phase2str(current_phase), localaddrpresn);
+				}
+			}
 
-                fflush(pHpnServerLogPtr);
-#endif
+		fflush(pHpnServerLogPtr);
+                
+		pthread_create(&tid, NULL, &doProcessHpnClientReq, (void *) connfd);
+	}
 
-#if 0
-                if ( (childpid = Fork()) == 0)
-                {        /* child process */
-
-                        Close(listenfd); /* close listening socket */
-                        process_request(connfd);/* process the request */
-                        exit(0);
-                }
-#endif
-                pthread_create(&tid, NULL, &doProcessHpnClientReq, (void *) connfd);
-                //process_request(connfd);/* process the request */
-
-                //Close(connfd); /* parent closes connected socket */
-        }
-
-        return ((char *)0);
+	return ((char *)0);
 }
-#endif
-
-
-
 
 int Writen(int fd, void *ptr, size_t nbytes)
 {
@@ -698,7 +619,7 @@ void sig_usr1_handler(int signum, siginfo_t *info, void *ptr)
 
 	fprintf(pHpnServerLogPtr,"Debug Level is now %d...\n",vDebugLevel);
 	fflush(pHpnServerLogPtr);
-return;
+	return;
 }
 
 void catch_sigusr1()
@@ -714,20 +635,17 @@ void catch_sigusr1()
 
 int str_cli(int sockfd, struct PeerMsg *sThisMsg) //str_cli09
 {
-        int y;
-#ifdef HPNSSH_QFACTOR_BINN
-        binn *myobj = binn_object();
-        fMake_Binn_Server_Object(sThisMsg, myobj);
-#if 1
-        fprintf(pHpnServerLogPtr,"***!!!!!!!Size of binn object = %u...***\n", binn_size(myobj));
-        fflush(pHpnServerLogPtr);
+	int y;
+        
+	binn *myobj = binn_object();
+	fMake_Binn_Server_Object(sThisMsg, myobj);
+#if 0
+	fprintf(pHpnServerLogPtr,"***!!!!!!!Size of binn object = %u...***\n", binn_size(myobj));
+	fflush(pHpnServerLogPtr);
 #endif
-        y = Writen(sockfd, binn_ptr(myobj), binn_size(myobj));
-        binn_free(myobj);
-#else
-        y = Writen(sockfd, sThisMsg, sizeof(struct PeerMsg));
-#endif
-        return y;
+	y = Writen(sockfd, binn_ptr(myobj), binn_size(myobj));
+	binn_free(myobj);
+	return y;
 }
 
 int main(int argc, char *argv[])
@@ -739,27 +657,27 @@ int main(int argc, char *argv[])
 	sArgv_t sArgv;
 
 	sArgv.argc = argc;
-        sArgv.argv = argv;
+	sArgv.argv = argv;
 	memset(aDest_Ip2_Binary,0,sizeof(aDest_Ip2_Binary));
 
-#ifdef HPNSSH_QFACTOR
 	int vRetFromHandleHpnsshQfactorEnvThread, vRetFromHandleHpnsshQfactorEnvJoin;
 	pthread_t doHandleHpnsshQfactorEnvThread_id;
-#endif
 
-#ifdef HPNSSH_QFACTOR
-        //Handle messages from hpnssh client
-        vRetFromHandleHpnsshQfactorEnvThread = pthread_create(&doHandleHpnsshQfactorEnvThread_id, NULL, doHandleHpnsshQfactorEnv, &sArgv);
-        memset(&sHpnRetMsg,0,sizeof(sHpnRetMsg));
-        strcpy(sHpnRetMsg.msg, "Hello there!!! This is a Hpn msg...\n");
-        sHpnRetMsg.msg_no = htonl(HPNSSH_MSG);
+	catch_sigint();
+	catch_sigusr1();
 
-        memset(&sHpnRetMsg2,0,sizeof(sHpnRetMsg));
-        strcpy(sHpnRetMsg2.msg, "Hello there!!! This is a Hpn msg...\n");
-        sHpnRetMsg2.msg_no = htonl(HPNSSH_MSG);
+//Handle messages from hpnssh client
+	vRetFromHandleHpnsshQfactorEnvThread = pthread_create(&doHandleHpnsshQfactorEnvThread_id, NULL, doHandleHpnsshQfactorEnv, &sArgv);
+	
+	memset(&sHpnRetMsg,0,sizeof(sHpnRetMsg));
+	strcpy(sHpnRetMsg.msg, "Hello there!!! This is a Hpn msg...\n");
+	sHpnRetMsg.msg_no = htonl(HPNSSH_MSG);
 
-        //Send messages tp HpnsshQfactor server for simulated testing
-#endif
+	memset(&sHpnRetMsg2,0,sizeof(sHpnRetMsg));
+	strcpy(sHpnRetMsg2.msg, "Hello there!!! This is a Hpn msg...\n");
+	sHpnRetMsg2.msg_no = htonl(HPNSSH_MSG);
+
+	//Send messages tp HpnsshQfactor server for simulated testing
 
 	sprintf(aLogFile,"/tmp/hpnServerLog");
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
@@ -771,40 +689,18 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-#if 0
-	fprintf(pHpnServerLogPtr,"%s %s: ***Starting Client for testing with HPN-QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
-	sprintf(aMySrc_Ip,"127.0.0.1");
-	if (argc > 1 && argc < 6) //5 args max
+	fprintf(pHpnServerLogPtr,"%s %s: ***Starting simulated HPN-QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
+	if (argc == 3 && ((strcmp(argv[1],"-p") == 0)))
 	{
-		if (argc == 3 && ((strcmp(argv[1],"-p") == 0) || 
-				  (strcmp(argv[1],"-d") == 0)))
-		{
-			if (strcmp(argv[1],"-d") == 0)
-				sprintf(aMySrc_Ip, argv[2]);
-			if (strcmp(argv[1],"-p") == 0)
-				vPort = atoi(argv[2]);
-		}
-		else
-			if (argc == 5 && (((strcmp(argv[3],"-p") == 0) || (strcmp(argv[3],"-d") == 0)) || 
-					  ((strcmp(argv[3],"-d") == 0) || (strcmp(argv[3],"-p") == 0))))
-			{
-
-				//do nothing yet
-			}
+		if (strcmp(argv[1],"-p") == 0)
+			vPort = atoi(argv[2]);
 	}
 
-	fprintf(pHpnServerLogPtr,"%s %s: ***Connecting to HPNSSN-QFACTOR Server %s, using port %d...***\n", 
-							ms_ctime_buf, phase2str(current_phase), aMySrc_Ip, vPort);
+	fprintf(pHpnServerLogPtr,"%s %s: ***Starting simulated HPN-QFACTOR server, listening on port %d*\n", ms_ctime_buf, phase2str(current_phase), vPort);
 	fflush(pHpnServerLogPtr);
-#endif
-	catch_sigint();
-	catch_sigusr1();
 
-#ifdef HPNSSH_QFACTOR
-        if (vRetFromHandleHpnsshQfactorEnvThread == 0)
-                vRetFromHandleHpnsshQfactorEnvJoin = pthread_join(doHandleHpnsshQfactorEnvThread_id, NULL);
-#endif
+	if (vRetFromHandleHpnsshQfactorEnvThread == 0)
+		vRetFromHandleHpnsshQfactorEnvJoin = pthread_join(doHandleHpnsshQfactorEnvThread_id, NULL);
 
-return 0;
+	return 0;
 }
-
