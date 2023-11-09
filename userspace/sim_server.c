@@ -23,7 +23,7 @@ typedef struct {
         char ** argv;
 } sArgv_t;
 
-int vDebugLevel = 1;
+int vDebugLevel = 7;
 int vPort = 5525; //default listening port
 int vShutdown = 0;
 FILE * pHpnServerLogPtr = 0;
@@ -265,10 +265,6 @@ int str_cli(int sockfd, struct PeerMsg *sThisMsg);
 #define HPNSSH_DUMMY            166
 
 void fDoHpnRead(unsigned int val, int sockfd);
-void fDoHpnReadAll(unsigned int val, int sockfd);
-void fDoHpnShutdown(unsigned int val, int sockfd);
-void fDoHpnStart(unsigned int val, int sockfd);
-void fDoHpnAssessment(unsigned int val, int sockfd);
 
 ssize_t                                         /* Read "n" bytes from a descriptor. */
 readn(int fd, void *vptr, size_t n)
@@ -349,7 +345,7 @@ void * doProcessHpnClientReq(void * arg)
                 }
 
 #ifdef HPNSSH_QFACTOR_BINN
-#if 0
+#if 1
                 if (vDebugLevel > 1)
                 {
                         fprintf(pHpnServerLogPtr,"\n%s %s: ***num bytes read from Hpn Client = %lu***\n", ms_ctime_buf, phase2str(current_phase),n);
@@ -403,7 +399,6 @@ static int hpnretcdone = 0;
 struct PeerMsg sHpnRetMsg;
 struct PeerMsg sHpnRetMsg2;
 unsigned int hpnRetMsgSeqNo = 0;
-struct PeerMsg sTimeoutMsg;
 char aDest_Ip2_Binary[32];
 #endif
 
@@ -482,9 +477,6 @@ read_again:
         sRetMsg.hop_latency = count++;
         sRetMsg.queue_occupancy = count++;
         sRetMsg.switch_id = count++;
-
-        sHpnRetMsg.pts = 0;
-
 #if 0
         hpnretcdone = 0;
         Pthread_mutex_unlock(&hpn_ret_mutex);
@@ -726,7 +718,7 @@ int str_cli(int sockfd, struct PeerMsg *sThisMsg) //str_cli09
 #ifdef HPNSSH_QFACTOR_BINN
         binn *myobj = binn_object();
         fMake_Binn_Server_Object(sThisMsg, myobj);
-#if 0
+#if 1
         fprintf(pHpnServerLogPtr,"***!!!!!!!Size of binn object = %u...***\n", binn_size(myobj));
         fflush(pHpnServerLogPtr);
 #endif
@@ -765,16 +757,6 @@ int main(int argc, char *argv[])
         memset(&sHpnRetMsg2,0,sizeof(sHpnRetMsg));
         strcpy(sHpnRetMsg2.msg, "Hello there!!! This is a Hpn msg...\n");
         sHpnRetMsg2.msg_no = htonl(HPNSSH_MSG);
-
-        memset(&sTimeoutMsg,0,sizeof(sTimeoutMsg));
-        strcpy(sTimeoutMsg.msg, "Hello there!!! This is  a dummy message ..., Here's some data\n");
-        sTimeoutMsg.msg_no = htonl(HPNSSH_MSG);
-        sTimeoutMsg.value = htonl(HPNSSH_DUMMY);;
-        memcpy(sTimeoutMsg.timestamp, ms_ctime_buf, MS_CTIME_BUF_LEN);
-        sTimeoutMsg.hop_latency = htonl(1);
-        sTimeoutMsg.queue_occupancy = htonl(2);
-        sTimeoutMsg.switch_id = htonl(3);
-        sTimeoutMsg.seq_no = htonl(4);
 
         //Send messages tp HpnsshQfactor server for simulated testing
 #endif
