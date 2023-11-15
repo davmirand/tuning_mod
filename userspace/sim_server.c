@@ -23,7 +23,7 @@ typedef struct {
 	char ** argv;
 } sArgv_t;
 
-int vDebugLevel = 7;
+int vDebugLevel = 4;
 int vPort = 5525; //default listening port
 int vShutdown = 0;
 FILE * pHpnServerLogPtr = 0;
@@ -202,10 +202,6 @@ struct PeerMsg {
 	unsigned int queue_occupancy;
 	unsigned int switch_id;
 	char timestamp[MS_CTIME_BUF_LEN];
-	char msg[80];
-	char * pts;
-	char * ptimes;
-	char * pm;
 };
 
 int str_cli(int sockfd, struct PeerMsg *sThisMsg);
@@ -280,6 +276,8 @@ void * doProcessHpnClientReq(void * arg)
 	int sockfd = (int)arg;
 
 	pthread_detach(pthread_self());
+	
+	current_phase = RUNNING;
 
 	for ( ; ; )
 	{
@@ -307,7 +305,7 @@ void * doProcessHpnClientReq(void * arg)
                 
 		if (sMsg.msg_type == HPNSSH_MSG)
 		{
-			if (vDebugLevel > 0)
+			if (vDebugLevel > 1)
 			{
 				fprintf(pHpnServerLogPtr,"\n%s %s: ***Received Hpnssh message from Hpnssh Client...***\n", ms_ctime_buf, phase2str(current_phase));
 				fprintf(pHpnServerLogPtr,"%s %s: ***msg type = %d, msg op = %u\n", ms_ctime_buf, phase2str(current_phase), sMsg.msg_type, sMsg.op);
@@ -339,99 +337,28 @@ void fMake_Binn_Server_Object(struct PeerMsg *pMsg, binn * obj)
 	return;
 }
 
-pthread_mutex_t hpn_ret_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t hpn_ret_cond = PTHREAD_COND_INITIALIZER;
-static int hpnretcdone = 0;
-struct PeerMsg sHpnRetMsg;
-struct PeerMsg sHpnRetMsg2;
-unsigned int hpnRetMsgSeqNo = 0;
-char aDest_Ip2_Binary[32];
-
 void fDoHpnRead(unsigned int val, int sockfd)
 {
 	time_t clk;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	struct PeerMsg sRetMsg;
-	int y,n;
-	struct timeval tv;
-	struct timespec ts;
-	int saveerrno = 0;
-	char mychar;
 	static unsigned int count = 1111;
 
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-	if (vDebugLevel > 6)
+	if (vDebugLevel > 3)
 		fprintf(pHpnServerLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
 
 	//BINN objects are cross platform - no need for big endian, little endian worries 
 	sRetMsg.msg_no = HPNSSH_MSG;
 	sRetMsg.value = HPNSSH_READ_FS;
 
-read_again:
-#if 0
-	Pthread_mutex_lock(&hpn_ret_mutex);
-        if (gettimeofday(&tv, NULL) < 0)
-                err_sys("gettimeofday error");
-        ts.tv_sec = tv.tv_sec + 5; //seconds in future
-        ts.tv_nsec = tv.tv_usec * 1000; //microsec to nanosec
-
-        while(hpnretcdone == 0)
-                if ( (n = pthread_cond_timedwait(&hpn_ret_cond, &hpn_ret_mutex, &ts)) != 0)
-                {
-                        saveerrno = errno;
-                        gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-                        if (vDebugLevel > 8)
-                                fprintf(pHpnServerLogPtr,"%s %s: ***INFO***: In fDoHpnRead(),  errno = %d, n= %d**\n", ms_ctime_buf, phase2str(current_phase), saveerrno,n);
-
-                        if (n == ETIME || n == ETIMEDOUT) //apparently n could also be ETIME although man notes only mention ETIMEDOUT
-                        {
-                                if (vDebugLevel > 7)
-                                {
-                                        fprintf(pHpnServerLogPtr,"%s %s: ***WARNING***: In fDoHpnRead(), wait condition timed out errno = %d, n= %d**\n", ms_ctime_buf, phase2str(current_phase), saveerrno,n);
-                                        fflush(pHpnServerLogPtr);
-                                }
-
-                                Pthread_mutex_unlock(&hpn_ret_mutex); //release the Kraken
-                                //goto read_again;
-                                y = recv(sockfd, &mychar, 1, MSG_DONTWAIT|MSG_PEEK);
-                                saveerrno = errno;
-                                if (vDebugLevel > 6)
-                                {
-                                        fprintf(pHpnServerLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), after recv(), errno = %d, y= %d**\n", ms_ctime_buf, phase2str(current_phase), saveerrno,y);
-                                        fflush(pHpnServerLogPtr);
-                                }
-                                if (saveerrno && !y) //cpnnection dropped on client side
-                                {
-                                        if (vDebugLevel > 1)
-                                        {
-                                                fprintf(pHpnServerLogPtr,"%s %s: ***INFO***: client closed connection, returning from read fDoHpnRead()****\n", ms_ctime_buf, phase2str(current_phase));
-                                                fflush(pHpnServerLogPtr);
-                                        }
-
-                                        return;
-                                }
-                                else
-                                        goto read_again;
-                        }
-                }
-#endif
 	memcpy(sRetMsg.timestamp, ms_ctime_buf, MS_CTIME_BUF_LEN);
 	sRetMsg.hop_latency = count++;
 	sRetMsg.queue_occupancy = count++;
 	sRetMsg.switch_id = count++;
-#if 0
-        hpnretcdone = 0;
-        Pthread_mutex_unlock(&hpn_ret_mutex);
-#endif
-#if 0
-        if (!str_cli(sockfd, &sRetMsg))
-                goto read_again;
-
-        fprintf(pHpnServerLogPtr,"%s %s: ***WARNING***: client closed connection, EPIPE error???****\n", ms_ctime_buf, phase2str(current_phase));
-        fflush(pHpnServerLogPtr);
-#endif
-	y = str_cli(sockfd, &sRetMsg);
+	
+	str_cli(sockfd, &sRetMsg);
 
 	return;
 }
@@ -504,16 +431,12 @@ void * doHandleHpnsshQfactorEnv(void * vargp)
 		if (retval == -1)
 		{
 			fprintf(pHpnServerLogPtr,"%s %s: ***Peer error:***\n", ms_ctime_buf, phase2str(current_phase));
-			//      perror("getpeername()");
 		}
 		else
 			{
 				char *peeraddrpresn = inet_ntoa(peeraddr.sin_addr);
-				sprintf(aDest_Ip2_Binary,"%02X",peeraddr.sin_addr.s_addr);
-				//total_time_passed = 0;
 				if (vDebugLevel > 1)
 				{
-					fprintf(pHpnServerLogPtr,"%s %s: ***Peer information: ip long %s\n", ms_ctime_buf, phase2str(current_phase), aDest_Ip2_Binary);
 					fprintf(pHpnServerLogPtr,"%s %s: ***Peer information:\n", ms_ctime_buf, phase2str(current_phase));
 					fprintf(pHpnServerLogPtr,"%s %s: ***Peer Address Family: %d\n", ms_ctime_buf, phase2str(current_phase), peeraddr.sin_family);
 					fprintf(pHpnServerLogPtr,"%s %s: ***Peer Port: %d\n", ms_ctime_buf, phase2str(current_phase), peeraddr.sin_port);
@@ -607,7 +530,7 @@ void catch_sigint()
 	sigaction(SIGINT, &_sigact, NULL);
 }
 
-#define DEBUGLEVELMAX	9
+#define DEBUGLEVELMAX	4
 void sig_usr1_handler(int signum, siginfo_t *info, void *ptr)
 {
 	fprintf(pHpnServerLogPtr,"Caught SIGUSR1...\n");
@@ -658,7 +581,6 @@ int main(int argc, char *argv[])
 
 	sArgv.argc = argc;
 	sArgv.argv = argv;
-	memset(aDest_Ip2_Binary,0,sizeof(aDest_Ip2_Binary));
 
 	int vRetFromHandleHpnsshQfactorEnvThread, vRetFromHandleHpnsshQfactorEnvJoin;
 	pthread_t doHandleHpnsshQfactorEnvThread_id;
@@ -666,18 +588,7 @@ int main(int argc, char *argv[])
 	catch_sigint();
 	catch_sigusr1();
 
-//Handle messages from hpnssh client
 	vRetFromHandleHpnsshQfactorEnvThread = pthread_create(&doHandleHpnsshQfactorEnvThread_id, NULL, doHandleHpnsshQfactorEnv, &sArgv);
-	
-	memset(&sHpnRetMsg,0,sizeof(sHpnRetMsg));
-	strcpy(sHpnRetMsg.msg, "Hello there!!! This is a Hpn msg...\n");
-	sHpnRetMsg.msg_no = htonl(HPNSSH_MSG);
-
-	memset(&sHpnRetMsg2,0,sizeof(sHpnRetMsg));
-	strcpy(sHpnRetMsg2.msg, "Hello there!!! This is a Hpn msg...\n");
-	sHpnRetMsg2.msg_no = htonl(HPNSSH_MSG);
-
-	//Send messages tp HpnsshQfactor server for simulated testing
 
 	sprintf(aLogFile,"/tmp/hpnServerLog");
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
