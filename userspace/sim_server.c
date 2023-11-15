@@ -12,9 +12,6 @@
 #include <syslog.h>              /* for syslog() */
 #include "binncli.h"
 
-#define CTIME_BUF_LEN           27
-#define MS_CTIME_BUF_LEN        48
-
 #define WORKFLOW_NAMES_MAX      4
 #define	MAXLINE		4096	/* max text line length */
 
@@ -194,20 +191,8 @@ const char *phase2str(enum work_phases phase)
 	return NULL;
 }
 
-struct PeerMsg {
-	unsigned int msg_no;
-	unsigned int seq_no;
-	unsigned int value;
-	unsigned int hop_latency;
-	unsigned int queue_occupancy;
-	unsigned int switch_id;
-	char timestamp[MS_CTIME_BUF_LEN];
-};
+int str_cli(int sockfd, struct sPeerMsg *sThisMsg);
 
-int str_cli(int sockfd, struct PeerMsg *sThisMsg);
-
-#define HPNSSH_QFACTOR	1
-#define HPNSSH_QFACTOR_BINN 1
 #define HPNSSH_MSG      2
 
 //For HPNSSH_MSGs value will be whether to do a read or readall or shutdown
@@ -274,9 +259,7 @@ void * doProcessHpnClientReq(void * arg)
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 
 	int sockfd = (int)arg;
-
 	pthread_detach(pthread_self());
-	
 	current_phase = RUNNING;
 
 	for ( ; ; )
@@ -324,8 +307,16 @@ void * doProcessHpnClientReq(void * arg)
 	}
 
 }
+#if 1
+void fMake_Binn_Server_Object(struct sPeerMsg *pMsg, binn * obj)
+{
+	binn_object_set_blob(obj, "Msg", pMsg, sizeof(struct sPeerMsg));
 
-void fMake_Binn_Server_Object(struct PeerMsg *pMsg, binn * obj)
+	return;
+}
+#endif
+#if 0
+void fMake_Binn_Server_Object(struct sPeerMsg *pMsg, binn * obj)
 {
 	binn_object_set_uint32(obj, "msg_type", pMsg->msg_no);
 	binn_object_set_uint32(obj, "op", pMsg->value);
@@ -336,14 +327,17 @@ void fMake_Binn_Server_Object(struct PeerMsg *pMsg, binn * obj)
 
 	return;
 }
-
+#endif
 void fDoHpnRead(unsigned int val, int sockfd)
 {
 	time_t clk;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
-	struct PeerMsg sRetMsg;
-	static unsigned int count = 1111;
+	struct sPeerMsg sRetMsg;
+	static unsigned int count = 1;
+	static unsigned int count2 = 1;
+	static unsigned int count3 = 1;
+	//unsigned int seed = time(0);
 
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	if (vDebugLevel > 3)
@@ -354,9 +348,12 @@ void fDoHpnRead(unsigned int val, int sockfd)
 	sRetMsg.value = HPNSSH_READ_FS;
 
 	memcpy(sRetMsg.timestamp, ms_ctime_buf, MS_CTIME_BUF_LEN);
+//	sRetMsg.hop_latency = rand_r(&seed) % 10000;
 	sRetMsg.hop_latency = count++;
-	sRetMsg.queue_occupancy = count++;
-	sRetMsg.switch_id = count++;
+//	sRetMsg.queue_occupancy = rand_r(&seed) % 10000;;
+	sRetMsg.queue_occupancy = count2++;
+	//sRetMsg.switch_id = rand_r(&seed) % 10 + 1;
+	sRetMsg.switch_id = count3++;
 	
 	str_cli(sockfd, &sRetMsg);
 
@@ -556,13 +553,13 @@ void catch_sigusr1()
 	sigaction(SIGUSR1, &_sigact, NULL);
 }
 
-int str_cli(int sockfd, struct PeerMsg *sThisMsg) //str_cli09
+int str_cli(int sockfd, struct sPeerMsg *sThisMsg) //str_cli09
 {
 	int y;
         
 	binn *myobj = binn_object();
 	fMake_Binn_Server_Object(sThisMsg, myobj);
-#if 0
+#if 2
 	fprintf(pHpnServerLogPtr,"***!!!!!!!Size of binn object = %u...***\n", binn_size(myobj));
 	fflush(pHpnServerLogPtr);
 #endif

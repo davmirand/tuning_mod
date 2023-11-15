@@ -153,13 +153,26 @@ void fMake_Binn_Client_Object(struct ClientBinnMsg *pMsg, binn * obj)
 
 void fRead_Binn_Server_Object(struct ServerBinnMsg *pMsg, binn * obj)
 {
+	struct sPeerMsg *tMsg;
+	int value;
+
+	tMsg = binn_object_blob(obj, "Msg", &value);
+#if 1
+	pMsg->msg_type = tMsg->msg_no;
+	pMsg->op = tMsg->value;
+	pMsg->hop_latency = tMsg->hop_latency;
+	pMsg->queue_occupancy = tMsg->queue_occupancy;
+	pMsg->switch_id = tMsg->switch_id;
+	strcpy(pMsg->timestamp, tMsg->timestamp);
+#endif	
+#if 0
 	pMsg->msg_type = binn_object_uint32(obj, "msg_type");
 	pMsg->op = binn_object_uint32(obj, "op");
 	pMsg->hop_latency = binn_object_uint32(obj, "hop_latency");
 	pMsg->queue_occupancy = binn_object_uint32(obj, "queue_occupancy");
 	pMsg->switch_id = binn_object_uint32(obj, "switch_id");
 	pMsg->timestamp = binn_object_str(obj, "timestamp");
-	
+#endif	
 	return;
 }
 
@@ -382,7 +395,14 @@ void process_request(int sockfd, int readonce)
 				if (vShutdown)
 					return;
 			}
-		
+	
+#if 1
+		if (vDebugLevel > 0)
+		{
+			fprintf(pHpnClientLogPtr,"\n%s %s: ***num bytes read from Hpn Client = %lu***\n", ms_ctime_buf, phase2str(current_phase),n);
+			fflush(pHpnClientLogPtr);
+		}
+#endif
 		fRead_Binn_Server_Object(&sMsg, (binn *)&from_cli);
 
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
