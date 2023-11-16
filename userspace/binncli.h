@@ -33,7 +33,7 @@ struct ServerBinnMsg {
 	unsigned int hop_latency;
 	unsigned int queue_occupancy;
 	unsigned int switch_id;
-	char *timestamp;
+        char timestamp[MS_CTIME_BUF_LEN];
 };
 
 struct ClientBinnMsg {

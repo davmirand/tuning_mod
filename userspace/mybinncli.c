@@ -11,7 +11,7 @@
 #define CTIME_BUF_LEN           27
 #define MS_CTIME_BUF_LEN        48
 
-int vDebugLevel = 1;
+int vDebugLevel = 2;
 int vPort = 5525; //default listening port
 int vShutdown = 0;
 FILE * pHpnClientLogPtr = 0;
@@ -154,7 +154,7 @@ void fMake_Binn_Client_Object(struct ClientBinnMsg *pMsg, binn * obj)
 void fRead_Binn_Server_Object(struct ServerBinnMsg *pMsg, binn * obj)
 {
 	struct sPeerMsg *tMsg;
-	int value;
+	int value = BUFFER_SIZE_FROM_SERVER;
 
 	tMsg = binn_object_blob(obj, "Msg", &value);
 #if 1
@@ -163,7 +163,7 @@ void fRead_Binn_Server_Object(struct ServerBinnMsg *pMsg, binn * obj)
 	pMsg->hop_latency = tMsg->hop_latency;
 	pMsg->queue_occupancy = tMsg->queue_occupancy;
 	pMsg->switch_id = tMsg->switch_id;
-	strcpy(pMsg->timestamp, tMsg->timestamp);
+	memcpy(pMsg->timestamp, tMsg->timestamp, MS_CTIME_BUF_LEN);
 #endif	
 #if 0
 	pMsg->msg_type = binn_object_uint32(obj, "msg_type");
@@ -299,7 +299,7 @@ void fDoHpnReadFS(unsigned int val, int sockfd, struct ServerBinnMsg *from_serve
 	char ctime_buf[CTIME_BUF_LEN];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 
-	if (vDebugLevel > 1)
+	if (vDebugLevel > 2)
 	{
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		fprintf(pHpnClientLogPtr,"\n%s %s: ***INFO***: In fDoHpnReadFS(), value is %u***", ms_ctime_buf, phase2str(current_phase), val);
@@ -396,7 +396,7 @@ void process_request(int sockfd, int readonce)
 					return;
 			}
 	
-#if 1
+#if 0
 		if (vDebugLevel > 0)
 		{
 			fprintf(pHpnClientLogPtr,"\n%s %s: ***num bytes read from Hpn Client = %lu***\n", ms_ctime_buf, phase2str(current_phase),n);
@@ -535,7 +535,7 @@ cli_again:
 			break;
 
 		 case HPNSSH_READ:
-                        if (vDebugLevel > 1)
+                        if (vDebugLevel > 2)
                         {
                                 fprintf(pHpnClientLogPtr,"%s %s: ***Sending READ message to HPNSSN_QFACTOR server...***\n",
                                                                                         	ms_ctime_buf, phase2str(current_phase));
@@ -544,7 +544,7 @@ cli_again:
 
 			str_cli(sockfd, &cliHpnBinnMsg);        
 			
-			if (vDebugLevel > 1)
+			if (vDebugLevel > 2)
 			{
 				fprintf(pHpnClientLogPtr,"%s %s: ***Finished sending READ message to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
 				fflush(pHpnClientLogPtr);
@@ -563,7 +563,7 @@ cli_again:
                         break;
 	
 		case HPNSSH_READALL:		
-			if (vDebugLevel > 1)
+			if (vDebugLevel > 2)
 			{
 				fprintf(pHpnClientLogPtr,"%s %s: ***Sending READALL message to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
 				fflush(pHpnClientLogPtr);
@@ -571,7 +571,7 @@ cli_again:
 
 			str_cli(sockfd, &cliHpnBinnMsg);        
 				
-			if (vDebugLevel > 1)
+			if (vDebugLevel > 2)
 			{
 				fprintf(pHpnClientLogPtr,"%s %s: ***Finished sending READALL message to HPNSSN_QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
 				fflush(pHpnClientLogPtr);

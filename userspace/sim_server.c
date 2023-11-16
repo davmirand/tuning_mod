@@ -261,6 +261,7 @@ void * doProcessHpnClientReq(void * arg)
 	int sockfd = (int)arg;
 	pthread_detach(pthread_self());
 	current_phase = RUNNING;
+	srand(time(0));
 
 	for ( ; ; )
 	{
@@ -334,13 +335,10 @@ void fDoHpnRead(unsigned int val, int sockfd)
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	struct sPeerMsg sRetMsg;
-	static unsigned int count = 1;
-	static unsigned int count2 = 1;
-	static unsigned int count3 = 1;
 	//unsigned int seed = time(0);
 
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-	if (vDebugLevel > 3)
+	if (vDebugLevel > 2)
 		fprintf(pHpnServerLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
 
 	//BINN objects are cross platform - no need for big endian, little endian worries 
@@ -348,12 +346,12 @@ void fDoHpnRead(unsigned int val, int sockfd)
 	sRetMsg.value = HPNSSH_READ_FS;
 
 	memcpy(sRetMsg.timestamp, ms_ctime_buf, MS_CTIME_BUF_LEN);
-//	sRetMsg.hop_latency = rand_r(&seed) % 10000;
-	sRetMsg.hop_latency = count++;
-//	sRetMsg.queue_occupancy = rand_r(&seed) % 10000;;
-	sRetMsg.queue_occupancy = count2++;
-	//sRetMsg.switch_id = rand_r(&seed) % 10 + 1;
-	sRetMsg.switch_id = count3++;
+	//sRetMsg.hop_latency = rand_r(&seed) % 10000;
+	sRetMsg.hop_latency = rand() % 10000;
+	//sRetMsg.queue_occupancy = rand_r(&seed) % 10000;;
+	sRetMsg.queue_occupancy = rand() % 10000;;
+	//sRetMsg.switch_id = rand_r(&seed) % 10;
+	sRetMsg.switch_id = rand() % 10;
 	
 	str_cli(sockfd, &sRetMsg);
 
@@ -432,7 +430,7 @@ void * doHandleHpnsshQfactorEnv(void * vargp)
 		else
 			{
 				char *peeraddrpresn = inet_ntoa(peeraddr.sin_addr);
-				if (vDebugLevel > 1)
+				if (vDebugLevel > 3)
 				{
 					fprintf(pHpnServerLogPtr,"%s %s: ***Peer information:\n", ms_ctime_buf, phase2str(current_phase));
 					fprintf(pHpnServerLogPtr,"%s %s: ***Peer Address Family: %d\n", ms_ctime_buf, phase2str(current_phase), peeraddr.sin_family);
@@ -450,7 +448,7 @@ void * doHandleHpnsshQfactorEnv(void * vargp)
 			{
 				char *localaddrpresn = inet_ntoa(localaddr.sin_addr);
 
-				if (vDebugLevel > 1)
+				if (vDebugLevel > 3)
 				{
 					fprintf(pHpnServerLogPtr,"%s %s: ***Socket information:\n", ms_ctime_buf, phase2str(current_phase));
 					fprintf(pHpnServerLogPtr,"%s %s: ***Local Address Family: %d\n", ms_ctime_buf, phase2str(current_phase), localaddr.sin_family);
@@ -559,7 +557,7 @@ int str_cli(int sockfd, struct sPeerMsg *sThisMsg) //str_cli09
         
 	binn *myobj = binn_object();
 	fMake_Binn_Server_Object(sThisMsg, myobj);
-#if 2
+#if 0
 	fprintf(pHpnServerLogPtr,"***!!!!!!!Size of binn object = %u...***\n", binn_size(myobj));
 	fflush(pHpnServerLogPtr);
 #endif
