@@ -153,26 +153,18 @@ void fMake_Binn_Client_Object(struct ClientBinnMsg *pMsg, binn * obj)
 
 void fRead_Binn_Server_Object(struct ServerBinnMsg *pMsg, binn * obj)
 {
-	struct sPeerMsg *tMsg;
+	struct ServerBinnMsg *tMsg;
 	int value = BUFFER_SIZE_FROM_SERVER;
 
 	tMsg = binn_object_blob(obj, "Msg", &value);
-#if 1
-	pMsg->msg_type = tMsg->msg_no;
-	pMsg->op = tMsg->value;
+	
+	pMsg->msg_type = tMsg->msg_type;
+	pMsg->op = tMsg->op;
 	pMsg->hop_latency = tMsg->hop_latency;
 	pMsg->queue_occupancy = tMsg->queue_occupancy;
 	pMsg->switch_id = tMsg->switch_id;
 	memcpy(pMsg->timestamp, tMsg->timestamp, MS_CTIME_BUF_LEN);
-#endif	
-#if 0
-	pMsg->msg_type = binn_object_uint32(obj, "msg_type");
-	pMsg->op = binn_object_uint32(obj, "op");
-	pMsg->hop_latency = binn_object_uint32(obj, "hop_latency");
-	pMsg->queue_occupancy = binn_object_uint32(obj, "queue_occupancy");
-	pMsg->switch_id = binn_object_uint32(obj, "switch_id");
-	pMsg->timestamp = binn_object_str(obj, "timestamp");
-#endif	
+	
 	return;
 }
 

@@ -117,15 +117,17 @@ $(COMMON_H): %.h: %.c
 $(COMMON_OBJS): %.o: %.h
 	make -C $(COMMON_DIR)
 
+#-Wl,-R/usr/local/lib - meaning -Wl=pass extrax commands to linker, in this case, -R.. = store this path as default search path for the .so
+#basically, 3 different ways to get to libbinn below
 $(USER_TARGETS): %: %.c  $(OBJECT_LIBBPF) Makefile $(COMMON_MK) $(COMMON_OBJS) $(OTHER_OBJS) $(FACILIO_OBJS) $(KERN_USER_H) $(EXTRA_DEPS)
 	$(CC) -Wall -Wno-unused-label $(CFLAGS) $(LDFLAGS) -o $@ $(COMMON_OBJS) $(OTHER_OBJS) $(FACILIO_OBJS) -lm -lpthread \
-	 $< $(LIBS) /home/amlight/gitstuff/binn/libbinn.a
+	 $< $(LIBS) -L/usr/local/lib -lbinn -Wl,-R/usr/local/lib
 
 $(MY_TARGETS): %: %.c  Makefile $(COMMON_MK) $(MY_OBJS) $(EXTRA_DEPS) 
 	$(CC) -Wall -Wno-unused-label -g -o $@ $(MY_OBJS) $< 
 
 $(MYBINN_TARGETS): %: %.c  Makefile $(COMMON_MK) $(EXTRA_DEPS)
-	$(CC) -Wall -Wno-unused-label -g -o $@ $< /home/amlight/gitstuff/binn/libbinn.a
+	$(CC) -Wall -Wno-unused-label -g -o $@ $< -lbinn
 
 $(MYBINN_SERV_TARGETS): %: %.c  Makefile $(COMMON_MK) $(EXTRA_DEPS)
 	$(CC) -Wall -Wno-unused-label -g -o $@ $< /home/amlight/gitstuff/binn/libbinn.a -lpthread

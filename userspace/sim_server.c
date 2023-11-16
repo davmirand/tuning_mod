@@ -20,7 +20,7 @@ typedef struct {
 	char ** argv;
 } sArgv_t;
 
-int vDebugLevel = 4;
+int vDebugLevel = 2;
 int vPort = 5525; //default listening port
 int vShutdown = 0;
 FILE * pHpnServerLogPtr = 0;
@@ -191,7 +191,8 @@ const char *phase2str(enum work_phases phase)
 	return NULL;
 }
 
-int str_cli(int sockfd, struct sPeerMsg *sThisMsg);
+int str_cli(int sockfd, struct ServerBinnMsg *sThisMsg);
+void fDoHpnAssessment(unsigned int val, int sockfd);
 
 #define HPNSSH_MSG      2
 
@@ -308,49 +309,32 @@ void * doProcessHpnClientReq(void * arg)
 	}
 
 }
-#if 1
-void fMake_Binn_Server_Object(struct sPeerMsg *pMsg, binn * obj)
+
+void fMake_Binn_Server_Object(struct ServerBinnMsg *pMsg, binn * obj)
 {
-	binn_object_set_blob(obj, "Msg", pMsg, sizeof(struct sPeerMsg));
+	binn_object_set_blob(obj, "Msg", pMsg, sizeof(struct ServerBinnMsg));
 
 	return;
 }
-#endif
-#if 0
-void fMake_Binn_Server_Object(struct sPeerMsg *pMsg, binn * obj)
-{
-	binn_object_set_uint32(obj, "msg_type", pMsg->msg_no);
-	binn_object_set_uint32(obj, "op", pMsg->value);
-	binn_object_set_uint32(obj, "hop_latency", pMsg->hop_latency);
-	binn_object_set_uint32(obj, "queue_occupancy", pMsg->queue_occupancy);
-	binn_object_set_uint32(obj, "switch_id", pMsg->switch_id);
-	binn_object_set_str(obj, "timestamp", pMsg->timestamp);
 
-	return;
-}
-#endif
 void fDoHpnRead(unsigned int val, int sockfd)
 {
 	time_t clk;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
-	struct sPeerMsg sRetMsg;
-	//unsigned int seed = time(0);
+	struct ServerBinnMsg sRetMsg;
 
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	if (vDebugLevel > 2)
 		fprintf(pHpnServerLogPtr,"%s %s: ***INFO***: In fDoHpnRead(), value is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
 
 	//BINN objects are cross platform - no need for big endian, little endian worries 
-	sRetMsg.msg_no = HPNSSH_MSG;
-	sRetMsg.value = HPNSSH_READ_FS;
+	sRetMsg.msg_type = HPNSSH_MSG;
+	sRetMsg.op = HPNSSH_READ_FS;
 
 	memcpy(sRetMsg.timestamp, ms_ctime_buf, MS_CTIME_BUF_LEN);
-	//sRetMsg.hop_latency = rand_r(&seed) % 10000;
 	sRetMsg.hop_latency = rand() % 10000;
-	//sRetMsg.queue_occupancy = rand_r(&seed) % 10000;;
 	sRetMsg.queue_occupancy = rand() % 10000;;
-	//sRetMsg.switch_id = rand_r(&seed) % 10;
 	sRetMsg.switch_id = rand() % 10;
 	
 	str_cli(sockfd, &sRetMsg);
@@ -551,7 +535,7 @@ void catch_sigusr1()
 	sigaction(SIGUSR1, &_sigact, NULL);
 }
 
-int str_cli(int sockfd, struct sPeerMsg *sThisMsg) //str_cli09
+int str_cli(int sockfd, struct ServerBinnMsg *sThisMsg) //str_cli09
 {
 	int y;
         
@@ -580,11 +564,6 @@ int main(int argc, char *argv[])
 	int vRetFromHandleHpnsshQfactorEnvThread, vRetFromHandleHpnsshQfactorEnvJoin;
 	pthread_t doHandleHpnsshQfactorEnvThread_id;
 
-	catch_sigint();
-	catch_sigusr1();
-
-	vRetFromHandleHpnsshQfactorEnvThread = pthread_create(&doHandleHpnsshQfactorEnvThread_id, NULL, doHandleHpnsshQfactorEnv, &sArgv);
-
 	sprintf(aLogFile,"/tmp/hpnServerLog");
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
@@ -594,6 +573,11 @@ int main(int argc, char *argv[])
 		printf("%s %s: ***Couldn't open HPN Server log for testing, exiting...\n", ms_ctime_buf, phase2str(current_phase));
 		exit(1);
 	}
+
+	catch_sigint();
+	catch_sigusr1();
+
+	vRetFromHandleHpnsshQfactorEnvThread = pthread_create(&doHandleHpnsshQfactorEnvThread_id, NULL, doHandleHpnsshQfactorEnv, &sArgv);
 
 	fprintf(pHpnServerLogPtr,"%s %s: ***Starting simulated HPN-QFACTOR server...***\n", ms_ctime_buf, phase2str(current_phase));
 	if (argc == 3 && ((strcmp(argv[1],"-p") == 0)))

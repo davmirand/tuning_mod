@@ -18,15 +18,6 @@
 #define HPNSSH_READ_FS		133
 #define HPNSSH_READALL_FS  	144  //from server
 
-struct sPeerMsg {
-        unsigned int msg_no;
-        unsigned int value;
-        unsigned int hop_latency;
-        unsigned int queue_occupancy;
-        unsigned int switch_id;
-        char timestamp[MS_CTIME_BUF_LEN];
-};
-
 struct ServerBinnMsg {
 	unsigned int msg_type;
 	unsigned int op;
