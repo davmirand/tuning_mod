@@ -273,7 +273,6 @@ static int makeTimer( char *name, timer_t *timerID, int expires_usecs, struct it
 	time_t clk;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
-	int timerRc = 0;
 
 	struct sigevent         te;
 	struct sigaction        sa;
@@ -3909,9 +3908,10 @@ finish_up:
 return;
 }
 
+#define SECS_TO_WAIT_RTT_MESSAGE 30
 void * fDoRunFindHighestRtt(void * vargp)
 {
-	time_t clk;
+	time_t clk, now_time = 0, last_time = 0;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	char buffer[128];
@@ -4007,10 +4007,27 @@ finish_up:
 			if (vDebugLevel > 0)
 			{
 				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-				fprintf(tunLogPtr,"%s %s: !!!***WARNING: RTT from bpftrace and ping differs by a factor of %d and at least 1 is above the threshold of %.2fms***\n", 
-						ms_ctime_buf, phase2str(current_phase), rtt_factor, rtt_threshold);
-				fprintf(tunLogPtr,"%s!!!**RTT from bpftrace is %.3fms **** !!!**RTT from ping is %.3fms\n", 
-						pLearningSpaces, highest_rtt_from_bpftrace, highest_rtt_from_ping);
+				if (now_time == 0) //first time thru
+				{
+					now_time = clk;
+					last_time = now_time;
+					fprintf(tunLogPtr,"%s %s: !!!***WARNING: RTT from bpftrace and ping differs by a factor of %d and at least 1 is above the threshold of %.2fms***\n", 
+											ms_ctime_buf, phase2str(current_phase), rtt_factor, rtt_threshold);
+					fprintf(tunLogPtr,"%s!!!**RTT from bpftrace is %.3fms **** !!!**RTT from ping is %.3fms\n", 
+											pLearningSpaces, highest_rtt_from_bpftrace, highest_rtt_from_ping);
+				}
+				else
+					{
+						now_time = clk;
+						if ((now_time - last_time) > SECS_TO_WAIT_RTT_MESSAGE)
+						{
+							fprintf(tunLogPtr,"%s %s: !!!***WARNING: RTT from bpftrace and ping differs by a factor of %d and at least 1 is above the threshold of %.2fms***\n", 
+											ms_ctime_buf, phase2str(current_phase), rtt_factor, rtt_threshold);
+							fprintf(tunLogPtr,"%s!!!**RTT from bpftrace is %.3fms **** !!!**RTT from ping is %.3fms\n", 
+											pLearningSpaces, highest_rtt_from_bpftrace, highest_rtt_from_ping);
+							last_time = now_time;
+						}
+					}
 			}
 			//leave line below in for now			
 			fDoManageRtt(highest_rtt_from_bpftrace, &applied, &suggested, &nothing_done, &tune, aApplyDefTunBest, 1); //1 is from bpftrace
