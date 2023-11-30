@@ -587,9 +587,10 @@ void qOCC_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 	return;
 }
 
+#define SECS_TO_WAIT_FLOW_MESSAGE 10
 void * fDoRunBpfCollectionPerfEventArray2(void * vargp)
 {
-	time_t clk;
+	time_t clk, now_time = 0, last_time = 0;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	int timerRc = 0;
@@ -692,15 +693,6 @@ perf_event_loop: {
 		{
 			if (!perf_buffer_poll_start)
 			{
-#if 0
-				Pthread_mutex_lock(&hpn_ret_mutex);
-				//sHpnRetMsg.value = value;
-				hpnRetMsgSeqNo++;
-				sHpnRetMsg.seq_no = htonl(hpnRetMsgSeqNo);
-				hpnretcdone = 1;
-				Pthread_cond_signal(&hpn_ret_cond);
-				Pthread_mutex_unlock(&hpn_ret_mutex);
-#endif
 					if ((qinfo_min_value != QINFO_START_MIN_VALUE) && (qinfo_max_value != 0))
 					{
 						if (qinfo_clk_min <= qinfo_clk_max)
@@ -725,38 +717,34 @@ perf_event_loop: {
 
 							Pthread_cond_signal(&hpn_ret_cond);
 							Pthread_mutex_unlock(&hpn_ret_mutex);
-#if 0
-							memcpy(metaData[vMetaDataCount].timestamp,qinfo_ms_ctime_buf_min,MS_CTIME_BUF_LEN);
-							metaData[vMetaDataCount].hop_latency = qinfo_hop_latency_min;
-							metaData[vMetaDataCount].queue_occupancy = qinfo_min_value;
-							metaData[vMetaDataCount].switch_id = qinfo_hop_switch_id_min;
-						
-							vMetaDataCount++;
-							if (vMetaDataCount == NUMMETAVALUES)
-								vMetaDataCount = 0;
-
-
-							memcpy(metaData[vMetaDataCount].timestamp,qinfo_ms_ctime_buf_max,MS_CTIME_BUF_LEN);
-							metaData[vMetaDataCount].hop_latency = qinfo_hop_latency_max;
-							metaData[vMetaDataCount].queue_occupancy = qinfo_max_value;
-							metaData[vMetaDataCount].switch_id = qinfo_hop_switch_id_max;
 							
-							vMetaDataCount++;
-							if (vMetaDataCount == NUMMETAVALUES)
-								vMetaDataCount = 0;
-#endif
 							if (vDebugLevel == 4)
-							{ 	//print in this order
-								fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_min, phase2str(current_phase));
-								fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_switch_id_min);
-								fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_min_value);
-								fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_latency_min);
-		
-								fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_max, phase2str(current_phase));
-								fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_switch_id_max);
-								fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_max_value);
-								fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_latency_max);
+							{
+								gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+								now_time = clk;
+								if ((now_time - last_time) > SECS_TO_WAIT_FLOW_MESSAGE)
+								{
+									fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_max, phase2str(current_phase));
+									fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_switch_id_max);
+									fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_max_value);
+									fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_latency_max);
+									last_time = now_time;
+								}
 							}
+							else
+								if (vDebugLevel == 5)
+								{ 	//print in this order
+									gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+									fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_min, phase2str(current_phase));
+									fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_switch_id_min);
+									fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_min_value);
+									fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_latency_min);
+		
+									fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_max, phase2str(current_phase));
+									fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_switch_id_max);
+									fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_max_value);
+									fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_latency_max);
+								}
 						}
 						else
 							{
@@ -778,37 +766,34 @@ perf_event_loop: {
 								hpnretcdone = 1;
 								Pthread_cond_signal(&hpn_ret_cond);
 								Pthread_mutex_unlock(&hpn_ret_mutex);
-#if 0
-								memcpy(metaData[vMetaDataCount].timestamp,qinfo_ms_ctime_buf_max,MS_CTIME_BUF_LEN);
-								metaData[vMetaDataCount].hop_latency = qinfo_hop_latency_max;
-								metaData[vMetaDataCount].queue_occupancy = qinfo_max_value;
-								metaData[vMetaDataCount].switch_id = qinfo_hop_switch_id_max;
-							
-								vMetaDataCount++;
-								if (vMetaDataCount == NUMMETAVALUES)
-									vMetaDataCount = 0;
-
-								memcpy(metaData[vMetaDataCount].timestamp,qinfo_ms_ctime_buf_min,MS_CTIME_BUF_LEN);
-								metaData[vMetaDataCount].hop_latency = qinfo_hop_latency_min;
-								metaData[vMetaDataCount].queue_occupancy = qinfo_min_value;
-								metaData[vMetaDataCount].switch_id = qinfo_hop_switch_id_min;
-						
-								vMetaDataCount++;
-								if (vMetaDataCount == NUMMETAVALUES)
-									vMetaDataCount = 0;
-#endif							
+								
 								if (vDebugLevel == 4)
-								{ 	//print in this order
-									fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_max, phase2str(current_phase));
-									fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_switch_id_max);
-									fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_max_value);
-									fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_latency_max);
-
-									fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_min, phase2str(current_phase));
-									fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_switch_id_min);
-									fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_min_value);
-									fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_latency_min);
+								{
+									gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+									now_time = clk;
+									if ((now_time - last_time) > SECS_TO_WAIT_FLOW_MESSAGE)
+									{
+										fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_min, phase2str(current_phase));
+										fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_switch_id_min);
+										fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_min_value);
+										fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_latency_min);
+										last_time = now_time;
+									}
 								}
+								else
+									if (vDebugLevel == 5)
+									{ 	//print in this order
+										gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+										fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_max, phase2str(current_phase));
+										fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_switch_id_max);
+										fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_max_value);
+										fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_latency_max);
+
+										fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_min, phase2str(current_phase));
+										fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_switch_id_min);
+										fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_min_value);
+										fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_latency_min);
+									}
 							}
 					}
 					else
@@ -824,23 +809,28 @@ perf_event_loop: {
 								hpnretcdone = 1;
 								Pthread_cond_signal(&hpn_ret_cond);
 								Pthread_mutex_unlock(&hpn_ret_mutex);
-#if 0
-								memcpy(metaData[vMetaDataCount].timestamp,qinfo_ms_ctime_buf_min,MS_CTIME_BUF_LEN);
-								metaData[vMetaDataCount].hop_latency = qinfo_hop_latency_min;
-								metaData[vMetaDataCount].queue_occupancy = qinfo_min_value;
-								metaData[vMetaDataCount].switch_id = qinfo_hop_switch_id_min;
-						
-								vMetaDataCount++;
-								if (vMetaDataCount == NUMMETAVALUES)
-									vMetaDataCount = 0;
-#endif
+								
 								if (vDebugLevel == 4)
 								{
-									fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_min, phase2str(current_phase));
-									fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_switch_id_min);
-									fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_min_value);
-									fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_latency_min);
+									gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+									now_time = clk;
+									if ((now_time - last_time) > SECS_TO_WAIT_FLOW_MESSAGE)
+									{
+										fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_min, phase2str(current_phase));
+										fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_switch_id_min);
+										fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_min_value);
+										fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_latency_min);
+										last_time = now_time;
+									}
 								}
+								else
+									if (vDebugLevel == 5)
+									{
+										fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_min, phase2str(current_phase));
+										fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_switch_id_min);
+										fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_min_value);
+										fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_min, phase2str(current_phase), qinfo_hop_latency_min);
+									}
 							}
 							else
 								{ //must be this
@@ -853,23 +843,28 @@ perf_event_loop: {
 									hpnretcdone = 1;
 									Pthread_cond_signal(&hpn_ret_cond);
 									Pthread_mutex_unlock(&hpn_ret_mutex);
-#if 0
-									memcpy(metaData[vMetaDataCount].timestamp,qinfo_ms_ctime_buf_max,MS_CTIME_BUF_LEN);
-									metaData[vMetaDataCount].hop_latency = qinfo_hop_latency_max;
-									metaData[vMetaDataCount].queue_occupancy = qinfo_max_value;
-									metaData[vMetaDataCount].switch_id = qinfo_hop_switch_id_max;
-							
-									vMetaDataCount++;
-									if (vMetaDataCount == NUMMETAVALUES)
-										vMetaDataCount = 0;
-#endif
+									
 									if (vDebugLevel == 4)
 									{
-										fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_max, phase2str(current_phase));
-										fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_switch_id_max);
-										fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_max_value);
-										fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_latency_max);
+										gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+										now_time = clk;
+										if ((now_time - last_time) > SECS_TO_WAIT_FLOW_MESSAGE)
+										{
+											fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_max, phase2str(current_phase));
+											fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_switch_id_max);
+											fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_max_value);
+											fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_latency_max);
+											last_time = now_time;
+										}
 									}
+									else
+										if (vDebugLevel == 5)
+										{
+											fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", qinfo_ms_ctime_buf_max, phase2str(current_phase));
+											fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_switch_id_max);
+											fprintf(tunLogPtr, "%s %s: FLOW    : queue_occupancy = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_max_value);
+											fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",qinfo_ms_ctime_buf_max, phase2str(current_phase), qinfo_hop_latency_max);
+										}
 								}
 						}
 			}
@@ -909,7 +904,7 @@ void fStartEvaluationTimer(__u32 hop_key_hop_index)
 	if (!vRetTimer)
 	{
 		vCanStartEvaluationTimer = 0;
-		if (vDebugLevel > 2)
+		if (vDebugLevel > 4)
 		{
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			fprintf(tunLogPtr,"%s %s: ***INFO !!! INFO !!! Timer set to %u microseconds for Evaluation***\n",ms_ctime_buf, phase2str(current_phase), gInterval*10); 
@@ -962,14 +957,12 @@ void EvaluateQOccUserInfo(__u32 hop_key_hop_index)
 		{
 			vq_TimerIsSet = 1;
 			curr_hop_key_hop_index = hop_key_hop_index;
-			if (vDebugLevel > 2)
-			{
-				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-				fprintf(tunLogPtr,"%s %s: ***WARNING !!! WARNING !!! Timer set to %d microseconds for Queue Occupancy User Info***\n",ms_ctime_buf, phase2str(current_phase), gInterval); 
-			}
 		}
 		else
-			fprintf(tunLogPtr,"%s %s: ***WARNING !!! WARNING !!! Could not set Qinfo User InfoTimer, vRetTimer = %d,  errno = to %d***\n",ms_ctime_buf, phase2str(current_phase), vRetTimer, errno); 
+			{
+				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+				fprintf(tunLogPtr,"%s %s: ***WARNING !!! WARNING !!! Could not set Qinfo User InfoTimer, vRetTimer = %d,  errno = to %d***\n",ms_ctime_buf, phase2str(current_phase), vRetTimer, errno); 
+			}
 	}
 
 	return;
@@ -1029,7 +1022,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 
 	hop_key.hop_index = 0;
 
-	if (vDebugLevel > 4)
+	if (vDebugLevel > 5)
 	{
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		fprintf(tunLogPtr, "\n%s %s: ***********************FLOW************************", ms_ctime_buf, phase2str(current_phase));
@@ -1066,7 +1059,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 
 		perf_buffer_poll_start = 0;
 
-		if (vDebugLevel > 4)
+		if (vDebugLevel > 5)
 		{
 #if 1
 			fprintf(tunLogPtr, "\n%s %s: FLOW    : hop_switch_id = %u\n",ms_ctime_buf, phase2str(current_phase), ntohl(hop_metadata_ptr->switch_id));
@@ -1147,7 +1140,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 			{
 				if (vq_TimerIsSet)
 				{
-					if (vDebugLevel > 1)
+					if (vDebugLevel > 4)
 						fprintf(tunLogPtr, "%s %s: ***INFO:  queue_occupancy is %u which is lower than threshold. Turning off Timer***\n", ms_ctime_buf, phase2str(current_phase), Qinfo);
 
 					timer_settime(qOCC_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
@@ -1947,7 +1940,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 					//do something
 					if (my_tune_max <= kmaximum) //already high
 					{
-						if (vDebugLevel > 4)
+						if (vDebugLevel > 5)
 						{
 							fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ms_ctime_buf, phase2str(current_phase), buffer);
 							fprintf(tunLogPtr, "%s %s: *** Current Tuning of net.ipv4.tcp_wmem appears sufficient***\n", ms_ctime_buf, phase2str(current_phase));
@@ -2027,7 +2020,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 						if (my_tune_max <= kmaximum) //already high
 						{
 							*nothing_done = 1;
-							if (vDebugLevel > 4)
+							if (vDebugLevel > 5)
 							{
 								fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ms_ctime_buf, phase2str(current_phase), buffer);
 								fprintf(tunLogPtr, "%s %s: *** Current Tuning of net.ipv4.tcp_wmem appears sufficient***\n", ms_ctime_buf, phase2str(current_phase));
@@ -2894,7 +2887,7 @@ start:
 		if (!check_bitrate_interval)
 		{
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-			if (vDebugLevel > 4)
+			if (vDebugLevel > 5)
 			{
 				fprintf(tunLogPtr,"%s %s: average_tx_Gbits_per_sec = %.2f Gb/s, average_rx_Gbits_per_sec = %.2f Gb/s\n",
 								ms_ctime_buf, phase2str(current_phase), average_tx_Gbits_per_sec, average_rx_Gbits_per_sec);
@@ -3057,7 +3050,7 @@ start:
 				else
 					if (nothing_done) //no change to tuning
 					{
-						if (vDebugLevel > 4)
+						if (vDebugLevel > 5)
 						{
 							fprintf(tunLogPtr, "%s %s: ***What is nothing_done??? and nothing_done is %d ...***\n", ms_ctime_buf, phase2str(current_phase), nothing_done);
 						}
@@ -3224,7 +3217,7 @@ void fDoManageRtt(double highest_rtt_ms, int * applied, int * suggested, int * n
 					//do something
 					if (my_tune_max <= kmaximum) //already high
 					{
-						if (vDebugLevel > 4)
+						if (vDebugLevel > 5)
 						{
 							fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ms_ctime_buf, phase2str(current_phase), buffer);
 							fprintf(tunLogPtr, "%s %s: *** Current Tuning of net.ipv4.tcp_wmem appears sufficient***\n", ms_ctime_buf, phase2str(current_phase));
@@ -3656,7 +3649,7 @@ finish_up:
 	else
 		{
 			int_total_retrans = int_packets_sent = vRateCount = vSomeTran = fRateArrayDone = 0;
-			if ((vDebugLevel > 4) && previous_average_tx_Gbits_per_sec && (countLog >= COUNT_TO_LOG))
+			if ((vDebugLevel > 5) && previous_average_tx_Gbits_per_sec && (countLog >= COUNT_TO_LOG))
 				fprintf(tunLogPtr,"%s %s: ***RETRAN*** No relevant packets found, packets_sent = %lu, total_retrans = %lu\n", 
 									ms_ctime_buf, phase2str(current_phase), packets_sent, total_retrans);
 		}
