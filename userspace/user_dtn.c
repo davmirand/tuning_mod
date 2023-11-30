@@ -517,7 +517,6 @@ void record_activity(char * pActivity);
 #define SIGALRM_MSG "SIGALRM received.\n"
 int vq_h_TimerIsSet = 0;
 int vq_TimerIsSet = 0;
-int vq_WarningCount = 0;
 
 void qEvaluation_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 {
@@ -527,9 +526,12 @@ void qEvaluation_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 	
 	vCanStartEvaluationTimer = 1;
 	
-	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-	fprintf(tunLogPtr, "%s %s: ***Evaluation Timer done. Resetting***\n",ms_ctime_buf, phase2str(current_phase)); 
-	fflush(tunLogPtr);
+	if (vDebugLevel > 5)
+	{
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr, "%s %s: ***Evaluation Timer done. Resetting***\n",ms_ctime_buf, phase2str(current_phase)); 
+		fflush(tunLogPtr);
+	}
 
 	return;
 }
@@ -558,14 +560,15 @@ void qOCC_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	char activity[MAX_SIZE_TUNING_STRING];
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-	fprintf(tunLogPtr, "%s %s: ***Timer Alarm went off*** still having problems with Queue Occupancy User Info. will check if we shoud trigger source***\n",ms_ctime_buf, phase2str(current_phase)); 
+	if (vDebugLevel > 5)
+		fprintf(tunLogPtr, "%s %s: ***Timer Alarm went off*** still having problems with Queue Occupancy User Info. will check if we shoud trigger source***\n",ms_ctime_buf, phase2str(current_phase)); 
+	
 	//***Do something here ***//
 	vq_TimerIsSet = 0;
 	sprintf(activity,"%s %s: ***hop_key.hop_index %X, Doing Something",ctime_buf, phase2str(current_phase), curr_hop_key_hop_index);
 	record_activity(activity); //make sure activity big enough to concatenate additional data -- see record_activity()
 	fflush(tunLogPtr);
 
-#if 1
 	if (vCanStartEvaluationTimer)
 	{
 		Pthread_mutex_lock(&dtn_mutex);
@@ -580,8 +583,6 @@ void qOCC_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 
 		// Start and wait for (evaluation timer * 10) before trying to trigger source again
 		fStartEvaluationTimer(curr_hop_key_hop_index);
-#endif	
-		vq_WarningCount = 0;
 	}
 	return;
 }
@@ -1001,6 +1002,7 @@ void record_activity(char *pActivity)
 	return;
 }
 
+#define SECS_TO_WAIT_QINFOWARN_MESSAGE 20
 void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 {
 	void *data_end = data + size;
@@ -1008,6 +1010,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 	struct hop_key hop_key;
 	long long flow_hop_latency_threshold = 0;
 	time_t clk;
+	static time_t now_time = 0, last_time = 0;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 
@@ -1110,26 +1113,46 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		if (Qinfo > vQUEUE_OCCUPANCY_DELTA)  
 		{
 			vQinfoUserValue = Qinfo;
-			if (vDebugLevel > 0 && vq_WarningCount < 1)  //print up to 3 times for this timer event, otherwise could flood the log
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+			if (vDebugLevel > 0)  
 			{
-				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-				fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! queue_occupancy = %u which is high!!! WARNING !!! WARNING***u\n", ms_ctime_buf, phase2str(current_phase), Qinfo);
+				if (vDebugLevel > 5)
+				{
+					fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! queue_occupancy = %u which is high!!! WARNING !!! WARNING***\n", ms_ctime_buf, phase2str(current_phase), Qinfo);
+				}
+				else
+					{
+						if (now_time == 0) //first time thru
+						{
+							now_time = clk;
+							last_time = now_time;
+							fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! queue_occupancy = %u which is high!!! WARNING !!! WARNING***\n", 
+																	ms_ctime_buf, phase2str(current_phase), Qinfo);
+						}
+						else
+							{
+								now_time = clk;
+								if ((now_time - last_time) > SECS_TO_WAIT_QINFOWARN_MESSAGE)
+								{
+									fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! queue_occupancy = %u which is high!!! WARNING !!! WARNING***\n", 
+																			ms_ctime_buf, phase2str(current_phase), Qinfo);
+									last_time = now_time;
+								}
+							}
+					}
 			}
-
-			vq_WarningCount = 1;
 			EvaluateQOccUserInfo(hop_key.hop_index);
 		}
 		else
 			{
 				if (vq_TimerIsSet)
 				{
-					if (vDebugLevel > 0)
+					if (vDebugLevel > 1)
 						fprintf(tunLogPtr, "%s %s: ***INFO:  queue_occupancy is %u which is lower than threshold. Turning off Timer***\n", ms_ctime_buf, phase2str(current_phase), Qinfo);
 
 					timer_settime(qOCC_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
 					vq_TimerIsSet = 0;
 				}
-				vq_WarningCount = 0;
 			}
 #endif
 #endif
@@ -1880,10 +1903,6 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	if (average_tx_Gbits_per_sec < vGoodBitrateValue)
 	{
-#if 0
-		fprintf(tunLogPtr,"%s %s: average_tx_Gbits_per_sec = %.2f Gb/s, vGoodBitrateValue Gb/s = %.2f \n",ctime_buf, phase2str(current_phase), average_tx_Gbits_per_sec, vGoodBitrateValue);
-		fflush(tunLogPtr);
-#endif
 		if (current_phase == TUNING)
 		{
 			fprintf(tunLogPtr, "%s %s: Trying to tune net.ipv4.tcp_wmem, but already TUNING something else.  Will retry later if still need TUNING***\n",ms_ctime_buf, phase2str(current_phase));
@@ -2118,9 +2137,8 @@ double fGetAppBandWidth()
 	}
 
 	strcpy(previous_value," ");
-	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
-	sprintf(try,"lsof | grep %s:",aDest_Ip2);
+	sprintf(try,"lsof -n | grep %s:",aDest_Ip2);
 
 	pipe = popen(try,"r");
 	if (!pipe)
@@ -2594,10 +2612,10 @@ void fDoQinfoAssessment(unsigned int val)
 return;
 }
 #endif
-
+#define SECS_TO_WAIT_TX_RX_MESSAGE 20
 void * fDoRunGetThresholds(void * vargp)
 {
-	time_t clk;
+	time_t clk, now_time = 0, last_time = 0;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	
@@ -2732,7 +2750,6 @@ start:
 			fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on link has stopped for now *** Turning off Queue Occupancy timer:\n",ms_ctime_buf, phase2str(current_phase));
 			timer_settime(qOCC_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
 			vq_TimerIsSet = 0;
-			vq_WarningCount = 0;
 		}
 
 		if (vq_h_TimerIsSet) //Turn off this timer since transmission has stopped
@@ -2815,7 +2832,7 @@ start:
 				if (vDebugLevel > 0)
 				{
 					gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-					fprintf(tunLogPtr,"%s %s: ***ERROR BITRATE*** average_tx_Gbits_per_sec = %.2f Gb/s is above maximum Bandwidth of %.2f... skiping this value\n",ms_ctime_buf, phase2str(current_phase), average_tx_Gbits_per_sec, netDeviceSpeed/1000.0);
+					fprintf(tunLogPtr,"%s %s: ***ERROR BITRATE*** average_tx_Gbits_per_sec = %.2f Gb/s is above maximum Bandwidth of %.2f... skipping this value\n",ms_ctime_buf, phase2str(current_phase), average_tx_Gbits_per_sec, netDeviceSpeed/1000.0);
 				}
 				average_tx_Gbits_per_sec = 0.0;
 				average_tx_kbits_per_sec = 0.0;
@@ -2876,8 +2893,32 @@ start:
 	{
 		if (!check_bitrate_interval)
 		{
-			fprintf(tunLogPtr,"%s %s: average_tx_Gbits_per_sec = %.2f Gb/s, average_rx_Gbits_per_sec = %.2f Gb/s\n",
-							ms_ctime_buf, phase2str(current_phase), average_tx_Gbits_per_sec, average_rx_Gbits_per_sec);
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+			if (vDebugLevel > 4)
+			{
+				fprintf(tunLogPtr,"%s %s: average_tx_Gbits_per_sec = %.2f Gb/s, average_rx_Gbits_per_sec = %.2f Gb/s\n",
+								ms_ctime_buf, phase2str(current_phase), average_tx_Gbits_per_sec, average_rx_Gbits_per_sec);
+			}
+			else
+			{
+				if (now_time == 0) //first time thru
+				{
+					now_time = clk;
+					last_time = now_time;
+					fprintf(tunLogPtr,"%s %s: average_tx_Gbits_per_sec = %.2f Gb/s, average_rx_Gbits_per_sec = %.2f Gb/s\n",
+								ms_ctime_buf, phase2str(current_phase), average_tx_Gbits_per_sec, average_rx_Gbits_per_sec);
+				}
+				else
+					{
+						now_time = clk;
+						if ((now_time - last_time) > SECS_TO_WAIT_TX_RX_MESSAGE)
+						{
+							fprintf(tunLogPtr,"%s %s: average_tx_Gbits_per_sec = %.2f Gb/s, average_rx_Gbits_per_sec = %.2f Gb/s\n",
+										ms_ctime_buf, phase2str(current_phase), average_tx_Gbits_per_sec, average_rx_Gbits_per_sec);
+							last_time = now_time;
+						}
+					}
+			}
 		}
 	}
 
@@ -3654,7 +3695,7 @@ double fFindRttUsingPing()
 
 	if (aDest_Ip2[0] == 0)
 	{
-		if (vDebugLevel > 1)
+		if (vDebugLevel > 2)
 		{
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			fprintf(tunLogPtr,"%s %s: ***Waiting on Peer Ip address to Ping***\n", ms_ctime_buf, phase2str(current_phase));
@@ -3687,7 +3728,7 @@ double fFindRttUsingPing()
 		//should look like example: "rtt min/avg/max/mdev = 0.314/0.341/0.366/0.021 ms"
                 if (foundstr)
                 {
-			if (vDebugLevel > 1)
+			if (vDebugLevel > 2)
 			{
 				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 				fprintf(tunLogPtr,"%s %s: ***using \"%s\" returns *%s", ms_ctime_buf, phase2str(current_phase),try, buffer);
@@ -3722,7 +3763,7 @@ finish_up:
 	pclose(pipe);
 	if (found)
 	{
-		if (vDebugLevel > 1)
+		if (vDebugLevel > 2)
 		{
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			fprintf(tunLogPtr,"%s %s: ***Average RTT using ping is %.3fms\n", ms_ctime_buf, phase2str(current_phase), avg_rtt_ping);
@@ -3909,9 +3950,10 @@ return;
 }
 
 #define SECS_TO_WAIT_RTT_MESSAGE 30
+#define SECS_TO_WAIT_MONITORCPU_MESSAGE 10
 void * fDoRunFindHighestRtt(void * vargp)
 {
-	time_t clk, now_time = 0, last_time = 0;
+	time_t clk, now_time = 0, last_time = 0, cpumon_last_time = 0;;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	char buffer[128];
@@ -3943,10 +3985,19 @@ rttstart:
 
 		if (vDebugLevel > 2) 
 		{
-			sleep(1);
-			fDoCpuMonitoring();	
+			//sleep(1);
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+			now_time = clk;
+			if ((now_time - cpumon_last_time) > SECS_TO_WAIT_MONITORCPU_MESSAGE)
+			{
+				fDoCpuMonitoring();	
+				cpumon_last_time = now_time;
+			}
 		}
 	}
+
+	if (!vIamASrcDtn)
+		goto skiprtt;
 
 	rtt = 0;
 	highest_rtt = 0;
@@ -3993,7 +4044,7 @@ finish_up:
 	if (highest_rtt)
 	{
 		highest_rtt_from_bpftrace = highest_rtt/(double)1000;
-		if (vDebugLevel > 1 && previous_average_tx_Gbits_per_sec)
+		if (vDebugLevel > 2 && previous_average_tx_Gbits_per_sec)
 		{
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			fprintf(tunLogPtr,"\n%s %s: ***Highest RTT using bpftrace is %.3fms\n", ms_ctime_buf, phase2str(current_phase), highest_rtt_from_bpftrace);
@@ -4044,6 +4095,7 @@ finish_up:
 		fprintf(tunLogPtr, "%s %s: ***Sleeping for 250000 microseconds before resuming RTT checking...\n", ms_ctime_buf, phase2str(current_phase)); //2 x 250000
 	}
 
+skiprtt:
 	fflush(tunLogPtr);
 	my_usleep(250000); //sleeps in microseconds	
 	if (vDebugLevel > 0)
