@@ -1877,11 +1877,13 @@ return;
 
 #define BITRATE_INTERVAL 1
 #define KTUNING_DELTA	200000
+#define SECS_TO_WAIT_BITRATE_MESSAGE 30
 extern int my_tune_max;
 void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done, int * tune, char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING]);
 void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done, int * tune, char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING])
 {
 	time_t clk;
+	static time_t now_time = 0, last_time = 0;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	char buffer[256];
@@ -2038,14 +2040,19 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 							}
 					}
 			}
-		
+
 		if ((vDebugLevel > 1) && (average_tx_Gbits_per_sec < vGoodBitrateValueThatDoesntNeedMessage ))
 		{
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+			now_time = clk;
+			if ((now_time - last_time) > SECS_TO_WAIT_BITRATE_MESSAGE)
 			fprintf(tunLogPtr, "%s %s: !!!*****BITRATE IS LOW********!!!\n", ms_ctime_buf, phase2str(current_phase));
 			if (aLocal_Ip[0])
 				fGetMtuInfoOfDevices();
 			else
 				fprintf(tunLogPtr, "%s!!!*****PLEASE CHECK IF MTU of device \"%s\" is correct or MTU of VLANS on %s are correct********!!!\n", pLearningSpaces, netDevice, netDevice);
+
+			last_time = now_time;
 		}
 	}
         
@@ -3059,7 +3066,7 @@ start:
 							nothing_done = 0;
 						else
 						{
-							if ((nothing_done == 2) && (vDebugLevel > 1))
+							if ((nothing_done == 2) && (vDebugLevel > 2) && gTuningMode)
 							{
 								gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
