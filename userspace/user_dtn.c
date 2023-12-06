@@ -3068,7 +3068,7 @@ start:
 							nothing_done = 0;
 						else
 						{
-							if ((nothing_done == 2) && (vDebugLevel > 2) && gTuningMode)
+							if ((nothing_done == 2) && (vDebugLevel > 3))
 							{
 								gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
