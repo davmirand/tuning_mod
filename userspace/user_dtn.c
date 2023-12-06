@@ -2046,13 +2046,15 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			now_time = clk;
 			if ((now_time - last_time) > SECS_TO_WAIT_BITRATE_MESSAGE)
-			fprintf(tunLogPtr, "%s %s: !!!*****BITRATE IS LOW********!!!\n", ms_ctime_buf, phase2str(current_phase));
-			if (aLocal_Ip[0])
-				fGetMtuInfoOfDevices();
-			else
-				fprintf(tunLogPtr, "%s!!!*****PLEASE CHECK IF MTU of device \"%s\" is correct or MTU of VLANS on %s are correct********!!!\n", pLearningSpaces, netDevice, netDevice);
+			{
+				fprintf(tunLogPtr, "%s %s: !!!*****BITRATE IS LOW********!!!\n", ms_ctime_buf, phase2str(current_phase));
+				if (aLocal_Ip[0])
+					fGetMtuInfoOfDevices();
+				else
+					fprintf(tunLogPtr, "%s!!!*****PLEASE CHECK IF MTU of device \"%s\" is correct or MTU of VLANS on %s are correct********!!!\n", pLearningSpaces, netDevice, netDevice);
 
-			last_time = now_time;
+				last_time = now_time;
+			}
 		}
 	}
         
