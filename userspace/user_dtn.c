@@ -3401,7 +3401,7 @@ return found;
 }
 
 static int COUNT_TO_LOG	= 100;
-#define NUM_RATES_TO_USE 5
+#define NUM_RATES_TO_USE 10
 void *doRunFindRetransmissionRate(void * vargp)
 {
 	time_t clk;
@@ -3642,7 +3642,7 @@ finish_up:
 		vAvgRetransmissionRate = vSomeTran;
 		vRetransmissionRate = vAvgIntRetransmissionRate = vSomeIntTran;
 
-		if ((vDebugLevel > 3) && previous_average_tx_Gbits_per_sec && (countLog >= COUNT_TO_LOG))
+		if ((vDebugLevel > 4) && previous_average_tx_Gbits_per_sec && (countLog >= COUNT_TO_LOG))
 		{
 			if (int_total_retrans)
 				fprintf(tunLogPtr,"%s %s: ***RETRAN*** total packets_sent = %lu, total retransmissions = %lu, last_int_packets_sent = %lu, *NEW* last_int_retrans = %lu, vRateCount = %d, vSomeIntRetrans = %lu, vSomeIntPackets = %lu\n", 
