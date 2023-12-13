@@ -435,6 +435,19 @@ typedef struct {
 	char ** argv;
 } sArgv_t;
 
+//Keep track of networks that we are talking t currently
+#define MAX_NUM_IP_ATTACHED 10
+__u32 currently_attached_networks = 0;
+typedef struct {
+#define MAX_NUM_PORTS_ON_THIS_IP 10
+	__u32 src_ip_addr;
+        __u16 src_port[MAX_NUM_PORTS_ON_THIS_IP];
+	__u16 rsvd;
+	__u32 currently_attached_ports;
+	int currently_exist;
+} sSrc_Dtn_IPs_t;
+sSrc_Dtn_IPs_t aSrc_Dtn_IPs[MAX_NUM_IP_ATTACHED]; 
+
 #include "int_defs.h"
 #include "filter_defs.h"
 
@@ -1030,6 +1043,10 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 
 	while (data + data_offset + sizeof(struct int_hop_metadata) <= data_end)
 	{
+		int vSrc_Dtn_IP_Found;
+		int vSrc_Ip_Tuple_Found;
+		int Last_IP_Index_Not_Exist;
+		int IP_Found_Index;
 		struct int_hop_metadata *hop_metadata_ptr = data + data_offset;
 		data_offset += sizeof(struct int_hop_metadata);
 		Qinfo = ntohl(hop_metadata_ptr->queue_info) & 0xffffff;
@@ -1178,12 +1195,98 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		flow_threshold_update.hop_latency_threshold += ntohl(hop_metadata_ptr->egress_time) - ntohl(hop_metadata_ptr->ingress_time);
 		flow_hop_latency_threshold += ntohl(hop_metadata_ptr->egress_time) - ntohl(hop_metadata_ptr->ingress_time);
 		print_hop_key(&hop_key);
+//New stuff
+		
+		src_ip_addr.y = ntohl(hop_key.flow_key.src_ip);
+		src_port = hop_key.flow_key.src_port;
+		//check array
+		vSrc_Dtn_IP_Found = 0;
+		vSrc_Ip_Tuple_Found = 0;
+		Last_IP_Index_Not_Exist = 0;
+		IP_Found_Index = 0;
+		for (int i = 0; i < MAX_NUM_IP_ATTACHED; i++)
+		{
+			if (aSrc_Dtn_IPs[i].src_ip_addr == src_ip_addr.y)
+			{
+				vSrc_Dtn_IP_Found = 1;
+				IP_Found_Index = i;
+
+				for (int j = 0; j < MAX_NUM_PORTS_ON_THIS_IP; j++)
+				{
+					if (aSrc_Dtn_IPs[i].src_port[j] == src_port)
+					{
+						vSrc_Ip_Tuple_Found = 1;
+						aSrc_Dtn_IPs[i].currently_exist = 1;
+						break;
+					}
+				}
+				
+				if (vSrc_Ip_Tuple_Found)
+				{
+					new_traffic = 0;
+					break;
+				}
+				else
+					{
+						//new traffic
+						new_traffic = 1;
+						break;
+					}
+			}
+			else
+				if (aSrc_Dtn_IPs[i].src_ip_addr == 0)
+					Last_IP_Index_Not_Exist = i;
+		}
+
+		if (vSrc_Ip_Tuple_Found);
+		else
+			{
+				if (vSrc_Dtn_IP_Found) //Ip exist but not port
+				{
+					aSrc_Dtn_IPs[IP_Found_Index].currently_exist = 1;
+					for (int j = 0; j < MAX_NUM_PORTS_ON_THIS_IP; j++)
+					{
+						if (aSrc_Dtn_IPs[IP_Found_Index].src_port[j] == 0)
+						{
+							aSrc_Dtn_IPs[IP_Found_Index].src_port[j] = src_port;
+							aSrc_Dtn_IPs[IP_Found_Index].currently_attached_ports++;
+						}
+					}
+				}
+				else	
+					{
+						aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].src_ip_addr = src_ip_addr.y;	
+						aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].currently_exist = 1;
+						aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].src_port[0] = src_port; //since it was never in the DB
+						currently_attached_networks++;
+					}
+			}
+
+
+		if (vDebugLevel > 1)
+		{
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+			if (new_traffic)
+				fprintf(tunLogPtr, "%s %s: ***new trafficZZZZZ***\n", ms_ctime_buf, phase2str(current_phase));
+                
+				
+			if (src_ip_addr.y != ntohl(hop_key.flow_key.src_ip))
+				fprintf(tunLogPtr, "%s %s: ***src_ip_addr.y != ntohl(hop_key.flow_key.src_ip)ZZZZ %u, %u***\n", 
+							ms_ctime_buf, phase2str(current_phase), src_ip_addr.y, ntohl(hop_key.flow_key.src_ip));
+			else
+				{
+					if (src_port != hop_key.flow_key.src_port)
+						fprintf(tunLogPtr, "%s %s: ***src_ip_addr.y == ntohl(hop_key.flow_key.src_ip)ZZZZ src_ip %u, src_port %d != new_src_port %d***\n", 
+								ms_ctime_buf, phase2str(current_phase), ntohl(hop_key.flow_key.src_ip), src_port, hop_key.flow_key.src_port);
+				}
+		}
 #if 1
-                if ((src_ip_addr.y != ntohl(hop_key.flow_key.src_ip)) || new_traffic)
+                if (new_traffic)
+                //if ((src_ip_addr.y != ntohl(hop_key.flow_key.src_ip)) || (src_port != hop_key.flow_key.src_port) || new_traffic)
                 //if ((src_ip_addr.y != ntohl(hop_key.flow_key.src_ip)) || new_traffic)
                 {
 			new_traffic = 0;
-			src_ip_addr.y = ntohl(hop_key.flow_key.src_ip);
+		//	src_ip_addr.y = ntohl(hop_key.flow_key.src_ip);
 		//	src_ip_addr.y = hop_key.flow_key.src_ip;
 			if (vDebugLevel > 4)
 			{
@@ -1206,7 +1309,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 #endif
 #ifdef INCLUDE_SRC_PORT
 		//src_port = ntohs(hop_key.flow_key.src_port);
-		src_port = hop_key.flow_key.src_port;
+		//src_port = hop_key.flow_key.src_port;
 #endif
 		hop_key.hop_index++;
 
@@ -1877,7 +1980,7 @@ return;
 
 #define BITRATE_INTERVAL 1
 #define KTUNING_DELTA	200000
-#define SECS_TO_WAIT_BITRATE_MESSAGE 30
+#define SECS_TO_WAIT_BITRATE_MESSAGE 60
 extern int my_tune_max;
 void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done, int * tune, char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING]);
 void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, int * suggested, int * nothing_done, int * tune, char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING])
@@ -4869,6 +4972,7 @@ int main(int argc, char **argv)
 	memset(aDest_Ip2,0,sizeof(aDest_Ip2));
 	memset(aDest_Ip2_Binary,0,sizeof(aDest_Ip2_Binary));
 	memset(aLocal_Ip,0,sizeof(aLocal_Ip));
+	memset(aSrc_Dtn_IPs, 0, sizeof (aSrc_Dtn_IPs));
 	src_ip_addr.y = 0;
 #ifdef INCLUDE_SRC_PORT
 	src_port = 0;
