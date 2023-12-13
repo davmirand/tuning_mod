@@ -219,11 +219,11 @@ struct PeerMsg sHpnRetMsg2;
 unsigned int hpnRetMsgSeqNo = 0;
 struct PeerMsg sTimeoutMsg;
 #endif
-static unsigned int sleep_count = 1;
 static double vGoodBitrateValue = 0.0;
 static double vGoodBitrateValueThatDoesntNeedMessage = 0.0;
 struct PeerMsg sMsg;
 unsigned int sMsgSeqNo = 0;
+unsigned int sMsgSeqNoConn= 0;
 char aSrc_Ip[32];
 char aDest_Ip2[32];
 char aDest_Ip2_Binary[32];
@@ -1047,6 +1047,8 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		int vSrc_Ip_Tuple_Found;
 		int Last_IP_Index_Not_Exist;
 		int IP_Found_Index;
+		int PORT_Used_Index;
+
 		struct int_hop_metadata *hop_metadata_ptr = data + data_offset;
 		data_offset += sizeof(struct int_hop_metadata);
 		Qinfo = ntohl(hop_metadata_ptr->queue_info) & 0xffffff;
@@ -1204,6 +1206,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		vSrc_Ip_Tuple_Found = 0;
 		Last_IP_Index_Not_Exist = 0;
 		IP_Found_Index = 0;
+		PORT_Used_Index = 0;
 		for (int i = 0; i < MAX_NUM_IP_ATTACHED; i++)
 		{
 			if (aSrc_Dtn_IPs[i].src_ip_addr == src_ip_addr.y)
@@ -1230,6 +1233,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 					{
 						//new traffic
 						new_traffic = 1;
+						fprintf(tunLogPtr, "%s %s: ***new traffic got set here1111***\n", ms_ctime_buf, phase2str(current_phase));
 						break;
 					}
 			}
@@ -1250,6 +1254,10 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 						{
 							aSrc_Dtn_IPs[IP_Found_Index].src_port[j] = src_port;
 							aSrc_Dtn_IPs[IP_Found_Index].currently_attached_ports++;
+							PORT_Used_Index = j;
+							new_traffic = 1;
+							fprintf(tunLogPtr, "%s %s: ***new traffic got set here2222***\n", ms_ctime_buf, phase2str(current_phase));
+							break;
 						}
 					}
 				}
@@ -1258,7 +1266,10 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 						aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].src_ip_addr = src_ip_addr.y;	
 						aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].currently_exist = 1;
 						aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].src_port[0] = src_port; //since it was never in the DB
+						PORT_Used_Index = 0;
 						currently_attached_networks++;
+						new_traffic = 1;
+						fprintf(tunLogPtr, "%s %s: ***new traffic got set here3333***\n", ms_ctime_buf, phase2str(current_phase));
 					}
 			}
 
@@ -1269,16 +1280,21 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 			if (new_traffic)
 				fprintf(tunLogPtr, "%s %s: ***new trafficZZZZZ***\n", ms_ctime_buf, phase2str(current_phase));
                 
-				
-			if (src_ip_addr.y != ntohl(hop_key.flow_key.src_ip))
-				fprintf(tunLogPtr, "%s %s: ***src_ip_addr.y != ntohl(hop_key.flow_key.src_ip)ZZZZ %u, %u***\n", 
-							ms_ctime_buf, phase2str(current_phase), src_ip_addr.y, ntohl(hop_key.flow_key.src_ip));
+			
+			if (vSrc_Ip_Tuple_Found)
+				fprintf(tunLogPtr, "%s %s: ***vSrc_Ip_Tuple_Found src_ip_addr %u, src_port %u***\n", 
+							ms_ctime_buf, phase2str(current_phase), src_ip_addr.y, src_port);
 			else
+				if (vSrc_Dtn_IP_Found) //Ip exist but not port
 				{
-					if (src_port != hop_key.flow_key.src_port)
-						fprintf(tunLogPtr, "%s %s: ***src_ip_addr.y == ntohl(hop_key.flow_key.src_ip)ZZZZ src_ip %u, src_port %d != new_src_port %d***\n", 
-								ms_ctime_buf, phase2str(current_phase), ntohl(hop_key.flow_key.src_ip), src_port, hop_key.flow_key.src_port);
+					fprintf(tunLogPtr, "%s %s: ***vSrc_Dtn_IP_Found src_ip_addr %u, src_port %d IP_Found_Index %d PORT_Used_Index %d***\n", 
+						ms_ctime_buf, phase2str(current_phase), src_ip_addr.y, src_port, IP_Found_Index, PORT_Used_Index);
 				}
+				else
+					{
+						fprintf(tunLogPtr, "%s %s: ***vSrc_Dtn_IP_Found ****NOT FOUND***  src_ip_addr %u, src_port %d Last_IP_Index_Not_Exist %d PORT_Used_Index %d***\n", 
+									ms_ctime_buf, phase2str(current_phase), src_ip_addr.y, src_port, Last_IP_Index_Not_Exist, PORT_Used_Index);
+					}
 		}
 #if 1
                 if (new_traffic)
@@ -1288,7 +1304,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 			new_traffic = 0;
 		//	src_ip_addr.y = ntohl(hop_key.flow_key.src_ip);
 		//	src_ip_addr.y = hop_key.flow_key.src_ip;
-			if (vDebugLevel > 4)
+			if (vDebugLevel > 1)
 			{
 				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 				fprintf(tunLogPtr, "%s %s: ***new traffic???***\n", ms_ctime_buf, phase2str(current_phase));
@@ -1299,8 +1315,8 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
                         strcpy(sMsg.msg, "Hello there!!! This is a Start of Traffic  msg...\n");
                         sMsg.msg_no = htonl(TEST_MSG);
 			sMsg.value = htonl(0);
-			sMsgSeqNo++;
-			sMsg.seq_no = htonl(sMsgSeqNo);
+			sMsgSeqNoConn++;
+			sMsg.seq_no = htonl(sMsgSeqNoConn);
                         cdone = 1;
                         Pthread_cond_signal(&dtn_cond);
                         Pthread_mutex_unlock(&dtn_mutex);
@@ -3240,6 +3256,8 @@ tx_Gbs_off:
 			fprintf(tunLogPtr, "%s %s: ***New traffic %lu***\n", ms_ctime_buf, phase2str(current_phase), count++);
 			fflush(tunLogPtr);
 		}
+
+		//memset(aSrc_Dtn_IPs, 0, sizeof (aSrc_Dtn_IPs)); //if is new traffic, then nothing should be in DB
 	}
 
 
@@ -4772,6 +4790,7 @@ void * fDoRunSendMessageToPeer(void * vargp)
 	int sockfd;
 	struct sockaddr_in servaddr;
 	struct PeerMsg sMsg2;
+	int busy_0index = 0;
 	int check = 0;
 
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
@@ -4783,6 +4802,7 @@ cli_again:
 	
 	while(cdone == 0)
 		Pthread_cond_wait(&dtn_cond, &dtn_mutex);
+	
 	memcpy(&sMsg2,&sMsg,sizeof(sMsg2));
 	cdone = 0;
 	Pthread_mutex_unlock(&dtn_mutex);
@@ -4790,7 +4810,7 @@ cli_again:
 	if (vDebugLevel > 1)
 	{
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-		fprintf(tunLogPtr,"%s %s: ***Sending message %d to source DTN...***\n", ms_ctime_buf, phase2str(current_phase), sleep_count);
+		fprintf(tunLogPtr,"%s %s: ***Sending message %d to source DTN...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg2.seq_no));
 		fflush(tunLogPtr);
 	}
 
@@ -4814,7 +4834,9 @@ cli_again:
 	{
 		goto cli_again;
 	}
+
 	str_cli_nohpn(sockfd, &sMsg2);         /* do it all */
+
 	check = shutdown(sockfd, SHUT_WR);
 //	close(sockfd); - use shutdown instead of close
 	if (!check)
@@ -4822,7 +4844,6 @@ cli_again:
 	else
 		printf("shutdown failed, check = %d\n",check);
 
-	sleep_count++;
 	goto cli_again;
 
 return ((char *)0);
