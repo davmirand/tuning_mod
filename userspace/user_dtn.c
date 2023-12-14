@@ -29,6 +29,9 @@
 #define SMSGS_BUFFER_SIZE 10
 int sMsgsIn = 0;
 int sMsgsOut = 0;
+unsigned int vHouseKeepingTime = 10000000; //10 million usecs = 10 secs
+int vHouseTime = 10;
+static double previous_average_tx_Gbits_per_sec = 0.0;
 
 #ifdef HPNSSH_QFACTOR_BINN
 #include "binncli.h"
@@ -211,7 +214,7 @@ time_t calculate_delta_for_csv(void)
 }
 
 pthread_mutex_t dtn_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t dtn_cond = PTHREAD_COND_INITIALIZER;
+//pthread_cond_t dtn_cond = PTHREAD_COND_INITIALIZER;
 pthread_cond_t full = PTHREAD_COND_INITIALIZER;
 pthread_cond_t empty = PTHREAD_COND_INITIALIZER;
 static int cdone = 0;
@@ -244,16 +247,19 @@ static union uIP src_ip_addr;
 void qOCC_Hop_TimerID_Handler(int signum, siginfo_t *info, void *ptr);
 void qOCC_TimerID_Handler(int signum, siginfo_t *info, void *ptr);
 void qEvaluation_TimerID_Handler(int signum, siginfo_t *info, void *ptr);
+void tHouseKeeping_TimerID_Handler(int signum, siginfo_t *info, void *ptr);
 static void timerHandler( int sig, siginfo_t *si, void *uc );
 
 timer_t qOCC_Hop_TimerID; //when both Qinfo and Hop latency over threshhold
 timer_t qOCC_TimerID; // when Qinfo over some user defined value that will cause us to send message to peer to start TCP Pacing if appropiate
 timer_t qEvaluation_TimerID; // when Qinfo over some user defined value that will cause us to send message to peer to start TCP Pacing if appropiate
 timer_t rTT_TimerID;
+timer_t tHouseKeeping_TimerID; //Housekeeping, if necessary
 
 struct itimerspec sStartTimer;
 struct itimerspec sStartEvaluationTimer;
 struct itimerspec sDisableTimer;
+struct itimerspec sHouseKeepingTimer;
 
 static void timerHandler( int sig, siginfo_t *si, void *uc )
 {
@@ -269,11 +275,14 @@ static void timerHandler( int sig, siginfo_t *si, void *uc )
 			if ( *tidp == qEvaluation_TimerID )
 				qEvaluation_TimerID_Handler(sig, si, uc);
 			else
-				fprintf(stdout, "Timer handler incorrect***\n");
+				if ( *tidp == tHouseKeeping_TimerID )
+					tHouseKeeping_TimerID_Handler(sig, si, uc);
+				else
+					fprintf(stdout, "Timer handler incorrect***\n");
 	return;
 }
 
-static int makeTimer( char *name, timer_t *timerID, int expires_usecs, struct itimerspec *startTmr)
+static int makeTimer( char *name, timer_t *timerID, int expires_usecs, struct itimerspec *startTmr, int interval)
 {
 	time_t clk;
 	char ctime_buf[27];
@@ -308,6 +317,11 @@ static int makeTimer( char *name, timer_t *timerID, int expires_usecs, struct it
 	*/
 	startTmr->it_value.tv_sec = sec;
 	startTmr->it_value.tv_nsec = nsec;
+	if (interval)
+	{
+		startTmr->it_interval.tv_sec = sec;
+		startTmr->it_interval.tv_nsec = nsec;
+	}
 
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	fprintf(tunLogPtr, "%s %s: timer name = %s, sec in timer = %ld, nsec = %ld, expires_usec = %d\n", 
@@ -443,10 +457,17 @@ typedef struct {
 //Keep track of networks that we are talking t currently
 #define MAX_NUM_IP_ATTACHED 10
 __u32 currently_attached_networks = 0;
+
+typedef struct {
+	__u16 src_port;
+	time_t last_time_port;
+} sSrc_Dtn_Ports_t;
+
 typedef struct {
 #define MAX_NUM_PORTS_ON_THIS_IP 20
 	__u32 src_ip_addr;
-        __u16 src_port[MAX_NUM_PORTS_ON_THIS_IP];
+	time_t last_time_ip;
+        sSrc_Dtn_Ports_t aSrc_port[MAX_NUM_PORTS_ON_THIS_IP];
 	__u16 rsvd;
 	__u32 currently_attached_ports;
 	int currently_exist;
@@ -535,6 +556,79 @@ void record_activity(char * pActivity);
 #define SIGALRM_MSG "SIGALRM received.\n"
 int vq_h_TimerIsSet = 0;
 int vq_TimerIsSet = 0;
+
+void tHouseKeeping_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
+{
+	time_t clk, now;
+	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
+	
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+	while (pthread_mutex_trylock(&dtn_mutex) != 0);
+	if (!previous_average_tx_Gbits_per_sec)
+	{
+		memset(aSrc_Dtn_IPs, 0, sizeof (aSrc_Dtn_IPs));
+		if (vDebugLevel > 1)
+		{
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+			fprintf(tunLogPtr, "%s %s: ***memset aSrc_Dtn done. previous_average_tx_Gbits_per_sec = %f***\n",
+							ms_ctime_buf, phase2str(current_phase), previous_average_tx_Gbits_per_sec); 
+		}
+	}
+	else
+		{
+			for (int i = 0; i < MAX_NUM_IP_ATTACHED; i++)
+			{
+				if (aSrc_Dtn_IPs[i].src_ip_addr)
+				{
+					gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+					if ((clk - aSrc_Dtn_IPs[i].last_time_ip) >= vHouseTime) //probabaly not there any more
+					{
+						memset(&aSrc_Dtn_IPs[i],0,sizeof(sSrc_Dtn_IPs_t));
+						currently_attached_networks--;
+						if (vDebugLevel > 1)
+							fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer attached_networks = %d***\n",
+													ms_ctime_buf, phase2str(current_phase), currently_attached_networks); 
+						continue;
+					}
+					else	//check the ports
+						{
+                                			for (int j = 0; j < MAX_NUM_PORTS_ON_THIS_IP; j++)
+                                			{
+                                        			if (aSrc_Dtn_IPs[i].aSrc_port[j].src_port)
+                                        			{
+									if ((clk - aSrc_Dtn_IPs[i].aSrc_port[j].last_time_port) >= vHouseTime) //probabaly not there any more
+									{
+										aSrc_Dtn_IPs[i].aSrc_port[j].src_port = 0;
+										aSrc_Dtn_IPs[i].aSrc_port[j].last_time_port = 0;
+										aSrc_Dtn_IPs[i].currently_attached_ports--;
+										if (vDebugLevel > 1)
+											fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer attached_ports = %d***\n",
+													ms_ctime_buf, phase2str(current_phase), aSrc_Dtn_IPs[i].currently_attached_ports); 
+										continue;
+									}
+									else
+										if (vDebugLevel > 1)
+											fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer something with ports time used  = %ld***\n",
+													ms_ctime_buf, phase2str(current_phase), clk - aSrc_Dtn_IPs[i].aSrc_port[j].last_time_port); 
+                                        			}
+							}
+						}
+				}
+			}
+		}
+
+        Pthread_mutex_unlock(&dtn_mutex);
+
+	if (vDebugLevel > 1)
+	{
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer done. previous_average_tx_Gbits_per_sec = %f***\n",ms_ctime_buf, phase2str(current_phase), previous_average_tx_Gbits_per_sec); 
+		fflush(tunLogPtr);
+	}
+
+	return;
+}
 
 void qEvaluation_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 {
@@ -646,7 +740,7 @@ void * fDoRunBpfCollectionPerfEventArray2(void * vargp)
 
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
-	timerRc = makeTimer("qOCC_Hop_TimerID", &qOCC_Hop_TimerID, gInterval, &sStartTimer);
+	timerRc = makeTimer("qOCC_Hop_TimerID", &qOCC_Hop_TimerID, gInterval, &sStartTimer, 0);
 	if (timerRc)
 	{
 		fprintf(tunLogPtr, "%s %s: Problem creating timer *qOCC_Hop_TimerID*.\n", ms_ctime_buf, phase2str(current_phase));
@@ -655,7 +749,7 @@ void * fDoRunBpfCollectionPerfEventArray2(void * vargp)
 	else
 		fprintf(tunLogPtr, "%s %s: *qOCC_Hop_TimerID* timer created.\n", ms_ctime_buf, phase2str(current_phase));
 
-	timerRc = makeTimer("qOCC_TimerID", &qOCC_TimerID, gInterval, &sStartTimer);
+	timerRc = makeTimer("qOCC_TimerID", &qOCC_TimerID, gInterval, &sStartTimer, 0);
 	if (timerRc)
 	{
 		fprintf(tunLogPtr, "%s %s: Problem creating timer *qOCC_TimerID*.\n", ms_ctime_buf, phase2str(current_phase));
@@ -664,7 +758,7 @@ void * fDoRunBpfCollectionPerfEventArray2(void * vargp)
 	else
 		fprintf(tunLogPtr, "%s %s: *qOCC_TimerID* timer created.\n", ms_ctime_buf, phase2str(current_phase));
 	
-	timerRc = makeTimer("qEvaluation_TimerID", &qEvaluation_TimerID, gInterval*10, &sStartEvaluationTimer);
+	timerRc = makeTimer("qEvaluation_TimerID", &qEvaluation_TimerID, gInterval*10, &sStartEvaluationTimer, 0);
 	if (timerRc)
 	{
 		fprintf(tunLogPtr, "%s %s: Problem creating timer *qEvaluation_TimerID*.\n", ms_ctime_buf, phase2str(current_phase));
@@ -673,6 +767,15 @@ void * fDoRunBpfCollectionPerfEventArray2(void * vargp)
 	else
 		fprintf(tunLogPtr, "%s %s: *qEvaluation_TimerID* timer created.\n", ms_ctime_buf, phase2str(current_phase));
 	
+	timerRc = makeTimer("tHouseKeeping_TimerID", &tHouseKeeping_TimerID, vHouseKeepingTime, &sHouseKeepingTimer, 1);
+	if (timerRc)
+	{
+		fprintf(tunLogPtr, "%s %s: Problem creating timer *tHouseKeeping_TimerID*.\n", ms_ctime_buf, phase2str(current_phase));
+		return ((char *)1);
+	}
+	else
+		fprintf(tunLogPtr, "%s %s: *tHouseKeeping_TimerID* timer created.\n", ms_ctime_buf, phase2str(current_phase));
+
 	fprintf(tunLogPtr,"%s %s: ***Queue occupancy threshold is set to %u\n", ms_ctime_buf, phase2str(current_phase), vQUEUE_OCCUPANCY_DELTA);
 
 open_maps: {
@@ -1047,6 +1150,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 	static time_t now_time = 0, last_time = 0;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
+	static int run_once = 1;
 
 	if(data + data_offset + sizeof(hop_key) > data_end) return;
 
@@ -1085,6 +1189,15 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		hop_hop_latency_threshold = egress_time - ingress_time;
 		
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+
+		if (run_once)
+		{
+			int vRetTimer;
+			run_once = 0;
+			vRetTimer = timer_settime(tHouseKeeping_TimerID, 0, &sHouseKeepingTimer, (struct itimerspec *)NULL);
+			if (vRetTimer)
+				fprintf(tunLogPtr, "%s %s: ***ERROR could not make Housekeeping Timer***",ms_ctime_buf, phase2str(current_phase));
+		}
 
 		if (Qinfo < qinfo_min_value)
 		{
@@ -1239,15 +1352,17 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		{
 			if (aSrc_Dtn_IPs[i].src_ip_addr == src_ip_addr.y)
 			{
+				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 				vSrc_Dtn_IP_Found = 1;
 				IP_Found_Index = i;
-
+				aSrc_Dtn_IPs[i].last_time_ip = clk;
 				for (int j = 0; j < MAX_NUM_PORTS_ON_THIS_IP; j++)
 				{
-					if (aSrc_Dtn_IPs[i].src_port[j] == src_port)
+					if (aSrc_Dtn_IPs[i].aSrc_port[j].src_port == src_port)
 					{
 						vSrc_Ip_Tuple_Found = 1;
 						aSrc_Dtn_IPs[i].currently_exist = 1;
+						aSrc_Dtn_IPs[i].aSrc_port[j].last_time_port = clk;
 						break;
 					}
 				}
@@ -1273,17 +1388,19 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		if (vSrc_Ip_Tuple_Found);
 		else
 			{
+				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 				if (vSrc_Dtn_IP_Found) //Ip exist but not port
 				{
 					aSrc_Dtn_IPs[IP_Found_Index].currently_exist = 1;
 					for (int j = 0; j < MAX_NUM_PORTS_ON_THIS_IP; j++)
 					{
-						if (aSrc_Dtn_IPs[IP_Found_Index].src_port[j] == 0)
+						if (aSrc_Dtn_IPs[IP_Found_Index].aSrc_port[j].src_port == 0)
 						{
-							aSrc_Dtn_IPs[IP_Found_Index].src_port[j] = src_port;
+							aSrc_Dtn_IPs[IP_Found_Index].aSrc_port[j].src_port = src_port;
 							aSrc_Dtn_IPs[IP_Found_Index].currently_attached_ports++;
 							PORT_Used_Index = j;
 							new_traffic = 1;
+							aSrc_Dtn_IPs[IP_Found_Index].aSrc_port[j].last_time_port = clk;
 							fprintf(tunLogPtr, "%s %s: ***new traffic got set here2222***\n", ms_ctime_buf, phase2str(current_phase));
 							break;
 						}
@@ -1293,7 +1410,9 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 					{
 						aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].src_ip_addr = src_ip_addr.y;	
 						aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].currently_exist = 1;
-						aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].src_port[0] = src_port; //since it was never in the DB
+						aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].last_time_ip = clk;
+						aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].aSrc_port[0].src_port = src_port; //since it was never in the DB
+						aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].aSrc_port[0].last_time_port = clk; 
 						PORT_Used_Index = 0;
 						currently_attached_networks++;
 						new_traffic = 1;
@@ -2225,7 +2344,6 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 }
 
 #define MAX_TUNING_APPLY	10
-static double previous_average_tx_Gbits_per_sec = 0.0;
 
 double fCheckAppBandwidth(char app[])
 {
