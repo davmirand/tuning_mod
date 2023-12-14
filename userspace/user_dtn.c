@@ -26,6 +26,9 @@
 #include "unp.h"
 #include "user_dtn.h"
 
+#define SMSGS_BUFFER_SIZE 10
+int sMsgsIn = 0;
+int sMsgsOut = 0;
 
 #ifdef HPNSSH_QFACTOR_BINN
 #include "binncli.h"
@@ -209,6 +212,8 @@ time_t calculate_delta_for_csv(void)
 
 pthread_mutex_t dtn_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t dtn_cond = PTHREAD_COND_INITIALIZER;
+pthread_cond_t full = PTHREAD_COND_INITIALIZER;
+pthread_cond_t empty = PTHREAD_COND_INITIALIZER;
 static int cdone = 0;
 #ifdef HPNSSH_QFACTOR
 pthread_mutex_t hpn_ret_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -221,7 +226,7 @@ struct PeerMsg sTimeoutMsg;
 #endif
 static double vGoodBitrateValue = 0.0;
 static double vGoodBitrateValueThatDoesntNeedMessage = 0.0;
-struct PeerMsg sMsg;
+struct PeerMsg sMsg[SMSGS_BUFFER_SIZE];
 unsigned int sMsgSeqNo = 0;
 unsigned int sMsgSeqNoConn= 0;
 char aSrc_Ip[32];
@@ -439,7 +444,7 @@ typedef struct {
 #define MAX_NUM_IP_ATTACHED 10
 __u32 currently_attached_networks = 0;
 typedef struct {
-#define MAX_NUM_PORTS_ON_THIS_IP 10
+#define MAX_NUM_PORTS_ON_THIS_IP 20
 	__u32 src_ip_addr;
         __u16 src_port[MAX_NUM_PORTS_ON_THIS_IP];
 	__u16 rsvd;
@@ -582,10 +587,11 @@ void qOCC_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 	record_activity(activity); //make sure activity big enough to concatenate additional data -- see record_activity()
 	fflush(tunLogPtr);
 
+#if 0
 	if (vCanStartEvaluationTimer)
 	{
 		Pthread_mutex_lock(&dtn_mutex);
-		strcpy(sMsg.msg, "Hello there!!! This is a Qinfo msg...\n");
+		strcpy(sMsg[in].msg, "Hello there!!! This is a Qinfo msg...\n");
 		sMsg.msg_no = htonl(QINFO_MSG);
 		sMsg.value = htonl(vQinfoUserValue);
 		sMsgSeqNo++;
@@ -597,6 +603,28 @@ void qOCC_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 		// Start and wait for (evaluation timer * 10) before trying to trigger source again
 		fStartEvaluationTimer(curr_hop_key_hop_index);
 	}
+#else
+	if (vCanStartEvaluationTimer)
+	{
+		Pthread_mutex_lock(&dtn_mutex);
+
+		while (((sMsgsIn + 1) % SMSGS_BUFFER_SIZE) == sMsgsOut)
+			pthread_cond_wait(&empty, &dtn_mutex);
+
+		strcpy(sMsg[sMsgsIn].msg, "Hello there!!! This is a Qinfo msg...\n");
+		sMsg[sMsgsIn].msg_no = htonl(QINFO_MSG);
+		sMsg[sMsgsIn].value = htonl(vQinfoUserValue);
+		sMsgSeqNo++;
+		sMsg[sMsgsIn].seq_no = htonl(sMsgSeqNo);
+		cdone = 1;
+		sMsgsIn = (sMsgsIn + 1) % SMSGS_BUFFER_SIZE;
+		Pthread_cond_signal(&full);
+		Pthread_mutex_unlock(&dtn_mutex);
+
+		// Start and wait for (evaluation timer * 10) before trying to trigger source again
+		fStartEvaluationTimer(curr_hop_key_hop_index);
+	}
+#endif
 	return;
 }
 
@@ -1309,7 +1337,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 				fprintf(tunLogPtr, "%s %s: ***new traffic???***\n", ms_ctime_buf, phase2str(current_phase));
 			}
-#if 1
+#if 0
 			vIamADestDtn  = 1;
                         Pthread_mutex_lock(&dtn_mutex);
                         strcpy(sMsg.msg, "Hello there!!! This is a Start of Traffic  msg...\n");
@@ -1319,6 +1347,21 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 			sMsg.seq_no = htonl(sMsgSeqNoConn);
                         cdone = 1;
                         Pthread_cond_signal(&dtn_cond);
+                        Pthread_mutex_unlock(&dtn_mutex);
+#else
+			vIamADestDtn  = 1;
+                        Pthread_mutex_lock(&dtn_mutex);
+			while (((sMsgsIn + 1) % SMSGS_BUFFER_SIZE) == sMsgsOut)
+				pthread_cond_wait(&empty,&dtn_mutex);
+
+                        strcpy(sMsg[sMsgsIn].msg, "Hello there!!! This is a Start of Traffic  msg...\n");
+                        sMsg[sMsgsIn].msg_no = htonl(TEST_MSG);
+			sMsg[sMsgsIn].value = htonl(0);
+			sMsgSeqNoConn++;
+			sMsg[sMsgsIn].seq_no = htonl(sMsgSeqNoConn);
+                        cdone = 1;
+			sMsgsIn = (sMsgsIn + 1) % SMSGS_BUFFER_SIZE;
+                        Pthread_cond_signal(&full);
                         Pthread_mutex_unlock(&dtn_mutex);
 #endif
 		}
@@ -4790,7 +4833,6 @@ void * fDoRunSendMessageToPeer(void * vargp)
 	int sockfd;
 	struct sockaddr_in servaddr;
 	struct PeerMsg sMsg2;
-	int busy_0index = 0;
 	int check = 0;
 
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
@@ -4800,11 +4842,13 @@ void * fDoRunSendMessageToPeer(void * vargp)
 cli_again:
 	Pthread_mutex_lock(&dtn_mutex);
 	
-	while(cdone == 0)
-		Pthread_cond_wait(&dtn_cond, &dtn_mutex);
+	while(sMsgsIn == sMsgsOut)
+		Pthread_cond_wait(&full, &dtn_mutex);
 	
-	memcpy(&sMsg2,&sMsg,sizeof(sMsg2));
+	memcpy(&sMsg2,&sMsg[sMsgsOut],sizeof(sMsg2));
+	sMsgsOut = (sMsgsOut + 1) % SMSGS_BUFFER_SIZE;
 	cdone = 0;
+	Pthread_cond_signal(&empty);
 	Pthread_mutex_unlock(&dtn_mutex);
 
 	if (vDebugLevel > 1)
@@ -4834,7 +4878,7 @@ cli_again:
 	{
 		goto cli_again;
 	}
-
+	
 	str_cli_nohpn(sockfd, &sMsg2);         /* do it all */
 
 	check = shutdown(sockfd, SHUT_WR);
