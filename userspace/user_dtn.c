@@ -559,16 +559,17 @@ int vq_TimerIsSet = 0;
 
 void tHouseKeeping_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 {
-	time_t clk, now;
+	time_t clk;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
-	
+
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	while (pthread_mutex_trylock(&dtn_mutex) != 0);
+
 	if (!previous_average_tx_Gbits_per_sec)
 	{
 		memset(aSrc_Dtn_IPs, 0, sizeof (aSrc_Dtn_IPs));
-		if (vDebugLevel > 1)
+		if (vDebugLevel > 4)
 		{
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			fprintf(tunLogPtr, "%s %s: ***memset aSrc_Dtn done. previous_average_tx_Gbits_per_sec = %f***\n",
@@ -586,7 +587,7 @@ void tHouseKeeping_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 					{
 						memset(&aSrc_Dtn_IPs[i],0,sizeof(sSrc_Dtn_IPs_t));
 						currently_attached_networks--;
-						if (vDebugLevel > 1)
+						if (vDebugLevel > 4)
 							fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer attached_networks = %d***\n",
 													ms_ctime_buf, phase2str(current_phase), currently_attached_networks); 
 						continue;
@@ -602,13 +603,13 @@ void tHouseKeeping_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 										aSrc_Dtn_IPs[i].aSrc_port[j].src_port = 0;
 										aSrc_Dtn_IPs[i].aSrc_port[j].last_time_port = 0;
 										aSrc_Dtn_IPs[i].currently_attached_ports--;
-										if (vDebugLevel > 1)
+										if (vDebugLevel > 4)
 											fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer attached_ports = %d***\n",
 													ms_ctime_buf, phase2str(current_phase), aSrc_Dtn_IPs[i].currently_attached_ports); 
 										continue;
 									}
 									else
-										if (vDebugLevel > 1)
+										if (vDebugLevel > 4)
 											fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer something with ports time used  = %ld***\n",
 													ms_ctime_buf, phase2str(current_phase), clk - aSrc_Dtn_IPs[i].aSrc_port[j].last_time_port); 
                                         			}
@@ -620,7 +621,7 @@ void tHouseKeeping_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 
         Pthread_mutex_unlock(&dtn_mutex);
 
-	if (vDebugLevel > 1)
+	if (vDebugLevel > 4)
 	{
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer done. previous_average_tx_Gbits_per_sec = %f***\n",ms_ctime_buf, phase2str(current_phase), previous_average_tx_Gbits_per_sec); 
@@ -1348,6 +1349,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		Last_IP_Index_Not_Exist = 0;
 		IP_Found_Index = 0;
 		PORT_Used_Index = 0;
+#if 1
 		for (int i = 0; i < MAX_NUM_IP_ATTACHED; i++)
 		{
 			if (aSrc_Dtn_IPs[i].src_ip_addr == src_ip_addr.y)
@@ -1376,7 +1378,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 					{
 						//new traffic
 						new_traffic = 1;
-						fprintf(tunLogPtr, "%s %s: ***new traffic got set here1111***\n", ms_ctime_buf, phase2str(current_phase));
+						//fprintf(tunLogPtr, "%s %s: ***new traffic got set here1111***\n", ms_ctime_buf, phase2str(current_phase));
 						break;
 					}
 			}
@@ -1401,7 +1403,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 							PORT_Used_Index = j;
 							new_traffic = 1;
 							aSrc_Dtn_IPs[IP_Found_Index].aSrc_port[j].last_time_port = clk;
-							fprintf(tunLogPtr, "%s %s: ***new traffic got set here2222***\n", ms_ctime_buf, phase2str(current_phase));
+							//fprintf(tunLogPtr, "%s %s: ***new traffic got set here2222***\n", ms_ctime_buf, phase2str(current_phase));
 							break;
 						}
 					}
@@ -1416,11 +1418,11 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 						PORT_Used_Index = 0;
 						currently_attached_networks++;
 						new_traffic = 1;
-						fprintf(tunLogPtr, "%s %s: ***new traffic got set here3333***\n", ms_ctime_buf, phase2str(current_phase));
+						//fprintf(tunLogPtr, "%s %s: ***new traffic got set here3333***\n", ms_ctime_buf, phase2str(current_phase));
 					}
 			}
-
-
+#endif
+#if 0
 		if (vDebugLevel > 1)
 		{
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
@@ -1443,6 +1445,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 									ms_ctime_buf, phase2str(current_phase), src_ip_addr.y, src_port, Last_IP_Index_Not_Exist, PORT_Used_Index);
 					}
 		}
+#endif
 #if 1
                 if (new_traffic)
                 //if ((src_ip_addr.y != ntohl(hop_key.flow_key.src_ip)) || (src_port != hop_key.flow_key.src_port) || new_traffic)
