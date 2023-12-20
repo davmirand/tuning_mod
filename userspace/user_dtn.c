@@ -1349,7 +1349,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		Last_IP_Index_Not_Exist = 0;
 		IP_Found_Index = 0;
 		PORT_Used_Index = 0;
-#if 1
+#if 0
 		for (int i = 0; i < MAX_NUM_IP_ATTACHED; i++)
 		{
 			if (aSrc_Dtn_IPs[i].src_ip_addr == src_ip_addr.y)
@@ -1470,7 +1470,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
                         cdone = 1;
                         Pthread_cond_signal(&dtn_cond);
                         Pthread_mutex_unlock(&dtn_mutex);
-#else
+#elif 1
 			vIamADestDtn  = 1;
                         Pthread_mutex_lock(&dtn_mutex);
 			while (((sMsgsIn + 1) % SMSGS_BUFFER_SIZE) == sMsgsOut)
