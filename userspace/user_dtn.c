@@ -569,7 +569,8 @@ void tHouseKeeping_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 	if (!previous_average_tx_Gbits_per_sec)
 	{
 		memset(aSrc_Dtn_IPs, 0, sizeof (aSrc_Dtn_IPs));
-		if (vDebugLevel > 4)
+		currently_attached_networks = 0;
+		if (vDebugLevel > 9)
 		{
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			fprintf(tunLogPtr, "%s %s: ***memset aSrc_Dtn done. previous_average_tx_Gbits_per_sec = %f***\n",
@@ -585,36 +586,13 @@ void tHouseKeeping_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 					gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 					if ((clk - aSrc_Dtn_IPs[i].last_time_ip) >= vHouseTime) //probabaly not there any more
 					{
+						if (vDebugLevel > 3)
+							fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer removing attached IP address %u from DB, current_attached_networks = %d***\n",
+													ms_ctime_buf, phase2str(current_phase), aSrc_Dtn_IPs[i].src_ip_addr, currently_attached_networks); 
 						memset(&aSrc_Dtn_IPs[i],0,sizeof(sSrc_Dtn_IPs_t));
 						currently_attached_networks--;
-						if (vDebugLevel > 4)
-							fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer attached_networks = %d***\n",
-													ms_ctime_buf, phase2str(current_phase), currently_attached_networks); 
 						continue;
 					}
-					else	//check the ports
-						{
-                                			for (int j = 0; j < MAX_NUM_PORTS_ON_THIS_IP; j++)
-                                			{
-                                        			if (aSrc_Dtn_IPs[i].aSrc_port[j].src_port)
-                                        			{
-									if ((clk - aSrc_Dtn_IPs[i].aSrc_port[j].last_time_port) >= vHouseTime) //probabaly not there any more
-									{
-										aSrc_Dtn_IPs[i].aSrc_port[j].src_port = 0;
-										aSrc_Dtn_IPs[i].aSrc_port[j].last_time_port = 0;
-										aSrc_Dtn_IPs[i].currently_attached_ports--;
-										if (vDebugLevel > 4)
-											fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer attached_ports = %d***\n",
-													ms_ctime_buf, phase2str(current_phase), aSrc_Dtn_IPs[i].currently_attached_ports); 
-										continue;
-									}
-									else
-										if (vDebugLevel > 4)
-											fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer something with ports time used  = %ld***\n",
-													ms_ctime_buf, phase2str(current_phase), clk - aSrc_Dtn_IPs[i].aSrc_port[j].last_time_port); 
-                                        			}
-							}
-						}
 				}
 			}
 		}
@@ -1177,10 +1155,8 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 	while (data + data_offset + sizeof(struct int_hop_metadata) <= data_end)
 	{
 		int vSrc_Dtn_IP_Found;
-		int vSrc_Ip_Tuple_Found;
-		int Last_IP_Index_Not_Exist;
+		int First_IP_Index_Not_Exist;
 		int IP_Found_Index;
-		int PORT_Used_Index;
 
 		struct int_hop_metadata *hop_metadata_ptr = data + data_offset;
 		data_offset += sizeof(struct int_hop_metadata);
@@ -1345,11 +1321,10 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		src_port = hop_key.flow_key.src_port;
 		//check array
 		vSrc_Dtn_IP_Found = 0;
-		vSrc_Ip_Tuple_Found = 0;
-		Last_IP_Index_Not_Exist = 0;
+		First_IP_Index_Not_Exist = 0;
 		IP_Found_Index = 0;
-		PORT_Used_Index = 0;
-#if 0
+#if 1
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		for (int i = 0; i < MAX_NUM_IP_ATTACHED; i++)
 		{
 			if (aSrc_Dtn_IPs[i].src_ip_addr == src_ip_addr.y)
@@ -1357,93 +1332,49 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 				vSrc_Dtn_IP_Found = 1;
 				IP_Found_Index = i;
+				aSrc_Dtn_IPs[i].currently_exist = 1;
 				aSrc_Dtn_IPs[i].last_time_ip = clk;
-				for (int j = 0; j < MAX_NUM_PORTS_ON_THIS_IP; j++)
-				{
-					if (aSrc_Dtn_IPs[i].aSrc_port[j].src_port == src_port)
-					{
-						vSrc_Ip_Tuple_Found = 1;
-						aSrc_Dtn_IPs[i].currently_exist = 1;
-						aSrc_Dtn_IPs[i].aSrc_port[j].last_time_port = clk;
-						break;
-					}
-				}
-				
-				if (vSrc_Ip_Tuple_Found)
-				{
-					new_traffic = 0;
-					break;
-				}
-				else
-					{
-						//new traffic
-						new_traffic = 1;
-						//fprintf(tunLogPtr, "%s %s: ***new traffic got set here1111***\n", ms_ctime_buf, phase2str(current_phase));
-						break;
-					}
+				new_traffic = 0;
+				break;
 			}
 			else
 				if (aSrc_Dtn_IPs[i].src_ip_addr == 0)
-					Last_IP_Index_Not_Exist = i;
+				{
+					if (!First_IP_Index_Not_Exist)
+						First_IP_Index_Not_Exist = (i+1); //should only get set once
+				}
 		}
 
-		if (vSrc_Ip_Tuple_Found);
-		else
-			{
-				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-				if (vSrc_Dtn_IP_Found) //Ip exist but not port
-				{
-					aSrc_Dtn_IPs[IP_Found_Index].currently_exist = 1;
-					for (int j = 0; j < MAX_NUM_PORTS_ON_THIS_IP; j++)
-					{
-						if (aSrc_Dtn_IPs[IP_Found_Index].aSrc_port[j].src_port == 0)
-						{
-							aSrc_Dtn_IPs[IP_Found_Index].aSrc_port[j].src_port = src_port;
-							aSrc_Dtn_IPs[IP_Found_Index].currently_attached_ports++;
-							PORT_Used_Index = j;
-							new_traffic = 1;
-							aSrc_Dtn_IPs[IP_Found_Index].aSrc_port[j].last_time_port = clk;
-							//fprintf(tunLogPtr, "%s %s: ***new traffic got set here2222***\n", ms_ctime_buf, phase2str(current_phase));
-							break;
-						}
-					}
-				}
-				else	
-					{
-						aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].src_ip_addr = src_ip_addr.y;	
-						aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].currently_exist = 1;
-						aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].last_time_ip = clk;
-						aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].aSrc_port[0].src_port = src_port; //since it was never in the DB
-						aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].aSrc_port[0].last_time_port = clk; 
-						PORT_Used_Index = 0;
-						currently_attached_networks++;
-						new_traffic = 1;
-						//fprintf(tunLogPtr, "%s %s: ***new traffic got set here3333***\n", ms_ctime_buf, phase2str(current_phase));
-					}
-			}
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		if (!vSrc_Dtn_IP_Found) //Ip exist 
+		{
+			//aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].src_ip_addr = src_ip_addr.y;	
+			//aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].currently_exist = 1;
+			//aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].last_time_ip = clk;
+			--First_IP_Index_Not_Exist;
+			aSrc_Dtn_IPs[First_IP_Index_Not_Exist].src_ip_addr = src_ip_addr.y;	
+			aSrc_Dtn_IPs[First_IP_Index_Not_Exist].currently_exist = 1;
+			aSrc_Dtn_IPs[First_IP_Index_Not_Exist].last_time_ip = clk;
+			currently_attached_networks++;
+			new_traffic = 1;
+//			if (vDebugLevel > 1)
+//				fprintf(tunLogPtr, "%s %s: ***new traffic got set here3333***\n", ms_ctime_buf, phase2str(current_phase));
+		}
 #endif
-#if 0
-		if (vDebugLevel > 1)
+#if 1
+		if (vDebugLevel > 9)
 		{
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-			if (new_traffic)
-				fprintf(tunLogPtr, "%s %s: ***new trafficZZZZZ***\n", ms_ctime_buf, phase2str(current_phase));
-                
-			
-			if (vSrc_Ip_Tuple_Found)
-				fprintf(tunLogPtr, "%s %s: ***vSrc_Ip_Tuple_Found src_ip_addr %u, src_port %u***\n", 
-							ms_ctime_buf, phase2str(current_phase), src_ip_addr.y, src_port);
+			if (vSrc_Dtn_IP_Found) //Ip exist 
+			{
+				fprintf(tunLogPtr, "%s %s: ***vSrc_Dtn_IP_Found src_ip_addr %u, src_port %d IP_Found_Index %d***\n", 
+						ms_ctime_buf, phase2str(current_phase), src_ip_addr.y, src_port, IP_Found_Index);
+			}
 			else
-				if (vSrc_Dtn_IP_Found) //Ip exist but not port
 				{
-					fprintf(tunLogPtr, "%s %s: ***vSrc_Dtn_IP_Found src_ip_addr %u, src_port %d IP_Found_Index %d PORT_Used_Index %d***\n", 
-						ms_ctime_buf, phase2str(current_phase), src_ip_addr.y, src_port, IP_Found_Index, PORT_Used_Index);
+					fprintf(tunLogPtr, "%s %s: ***vSrc_Dtn_IP_Found ****NOT FOUND***  src_ip_addr %u, src_port %d First_IP_Index_Not_Exist %d***\n", 
+								ms_ctime_buf, phase2str(current_phase), src_ip_addr.y, src_port, First_IP_Index_Not_Exist);
 				}
-				else
-					{
-						fprintf(tunLogPtr, "%s %s: ***vSrc_Dtn_IP_Found ****NOT FOUND***  src_ip_addr %u, src_port %d Last_IP_Index_Not_Exist %d PORT_Used_Index %d***\n", 
-									ms_ctime_buf, phase2str(current_phase), src_ip_addr.y, src_port, Last_IP_Index_Not_Exist, PORT_Used_Index);
-					}
 		}
 #endif
 #if 1
@@ -3420,8 +3351,6 @@ tx_Gbs_off:
 			fprintf(tunLogPtr, "%s %s: ***New traffic %lu***\n", ms_ctime_buf, phase2str(current_phase), count++);
 			fflush(tunLogPtr);
 		}
-
-		//memset(aSrc_Dtn_IPs, 0, sizeof (aSrc_Dtn_IPs)); //if is new traffic, then nothing should be in DB
 	}
 
 
