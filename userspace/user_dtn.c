@@ -457,6 +457,7 @@ typedef struct {
 //Keep track of networks that we are talking t currently
 #define MAX_NUM_IP_ATTACHED 10
 __u32 currently_attached_networks = 0;
+__u32 currently_dest_networks = 0;
 
 typedef struct {
 	__u16 src_port;
@@ -472,7 +473,15 @@ typedef struct {
 	__u32 currently_attached_ports;
 	int currently_exist;
 } sSrc_Dtn_IPs_t;
-sSrc_Dtn_IPs_t aSrc_Dtn_IPs[MAX_NUM_IP_ATTACHED]; 
+sSrc_Dtn_IPs_t aSrc_Dtn_IPs[MAX_NUM_IP_ATTACHED]; //when I am the dest, these are the sources
+
+typedef struct {
+	char aDest_Ip2_addr[32];
+	char aDest_Ip2_Binary_addr[32];
+	time_t last_time_ip;
+	int currently_exist;
+} sDest_Dtn_IPs_t;
+sDest_Dtn_IPs_t aDest_Dtn_IPs[MAX_NUM_IP_ATTACHED]; //when I am the source, these are the destinations
 
 #include "int_defs.h"
 #include "filter_defs.h"
@@ -3896,8 +3905,11 @@ finish_up:
 
 return (char *) 0;
 }
-
+#if 1
 double fFindRttUsingPing()
+#else
+double fFindRttUsingPing(char aDest_Ip2[])
+#endif
 {
 	time_t clk;
 	char ctime_buf[27];
@@ -4179,6 +4191,12 @@ void * fDoRunFindHighestRtt(void * vargp)
 	long rtt = 0, highest_rtt = 0;
 	double highest_rtt_from_bpftrace = 0.0;
 	double highest_rtt_from_ping = 0.0;
+#if 0
+	int vLastIpPinged = 0;
+	int count = 0;
+	char aDestIpToPing[32];
+	struct in_addr dest_ip_addr;
+#endif
 	int applied = 0, suggested = 0, nothing_done = 0;
 	int tune = 1; //1 = up, 2 = down - tune up initially
 
@@ -4196,7 +4214,38 @@ rttstart:
 
 		if (vIamASrcDtn)
 		{
+#if 1
 			highest_rtt_from_ping = fFindRttUsingPing();
+#else
+			//need to work on
+			//
+			//
+			count = 0;
+			while (!aSrc_Dtn_IPs[vLastIpPinged].src_ip_addr && count < MAX_NUM_IP_ATTACHED)
+			{
+				if (vDebugLevel > 3) 
+					fprintf(tunLogPtr,"%s %s: ***in while print src_ip_addr = %u...***\n", ms_ctime_buf, phase2str(current_phase), aSrc_Dtn_IPs[vLastIpPinged].src_ip_addr);
+				vLastIpPinged++;
+				count++;
+				if (vLastIpPinged == MAX_NUM_IP_ATTACHED)
+					vLastIpPinged = 0;
+				
+				
+			}
+			
+			if (count < MAX_NUM_IP_ATTACHED)
+			{
+				dest_ip_addr.s_addr = aSrc_Dtn_IPs[vLastIpPinged].src_ip_addr;
+				sprintf(aDestIpToPing,"%s", inet_ntoa(dest_ip_addr));
+				highest_rtt_from_ping = fFindRttUsingPing(aDestIpToPing);
+			}
+			else
+				{
+					if (vDebugLevel > 3) 
+						fprintf(tunLogPtr,"%s %s: ***highes rtt from ping is zero ...***\n", ms_ctime_buf, phase2str(current_phase));
+					highest_rtt_from_ping = 0; //no ips to ping
+				}
+#endif
 		}
 
 		if (vDebugLevel > 2) 
@@ -4782,6 +4831,7 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 			{
 				char *peeraddrpresn = inet_ntoa(peeraddr.sin_addr);
 				sprintf(aDest_Ip2_Binary,"%02X",peeraddr.sin_addr.s_addr);
+				sprintf(aDest_Dtn_IPs[currently_dest_networks].aDest_Ip2_Binary_addr,"%02X",peeraddr.sin_addr.s_addr);
 				//total_time_passed = 0;
 				if (vDebugLevel > 1)
 				{
@@ -4794,6 +4844,12 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 
 				vIamASrcDtn = 1;	
 				strcpy(aDest_Ip2,peeraddrpresn);
+
+				strcpy(aDest_Dtn_IPs[currently_dest_networks].aDest_Ip2_addr,peeraddrpresn);
+				aDest_Dtn_IPs[currently_dest_networks].currently_exist = 1;
+				currently_dest_networks++;
+				if (currently_dest_networks == MAX_NUM_IP_ATTACHED)
+					currently_dest_networks = 0;
 			}
 
 		retval = getsockname(connfd, (struct sockaddr *) &localaddr, &localaddrlen);
