@@ -476,8 +476,9 @@ typedef struct {
 sSrc_Dtn_IPs_t aSrc_Dtn_IPs[MAX_NUM_IP_ATTACHED]; //when I am the dest, these are the sources
 
 typedef struct {
-	char aDest_Ip2_addr[32];
-	char aDest_Ip2_Binary_addr[32];
+	__u32 dest_ip_addr;
+	char aDest_Ip2[32];
+	char aDest_Ip2_Binary[32];
 	time_t last_time_ip;
 	int currently_exist;
 } sDest_Dtn_IPs_t;
@@ -573,40 +574,67 @@ void tHouseKeeping_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-	while (pthread_mutex_trylock(&dtn_mutex) != 0);
+	//while (pthread_mutex_trylock(&dtn_mutex) != 0);
 
 	if (!previous_average_tx_Gbits_per_sec)
 	{
+		
 		memset(aSrc_Dtn_IPs, 0, sizeof (aSrc_Dtn_IPs));
 		currently_attached_networks = 0;
-		if (vDebugLevel > 9)
+//		memset(aDest_Dtn_IPs, 0, sizeof (aDest_Dtn_IPs));
+		currently_dest_networks = 0;
+
+		if (vDebugLevel > 2)
 		{
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-			fprintf(tunLogPtr, "%s %s: ***memset aSrc_Dtn done. previous_average_tx_Gbits_per_sec = %f***\n",
-							ms_ctime_buf, phase2str(current_phase), previous_average_tx_Gbits_per_sec); 
+			fprintf(tunLogPtr, "%s %s: ***memset aSrc_Dtns and aDest_Dtns done. previous_average_tx_Gbits_per_sec = %f***\n",
+						ms_ctime_buf, phase2str(current_phase), previous_average_tx_Gbits_per_sec); 
 		}
 	}
 	else
 		{
-			for (int i = 0; i < MAX_NUM_IP_ATTACHED; i++)
+			if (vIamADestDtn)
 			{
-				if (aSrc_Dtn_IPs[i].src_ip_addr)
+				for (int i = 0; i < MAX_NUM_IP_ATTACHED; i++)
 				{
-					gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-					if ((clk - aSrc_Dtn_IPs[i].last_time_ip) >= vHouseTime) //probabaly not there any more
+					if (aSrc_Dtn_IPs[i].src_ip_addr)
 					{
-						if (vDebugLevel > 3)
-							fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer removing attached IP address %u from DB, current_attached_networks = %d***\n",
+						gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+						if ((clk - aSrc_Dtn_IPs[i].last_time_ip) >= vHouseTime) //probabaly not doing transfers anymore
+						{
+							if (vDebugLevel > 2)
+								fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer removing attached IP address %u from DB, current_attached_networks = %d***\n",
 													ms_ctime_buf, phase2str(current_phase), aSrc_Dtn_IPs[i].src_ip_addr, currently_attached_networks); 
-						memset(&aSrc_Dtn_IPs[i],0,sizeof(sSrc_Dtn_IPs_t));
-						currently_attached_networks--;
-						continue;
+							memset(&aSrc_Dtn_IPs[i],0,sizeof(sSrc_Dtn_IPs_t));
+							currently_attached_networks--;
+						}
 					}
 				}
 			}
+
+#if 0
+			if (vIamASrcDtn)
+			{
+				for (int i = 0; i < MAX_NUM_IP_ATTACHED; i++)
+				{
+					if (aDest_Dtn_IPs[i].dest_ip_addr)
+					{
+						gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+						if ((clk - aDest_Dtn_IPs[i].last_time_ip) >= vHouseTime) //probabaly not doing transfers anymore
+						{
+							if (vDebugLevel > 2)
+								fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer removing attached IP address %u from DB, current_attached_networks = %d***\n",
+													ms_ctime_buf, phase2str(current_phase), aDest_Dtn_IPs[i].dest_ip_addr, currently_dest_networks); 
+							memset(&aDest_Dtn_IPs[i],0,sizeof(sDest_Dtn_IPs_t));
+							currently_dest_networks--;
+						}
+					}
+				}
+			}
+#endif
 		}
 
-        Pthread_mutex_unlock(&dtn_mutex);
+        //Pthread_mutex_unlock(&dtn_mutex);
 
 	if (vDebugLevel > 4)
 	{
@@ -762,7 +790,15 @@ void * fDoRunBpfCollectionPerfEventArray2(void * vargp)
 		return ((char *)1);
 	}
 	else
-		fprintf(tunLogPtr, "%s %s: *tHouseKeeping_TimerID* timer created.\n", ms_ctime_buf, phase2str(current_phase));
+		{
+                        int vRetTimer;
+			fprintf(tunLogPtr, "%s %s: *tHouseKeeping_TimerID* timer created.\n", ms_ctime_buf, phase2str(current_phase));
+                        vRetTimer = timer_settime(tHouseKeeping_TimerID, 0, &sHouseKeepingTimer, (struct itimerspec *)NULL);
+                        if (vRetTimer)
+                                fprintf(tunLogPtr, "%s %s: ***ERROR could not set Housekeeping Timer***",ms_ctime_buf, phase2str(current_phase));
+		}
+
+
 
 	fprintf(tunLogPtr,"%s %s: ***Queue occupancy threshold is set to %u\n", ms_ctime_buf, phase2str(current_phase), vQUEUE_OCCUPANCY_DELTA);
 
@@ -1138,7 +1174,6 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 	static time_t now_time = 0, last_time = 0;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
-	static int run_once = 1;
 
 	if(data + data_offset + sizeof(hop_key) > data_end) return;
 
@@ -1175,15 +1210,6 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		hop_hop_latency_threshold = egress_time - ingress_time;
 		
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-
-		if (run_once)
-		{
-			int vRetTimer;
-			run_once = 0;
-			vRetTimer = timer_settime(tHouseKeeping_TimerID, 0, &sHouseKeepingTimer, (struct itimerspec *)NULL);
-			if (vRetTimer)
-				fprintf(tunLogPtr, "%s %s: ***ERROR could not make Housekeeping Timer***",ms_ctime_buf, phase2str(current_phase));
-		}
 
 		if (Qinfo < qinfo_min_value)
 		{
@@ -3905,7 +3931,7 @@ finish_up:
 
 return (char *) 0;
 }
-#if 1
+#if 0
 double fFindRttUsingPing()
 #else
 double fFindRttUsingPing(char aDest_Ip2[])
@@ -4191,11 +4217,10 @@ void * fDoRunFindHighestRtt(void * vargp)
 	long rtt = 0, highest_rtt = 0;
 	double highest_rtt_from_bpftrace = 0.0;
 	double highest_rtt_from_ping = 0.0;
-#if 0
+#if 1
 	int vLastIpPinged = 0;
 	int count = 0;
-	char aDestIpToPing[32];
-	struct in_addr dest_ip_addr;
+	int found_ip = 0;
 #endif
 	int applied = 0, suggested = 0, nothing_done = 0;
 	int tune = 1; //1 = up, 2 = down - tune up initially
@@ -4214,37 +4239,53 @@ rttstart:
 
 		if (vIamASrcDtn)
 		{
-#if 1
+#if 0
 			highest_rtt_from_ping = fFindRttUsingPing();
 #else
 			//need to work on
 			//
 			//
-			count = 0;
-			while (!aSrc_Dtn_IPs[vLastIpPinged].src_ip_addr && count < MAX_NUM_IP_ATTACHED)
+			count = MAX_NUM_IP_ATTACHED;
+			found_ip = 0;
+search_for_ip:
+			while (aDest_Dtn_IPs[vLastIpPinged].dest_ip_addr && !found_ip && count)
 			{
-				if (vDebugLevel > 3) 
-					fprintf(tunLogPtr,"%s %s: ***in while print src_ip_addr = %u...***\n", ms_ctime_buf, phase2str(current_phase), aSrc_Dtn_IPs[vLastIpPinged].src_ip_addr);
+				if (vDebugLevel > 2) 
+					fprintf(tunLogPtr,"%s %s: ***in while print dest_ip_addr = %u...count = %d***\n", ms_ctime_buf, phase2str(current_phase), aDest_Dtn_IPs[vLastIpPinged].dest_ip_addr, count);
+				
+				highest_rtt_from_ping = fFindRttUsingPing(aDest_Dtn_IPs[vLastIpPinged].aDest_Ip2);
+				count--;
+				found_ip = 1;
+				
 				vLastIpPinged++;
-				count++;
 				if (vLastIpPinged == MAX_NUM_IP_ATTACHED)
 					vLastIpPinged = 0;
-				
-				
+
+				break;
 			}
 			
-			if (count < MAX_NUM_IP_ATTACHED)
-			{
-				dest_ip_addr.s_addr = aSrc_Dtn_IPs[vLastIpPinged].src_ip_addr;
-				sprintf(aDestIpToPing,"%s", inet_ntoa(dest_ip_addr));
-				highest_rtt_from_ping = fFindRttUsingPing(aDestIpToPing);
-			}
+			if (found_ip);
 			else
+				if (!found_ip && count)
 				{
-					if (vDebugLevel > 3) 
-						fprintf(tunLogPtr,"%s %s: ***highes rtt from ping is zero ...***\n", ms_ctime_buf, phase2str(current_phase));
-					highest_rtt_from_ping = 0; //no ips to ping
+					count--;
+					vLastIpPinged++;
+					if (vLastIpPinged == MAX_NUM_IP_ATTACHED)
+						vLastIpPinged = 0;
+
+					if (vDebugLevel > 2) 
+						fprintf(tunLogPtr,"%s %s: **still checking ..., found_ip = %d, count = %d, vLastPinged = %d***\n", 
+										ms_ctime_buf, phase2str(current_phase), found_ip, count, vLastIpPinged);
+				
+					goto search_for_ip;
 				}
+				else
+					{
+						highest_rtt_from_ping = 0;	
+						if (vDebugLevel > 2) 
+							fprintf(tunLogPtr,"%s %s: ***highes rtt from ping is zero ..., found_ip = %d, count = %d, vLastPinged = %d***\n", 
+											ms_ctime_buf, phase2str(current_phase), found_ip, count, vLastIpPinged);
+					}
 #endif
 		}
 
@@ -4829,9 +4870,68 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 		}
 		else
 			{
+
+/**************/
+				int vDest_Dtn_IP_Found = 0;
+                		int FirstD_IP_Index_Not_Exist = 0;
+                		int IPD_Found_Index = 0;
+
+				for (int i = 0; i < MAX_NUM_IP_ATTACHED; i++)
+				{
+					if (aDest_Dtn_IPs[i].dest_ip_addr == peeraddr.sin_addr.s_addr)
+					{
+						gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+						vDest_Dtn_IP_Found = 1;
+						IPD_Found_Index = i;
+						aDest_Dtn_IPs[i].currently_exist = 1;
+						aDest_Dtn_IPs[i].last_time_ip = clk;
+						break;
+					}
+					else
+						if (aDest_Dtn_IPs[i].dest_ip_addr == 0)
+						{
+							if (!FirstD_IP_Index_Not_Exist)
+								FirstD_IP_Index_Not_Exist = (i+1); //should only get set once
+						}
+				}
+
+				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+				if (!vDest_Dtn_IP_Found) //Ip does not exist
+				{
+					--FirstD_IP_Index_Not_Exist;
+					aDest_Dtn_IPs[FirstD_IP_Index_Not_Exist].dest_ip_addr = peeraddr.sin_addr.s_addr;
+					aDest_Dtn_IPs[FirstD_IP_Index_Not_Exist].currently_exist = 1;
+					aDest_Dtn_IPs[FirstD_IP_Index_Not_Exist].last_time_ip = clk;
+					currently_dest_networks++;
+					if (vDebugLevel > 1)
+						fprintf(tunLogPtr, "%s %s: ***dest traffic got set here8888***, current_dest_netwks = %d\n", 
+											ms_ctime_buf, phase2str(current_phase), currently_dest_networks);
+				}
+
+#if 1
+				if (vDebugLevel > 1)
+				{
+					gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+					if (vDest_Dtn_IP_Found) //Ip exist
+					{
+						fprintf(tunLogPtr, "%s %s: ***vDest_Dtn_IP_Found dest_ip_addr %u, IPD_Found_Index %d***\n",
+									ms_ctime_buf, phase2str(current_phase), peeraddr.sin_addr.s_addr, IPD_Found_Index);
+					}
+					else
+						{
+							fprintf(tunLogPtr, "%s %s: ***vDest_Dtn_IP_Found ****NOT FOUND***  dest_ip_addr %u, FirstD_IP_Index_Not_Exist %d***\n",
+									ms_ctime_buf, phase2str(current_phase), peeraddr.sin_addr.s_addr, FirstD_IP_Index_Not_Exist);
+						}
+				}
+#endif
+
+/*******************/
+
 				char *peeraddrpresn = inet_ntoa(peeraddr.sin_addr);
 				sprintf(aDest_Ip2_Binary,"%02X",peeraddr.sin_addr.s_addr);
-				sprintf(aDest_Dtn_IPs[currently_dest_networks].aDest_Ip2_Binary_addr,"%02X",peeraddr.sin_addr.s_addr);
+				if (!vDest_Dtn_IP_Found) //Ip connection did not exist
+					sprintf(aDest_Dtn_IPs[FirstD_IP_Index_Not_Exist].aDest_Ip2_Binary,"%02X",peeraddr.sin_addr.s_addr);
+
 				//total_time_passed = 0;
 				if (vDebugLevel > 1)
 				{
@@ -4845,11 +4945,13 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 				vIamASrcDtn = 1;	
 				strcpy(aDest_Ip2,peeraddrpresn);
 
-				strcpy(aDest_Dtn_IPs[currently_dest_networks].aDest_Ip2_addr,peeraddrpresn);
-				aDest_Dtn_IPs[currently_dest_networks].currently_exist = 1;
-				currently_dest_networks++;
-				if (currently_dest_networks == MAX_NUM_IP_ATTACHED)
-					currently_dest_networks = 0;
+				if (!vDest_Dtn_IP_Found) //Ip connection did not exist
+				{
+					strcpy(aDest_Dtn_IPs[FirstD_IP_Index_Not_Exist].aDest_Ip2,peeraddrpresn);
+					aDest_Dtn_IPs[FirstD_IP_Index_Not_Exist].currently_exist = 1;
+				}
+				//if (currently_dest_networks == MAX_NUM_IP_ATTACHED)
+				//	currently_dest_networks = 0;
 			}
 
 		retval = getsockname(connfd, (struct sockaddr *) &localaddr, &localaddrlen);
@@ -5144,6 +5246,7 @@ int main(int argc, char **argv)
 	memset(aDest_Ip2_Binary,0,sizeof(aDest_Ip2_Binary));
 	memset(aLocal_Ip,0,sizeof(aLocal_Ip));
 	memset(aSrc_Dtn_IPs, 0, sizeof (aSrc_Dtn_IPs));
+	memset(aDest_Dtn_IPs, 0, sizeof (aDest_Dtn_IPs));
 	src_ip_addr.y = 0;
 #ifdef INCLUDE_SRC_PORT
 	src_port = 0;
