@@ -30,7 +30,7 @@
 int sMsgsIn = 0;
 int sMsgsOut = 0;
 unsigned int vHouseKeepingTime = 10000000; //10 million usecs = 10 secs
-int vHouseTime = 10;
+int vHouseTime = 18;
 static double previous_average_tx_Gbits_per_sec = 0.0;
 
 #ifdef HPNSSH_QFACTOR_BINN
@@ -190,8 +190,9 @@ static int new_traffic = 0;
 static int rx_traffic = 0;
 static time_t now_time = 0;
 static time_t last_time = 0;
-static  int vIamASrcDtn = 0;
-static  int vIamADestDtn = 0;
+static int vIamASrcDtn = 0;
+static int vIamADestDtn = 0;
+static int vJustGotConnected = 0;
 static double rtt_threshold = 2.0;
 static int rtt_factor = 4;
 void fStartEvaluationTimer(__u32);
@@ -576,12 +577,13 @@ void tHouseKeeping_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	//while (pthread_mutex_trylock(&dtn_mutex) != 0);
 
-	if (!previous_average_tx_Gbits_per_sec)
+#if 1
+	if (!previous_average_tx_Gbits_per_sec && !vJustGotConnected)
 	{
 		
 		memset(aSrc_Dtn_IPs, 0, sizeof (aSrc_Dtn_IPs));
 		currently_attached_networks = 0;
-//		memset(aDest_Dtn_IPs, 0, sizeof (aDest_Dtn_IPs));
+		memset(aDest_Dtn_IPs, 0, sizeof (aDest_Dtn_IPs));
 		currently_dest_networks = 0;
 
 		if (vDebugLevel > 2)
@@ -592,7 +594,9 @@ void tHouseKeeping_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 		}
 	}
 	else
+#endif
 		{
+			vJustGotConnected = 0;
 			if (vIamADestDtn)
 			{
 				for (int i = 0; i < MAX_NUM_IP_ATTACHED; i++)
@@ -612,7 +616,7 @@ void tHouseKeeping_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 				}
 			}
 
-#if 0
+#if 1
 			if (vIamASrcDtn)
 			{
 				for (int i = 0; i < MAX_NUM_IP_ATTACHED; i++)
@@ -2363,8 +2367,11 @@ double fCheckAppBandwidth(char app[])
 return 0;
 }
 
-
+#if 0
 double fGetAppBandWidth()
+#else
+double fGetAppBandWidth(char aDest_Ip2[], int index)
+#endif
 {
 
 	time_t clk;
@@ -2373,7 +2380,7 @@ double fGetAppBandWidth()
 	char buffer[256];
 	FILE *pipe;
 	char try[1024];
-	int found = 0;
+	int foundlsof = 0;
 	static int nolsof = 0;
 	char * q = 0;
 	char value[256];
@@ -2399,13 +2406,18 @@ double fGetAppBandWidth()
 		return 0;
 	}
 
-	found = 1;
+	foundlsof = 1;
 
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+	if (vDebugLevel > 2)
+		fprintf(tunLogPtr,"\n%s %s: ***Getting app bandwidth for ****%s***\n", ms_ctime_buf, phase2str(current_phase), aDest_Ip2);
 	while (!feof(pipe))
 	{
 		// use buffer to read and add to result
 		if (fgets(buffer, 256, pipe) != NULL)
 		{
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+			aDest_Dtn_IPs[index].last_time_ip = clk; //traffic still on this link
 			memset(value,0,256);
 			q = strchr(buffer,' ');
 			if (q)
@@ -2425,16 +2437,17 @@ double fGetAppBandWidth()
 
 	pclose(pipe);
 
-	if (!found)
+	if (!foundlsof)
 	{
 		nolsof = 1;
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-		fprintf(tunLogPtr,"\n%s %s: ***!!!ERROR!!!**** Could not find \"lsof\" to get App Bandwidth***\n", ms_ctime_buf, phase2str(current_phase));
+		if (vDebugLevel > 2)
+			fprintf(tunLogPtr,"\n%s %s: ***!!!ERROR!!!**** Could not find \"lsof\" to get App Bandwidth***\n", ms_ctime_buf, phase2str(current_phase));
 	}
 
 	fflush(tunLogPtr);
 
-return found;
+return foundlsof;
 }
 
 #ifdef HPNSSH_QFACTOR
@@ -2896,6 +2909,7 @@ void * fDoRunGetThresholds(void * vargp)
 	int tune = 1; //1 = up, 2 = down - tune up initially
 	static unsigned long count = 0;
 	static int vFirstTimeThru = 1;
+	int vLastIpFound = 0, vIpCount = 0, vTwiceInaRow = 0;
 
 	sprintf(aNicSetting,"tc qdisc del dev %s root fq 2>/dev/null", netDevice);
 
@@ -2904,9 +2918,26 @@ void * fDoRunGetThresholds(void * vargp)
 	/*sprintf(try,"bpftrace -e \'BEGIN { @name;} kfunc:dev_get_stats { $nd = (struct net_device *) args->dev; @name = $nd->name; } kretfunc:dev_get_stats /@name == \"%s\"/ { $nd = (struct net_device *) args->dev; $rtnl = (struct rtnl_link_stats64 *) args->storage; $rx_bytes = $rtnl->rx_bytes; $tx_bytes = $rtnl->tx_bytes; printf(\"%s %s\\n\", $tx_bytes, $rx_bytes); time(\"%s\"); exit(); } END { clear(@name); }\'",netDevice,"%lu","%lu","%S");*/
 
 start:
-	if (vDebugLevel > 2 && previous_average_tx_Gbits_per_sec && vIamASrcDtn)
+	if (previous_average_tx_Gbits_per_sec && vIamASrcDtn)
 	{
-		fGetAppBandWidth();
+		vIpCount = MAX_NUM_IP_ATTACHED;
+                        
+		while (!aDest_Dtn_IPs[vLastIpFound].dest_ip_addr && vIpCount)
+		{
+			if (vDebugLevel > 2)
+				fprintf(tunLogPtr,"%s %s: ***looking for app ip addrs vLastIpFound= %d, ...vIpCount = %d***\n", ms_ctime_buf, phase2str(current_phase), vLastIpFound, vIpCount);
+			vIpCount--;
+                        vLastIpFound++;
+                        if (vLastIpFound == MAX_NUM_IP_ATTACHED)
+				vLastIpFound = 0;
+                }
+		if (vIpCount)
+		{
+			fGetAppBandWidth(aDest_Dtn_IPs[vLastIpFound].aDest_Ip2, vLastIpFound);
+                        vLastIpFound++;
+                        if (vLastIpFound == MAX_NUM_IP_ATTACHED)
+				vLastIpFound = 0;
+		}
 	//	sleep(1);
 	}
 #if 1
@@ -2987,14 +3018,20 @@ start:
 	else
 		fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on the link ****  Mode %d Pacing %d\n",ms_ctime_buf, phase2str(current_phase), gTuningMode, vResetPacingBack);
 #endif
-	if (!tx_kbits_per_sec)
+	if (!tx_kbits_per_sec) //sometimes links with longer RTTs take a while to show transmit/receive bits on a link
 	{
-		vIamASrcDtn = 0; //reset
-		vIamADestDtn = 0;
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
-		if (vDebugLevel > 9)
-			fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on link has stopped for now\n",ms_ctime_buf, phase2str(current_phase));
+		if (vDebugLevel > 2)
+			fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on link has stopped for now, TwiceInaRow = %d\n",ms_ctime_buf, phase2str(current_phase), vTwiceInaRow);
+
+		if (vTwiceInaRow)
+		{
+			vIamASrcDtn = 0; //reset
+			vIamADestDtn = 0;
+		}
+		else
+			vTwiceInaRow = 1;
 
 		if (vq_TimerIsSet) //Turn off this timer since transmission has stopped
 		{
@@ -3058,6 +3095,7 @@ start:
 	}
 	else
 	{
+		vTwiceInaRow = 0;
 		if (vDebugLevel > 9)
 			fprintf(tunLogPtr,"%s %s: ***INFO***: Activity is on the link***\n",ms_ctime_buf, phase2str(current_phase));
 	}
@@ -4220,7 +4258,6 @@ void * fDoRunFindHighestRtt(void * vargp)
 #if 1
 	int vLastIpPinged = 0;
 	int count = 0;
-	int found_ip = 0;
 #endif
 	int applied = 0, suggested = 0, nothing_done = 0;
 	int tune = 1; //1 = up, 2 = down - tune up initially
@@ -4241,7 +4278,7 @@ rttstart:
 		{
 #if 0
 			highest_rtt_from_ping = fFindRttUsingPing();
-#else
+#elif 0
 			//need to work on
 			//
 			//
@@ -4287,6 +4324,42 @@ search_for_ip:
 											ms_ctime_buf, phase2str(current_phase), found_ip, count, vLastIpPinged);
 					}
 #endif
+
+/***********************/
+#if 1
+		count = MAX_NUM_IP_ATTACHED;
+
+                while (!aDest_Dtn_IPs[vLastIpPinged].dest_ip_addr && count)
+                {
+                        if (vDebugLevel > 2)
+                                fprintf(tunLogPtr,"%s %s: ***looking for ping ip addrs vLastIpPinged= %d, ...count = %d***\n", ms_ctime_buf, phase2str(current_phase), vLastIpPinged, count);
+                        count--;
+                        vLastIpPinged++;
+                        if (vLastIpPinged == MAX_NUM_IP_ATTACHED)
+                                vLastIpPinged = 0;
+                }
+                if (count)
+                {
+			highest_rtt_from_ping = fFindRttUsingPing(aDest_Dtn_IPs[vLastIpPinged].aDest_Ip2);
+                        vLastIpPinged++;
+                        if (vLastIpPinged == MAX_NUM_IP_ATTACHED)
+                                vLastIpPinged = 0;
+                }
+		else
+			{
+				highest_rtt_from_ping = 0;	
+				if (vDebugLevel > 2) 
+					fprintf(tunLogPtr,"%s %s: ***highes rtt from ping is zero ..., count = %d, vLastPinged = %d***\n", 
+									ms_ctime_buf, phase2str(current_phase), count, vLastIpPinged);
+			}
+#endif
+
+
+/********************/
+
+
+
+
 		}
 
 		if (vDebugLevel > 2) 
@@ -4952,6 +5025,7 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 				}
 				//if (currently_dest_networks == MAX_NUM_IP_ATTACHED)
 				//	currently_dest_networks = 0;
+				vJustGotConnected = 1; //try to ensure that we don't clean up DB too early
 			}
 
 		retval = getsockname(connfd, (struct sockaddr *) &localaddr, &localaddrlen);
