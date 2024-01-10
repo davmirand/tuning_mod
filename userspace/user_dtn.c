@@ -2351,9 +2351,11 @@ double fCheckAppBandwidth(char app[])
 			vBandWidthInBits = ((8 * vBandWidthInBits) / 1000);	//really became kilobits here
 			vBandWidthInGBits = vBandWidthInBits/(double)(1000000);
 			
-			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-
-			fprintf(tunLogPtr,"%s %s: ***The app \"%s\" is using a Bandwidth of %.2f Gb/s\n", ms_ctime_buf, phase2str(current_phase), app, vBandWidthInGBits); //only need this one buffer
+			if (vDebugLevel > 2)
+			{
+				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+				fprintf(tunLogPtr,"%s %s: ***The app \"%s\" is using a Bandwidth of %.2f Gb/s\n", ms_ctime_buf, phase2str(current_phase), app, vBandWidthInGBits); //only need this one buffer
+			}
 			while (fgets(buffer, 128, pipe) != NULL); //dump the buffers after
 			break;
 		}
@@ -4278,88 +4280,33 @@ rttstart:
 		{
 #if 0
 			highest_rtt_from_ping = fFindRttUsingPing();
-#elif 0
-			//need to work on
-			//
-			//
+#else
 			count = MAX_NUM_IP_ATTACHED;
-			found_ip = 0;
-search_for_ip:
-			while (aDest_Dtn_IPs[vLastIpPinged].dest_ip_addr && !found_ip && count)
+
+			while (!aDest_Dtn_IPs[vLastIpPinged].dest_ip_addr && count)
 			{
-				if (vDebugLevel > 2) 
-					fprintf(tunLogPtr,"%s %s: ***in while print dest_ip_addr = %u...count = %d***\n", ms_ctime_buf, phase2str(current_phase), aDest_Dtn_IPs[vLastIpPinged].dest_ip_addr, count);
-				
-				highest_rtt_from_ping = fFindRttUsingPing(aDest_Dtn_IPs[vLastIpPinged].aDest_Ip2);
+				if (vDebugLevel > 2)
+					fprintf(tunLogPtr,"%s %s: ***looking for ping ip addrs vLastIpPinged= %d, ...count = %d***\n", ms_ctime_buf, phase2str(current_phase), vLastIpPinged, count);
 				count--;
-				found_ip = 1;
-				
+				vLastIpPinged++;
+				if (vLastIpPinged == MAX_NUM_IP_ATTACHED)
+				vLastIpPinged = 0;
+                	}
+			if (count)
+			{
+				highest_rtt_from_ping = fFindRttUsingPing(aDest_Dtn_IPs[vLastIpPinged].aDest_Ip2);
 				vLastIpPinged++;
 				if (vLastIpPinged == MAX_NUM_IP_ATTACHED)
 					vLastIpPinged = 0;
-
-				break;
 			}
-			
-			if (found_ip);
 			else
-				if (!found_ip && count)
 				{
-					count--;
-					vLastIpPinged++;
-					if (vLastIpPinged == MAX_NUM_IP_ATTACHED)
-						vLastIpPinged = 0;
-
+					highest_rtt_from_ping = 0;	
 					if (vDebugLevel > 2) 
-						fprintf(tunLogPtr,"%s %s: **still checking ..., found_ip = %d, count = %d, vLastPinged = %d***\n", 
-										ms_ctime_buf, phase2str(current_phase), found_ip, count, vLastIpPinged);
-				
-					goto search_for_ip;
+						fprintf(tunLogPtr,"%s %s: ***highes rtt from ping is zero ..., count = %d, vLastPinged = %d***\n", 
+					ms_ctime_buf, phase2str(current_phase), count, vLastIpPinged);
 				}
-				else
-					{
-						highest_rtt_from_ping = 0;	
-						if (vDebugLevel > 2) 
-							fprintf(tunLogPtr,"%s %s: ***highes rtt from ping is zero ..., found_ip = %d, count = %d, vLastPinged = %d***\n", 
-											ms_ctime_buf, phase2str(current_phase), found_ip, count, vLastIpPinged);
-					}
 #endif
-
-/***********************/
-#if 1
-		count = MAX_NUM_IP_ATTACHED;
-
-                while (!aDest_Dtn_IPs[vLastIpPinged].dest_ip_addr && count)
-                {
-                        if (vDebugLevel > 2)
-                                fprintf(tunLogPtr,"%s %s: ***looking for ping ip addrs vLastIpPinged= %d, ...count = %d***\n", ms_ctime_buf, phase2str(current_phase), vLastIpPinged, count);
-                        count--;
-                        vLastIpPinged++;
-                        if (vLastIpPinged == MAX_NUM_IP_ATTACHED)
-                                vLastIpPinged = 0;
-                }
-                if (count)
-                {
-			highest_rtt_from_ping = fFindRttUsingPing(aDest_Dtn_IPs[vLastIpPinged].aDest_Ip2);
-                        vLastIpPinged++;
-                        if (vLastIpPinged == MAX_NUM_IP_ATTACHED)
-                                vLastIpPinged = 0;
-                }
-		else
-			{
-				highest_rtt_from_ping = 0;	
-				if (vDebugLevel > 2) 
-					fprintf(tunLogPtr,"%s %s: ***highes rtt from ping is zero ..., count = %d, vLastPinged = %d***\n", 
-									ms_ctime_buf, phase2str(current_phase), count, vLastIpPinged);
-			}
-#endif
-
-
-/********************/
-
-
-
-
 		}
 
 		if (vDebugLevel > 2) 
