@@ -567,6 +567,7 @@ void record_activity(char * pActivity);
 #define SIGALRM_MSG "SIGALRM received.\n"
 int vq_h_TimerIsSet = 0;
 int vq_TimerIsSet = 0;
+static int vTwiceInaRow = 0;
 
 void tHouseKeeping_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 {
@@ -577,9 +578,11 @@ void tHouseKeeping_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	//while (pthread_mutex_trylock(&dtn_mutex) != 0);
 
-#if 1
-	if (!previous_average_tx_Gbits_per_sec && !vJustGotConnected)
+#if 0
+	if (!previous_average_tx_Gbits_per_sec && !vJustGotConnected && vTwiceInaRow)
 	{
+		vIamASrcDtn = 0; //reset
+		vIamADestDtn = 0;
 		
 		memset(aSrc_Dtn_IPs, 0, sizeof (aSrc_Dtn_IPs));
 		currently_attached_networks = 0;
@@ -606,14 +609,16 @@ void tHouseKeeping_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 						gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 						if ((clk - aSrc_Dtn_IPs[i].last_time_ip) >= vHouseTime) //probabaly not doing transfers anymore
 						{
-							if (vDebugLevel > 2)
-								fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer removing attached IP address %u from DB, current_attached_networks = %d***\n",
+							if (vDebugLevel > 4)
+								fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer removing attached IP address %u from DB, current_source_networks = %d***\n",
 													ms_ctime_buf, phase2str(current_phase), aSrc_Dtn_IPs[i].src_ip_addr, currently_attached_networks); 
 							memset(&aSrc_Dtn_IPs[i],0,sizeof(sSrc_Dtn_IPs_t));
 							currently_attached_networks--;
 						}
 					}
 				}
+				if (!currently_attached_networks)
+					vIamADestDtn = 0;
 			}
 
 #if 1
@@ -626,21 +631,23 @@ void tHouseKeeping_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 						gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 						if ((clk - aDest_Dtn_IPs[i].last_time_ip) >= vHouseTime) //probabaly not doing transfers anymore
 						{
-							if (vDebugLevel > 2)
-								fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer removing attached IP address %u from DB, current_attached_networks = %d***\n",
+							if (vDebugLevel > 4)
+								fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer removing attached IP address %u from DB, current_dest_networks = %d***\n",
 													ms_ctime_buf, phase2str(current_phase), aDest_Dtn_IPs[i].dest_ip_addr, currently_dest_networks); 
 							memset(&aDest_Dtn_IPs[i],0,sizeof(sDest_Dtn_IPs_t));
 							currently_dest_networks--;
 						}
 					}
 				}
+				if (!currently_dest_networks)
+					vIamASrcDtn = 0;
 			}
 #endif
 		}
 
         //Pthread_mutex_unlock(&dtn_mutex);
 
-	if (vDebugLevel > 4)
+	if (vDebugLevel > 8)
 	{
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer done. previous_average_tx_Gbits_per_sec = %f***\n",ms_ctime_buf, phase2str(current_phase), previous_average_tx_Gbits_per_sec); 
@@ -2411,7 +2418,7 @@ double fGetAppBandWidth(char aDest_Ip2[], int index)
 	foundlsof = 1;
 
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-	if (vDebugLevel > 2)
+	if (vDebugLevel > 5)
 		fprintf(tunLogPtr,"\n%s %s: ***Getting app bandwidth for ****%s***\n", ms_ctime_buf, phase2str(current_phase), aDest_Ip2);
 	while (!feof(pipe))
 	{
@@ -2911,7 +2918,7 @@ void * fDoRunGetThresholds(void * vargp)
 	int tune = 1; //1 = up, 2 = down - tune up initially
 	static unsigned long count = 0;
 	static int vFirstTimeThru = 1;
-	int vLastIpFound = 0, vIpCount = 0, vTwiceInaRow = 0;
+	int vLastIpFound = 0, vIpCount = 0;
 
 	sprintf(aNicSetting,"tc qdisc del dev %s root fq 2>/dev/null", netDevice);
 
@@ -2926,7 +2933,7 @@ start:
                         
 		while (!aDest_Dtn_IPs[vLastIpFound].dest_ip_addr && vIpCount)
 		{
-			if (vDebugLevel > 2)
+			if (vDebugLevel > 5)
 				fprintf(tunLogPtr,"%s %s: ***looking for app ip addrs vLastIpFound= %d, ...vIpCount = %d***\n", ms_ctime_buf, phase2str(current_phase), vLastIpFound, vIpCount);
 			vIpCount--;
                         vLastIpFound++;
@@ -3020,18 +3027,14 @@ start:
 	else
 		fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on the link ****  Mode %d Pacing %d\n",ms_ctime_buf, phase2str(current_phase), gTuningMode, vResetPacingBack);
 #endif
-	if (!tx_kbits_per_sec) //sometimes links with longer RTTs take a while to show transmit/receive bits on a link
+	if (!tx_kbits_per_sec && !rx_kbits_per_sec) //sometimes links with longer RTTs take a while to show transmit/receive bits on a link
 	{
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 
-		if (vDebugLevel > 2)
+		if (vDebugLevel > 9)
 			fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on link has stopped for now, TwiceInaRow = %d\n",ms_ctime_buf, phase2str(current_phase), vTwiceInaRow);
 
-		if (vTwiceInaRow)
-		{
-			vIamASrcDtn = 0; //reset
-			vIamADestDtn = 0;
-		}
+		if (vTwiceInaRow);
 		else
 			vTwiceInaRow = 1;
 
@@ -3718,7 +3721,7 @@ void *doRunFindRetransmissionRate(void * vargp)
 	int x, vRateCount = 0;
 	int fRateArrayDone = 0;
 
-	while (aDest_Ip2[0] == 0 && !vIamASrcDtn)
+	while (aDest_Ip2[0] == 0)
 	{
 		if (vDebugLevel > 9)
 		{
@@ -3729,12 +3732,27 @@ void *doRunFindRetransmissionRate(void * vargp)
 		sleep(3);
 	}
 	
+	while (!vIamASrcDtn)
+	{
+		if (vDebugLevel > 9)
+		{
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+			fprintf(tunLogPtr,"%s %s: ***Waiting to become a source DTN to start Retransmission Rate thread**\n", ms_ctime_buf, phase2str(current_phase));
+			fflush(tunLogPtr);
+		}
+		sleep(3);
+	}
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Starting Find Retransmission Rate thread ...***\n", ms_ctime_buf, phase2str(current_phase));	
 
 	sprintf(try,"%s","cat /sys/fs/bpf/tcp4");
 
 retrans:
+	while (!vIamASrcDtn)
+	{
+		//went back to not being a src dtn at the moment
+		msleep(2000);
+	}
 	if(vDebugLevel < 6)
 		COUNT_TO_LOG = 100;
 	if (vDebugLevel > 5)
@@ -4285,7 +4303,7 @@ rttstart:
 
 			while (!aDest_Dtn_IPs[vLastIpPinged].dest_ip_addr && count)
 			{
-				if (vDebugLevel > 2)
+				if (vDebugLevel > 5)
 					fprintf(tunLogPtr,"%s %s: ***looking for ping ip addrs vLastIpPinged= %d, ...count = %d***\n", ms_ctime_buf, phase2str(current_phase), vLastIpPinged, count);
 				count--;
 				vLastIpPinged++;
@@ -4923,13 +4941,13 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 					aDest_Dtn_IPs[FirstD_IP_Index_Not_Exist].currently_exist = 1;
 					aDest_Dtn_IPs[FirstD_IP_Index_Not_Exist].last_time_ip = clk;
 					currently_dest_networks++;
-					if (vDebugLevel > 1)
-						fprintf(tunLogPtr, "%s %s: ***dest traffic got set here8888***, current_dest_netwks = %d\n", 
+					if (vDebugLevel > 4)
+						fprintf(tunLogPtr, "%s %s: ***dest traffic got set here***, current_dest_netwks = %d\n", 
 											ms_ctime_buf, phase2str(current_phase), currently_dest_networks);
 				}
 
 #if 1
-				if (vDebugLevel > 1)
+				if (vDebugLevel > 4)
 				{
 					gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 					if (vDest_Dtn_IP_Found) //Ip exist
