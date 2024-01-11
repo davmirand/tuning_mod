@@ -3694,6 +3694,312 @@ return found;
 
 static int COUNT_TO_LOG	= 100;
 #define NUM_RATES_TO_USE 10
+#if 0
+void *doRunFindRetransmissionRate(void * vargp)
+{
+	time_t clk;
+	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
+	char buffer[256];
+	FILE *pipe;
+	char try[1024];
+	unsigned long total_retrans = 0;
+	unsigned long packets_sent = 0;
+	unsigned long int_total_retrans = 0;
+	unsigned long int_packets_sent = 0;
+	unsigned long vSomeIntRetranTran = 0;
+	unsigned long vSomeIntPacketsTran  = 0;
+	double vIntRetransmissionRate = 0, vSomeTran = 0, vAvgRetransmissionRate = 0, vTransferRetransmissionRate = 0;
+	double vAvgIntRetransmissionRate = 0, vSomeIntTran = 0;
+	unsigned long pre_total_retrans = 0;
+	unsigned long pre_packets_sent = 0;
+        char * foundstr = 0;
+	int found = 0;
+	unsigned int countLog = 0;
+	double aSaveRates[NUM_RATES_TO_USE];
+	unsigned long aSaveIntRetrans[NUM_RATES_TO_USE];
+	unsigned long aSaveIntPackets[NUM_RATES_TO_USE];
+	int x, vRateCount = 0;
+	int fRateArrayDone = 0;
+
+	while (aDest_Ip2[0] == 0)
+	{
+		if (vDebugLevel > 9)
+		{
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+			fprintf(tunLogPtr,"%s %s: ***Waiting on Peer (Dest) Ip addres***\n", ms_ctime_buf, phase2str(current_phase));
+			fflush(tunLogPtr);
+		}
+		sleep(3);
+	}
+	
+	while (!vIamASrcDtn)
+	{
+		if (vDebugLevel > 9)
+		{
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+			fprintf(tunLogPtr,"%s %s: ***Waiting to become a source DTN to start Retransmission Rate thread**\n", ms_ctime_buf, phase2str(current_phase));
+			fflush(tunLogPtr);
+		}
+		sleep(3);
+	}
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+	fprintf(tunLogPtr,"%s %s: ***Starting Find Retransmission Rate thread ...***\n", ms_ctime_buf, phase2str(current_phase));	
+
+	sprintf(try,"%s","cat /sys/fs/bpf/tcp4");
+
+retrans:
+	while (!vIamASrcDtn)
+	{
+		//went back to not being a src dtn at the moment
+		msleep(2000);
+	}
+	if(vDebugLevel < 6)
+		COUNT_TO_LOG = 100;
+	if (vDebugLevel > 5)
+		COUNT_TO_LOG = 50;
+	if (vDebugLevel > 8)
+		COUNT_TO_LOG = 0; //dump more debug from here
+
+	total_retrans = 0;
+	packets_sent = 0;
+	//int_total_retrans = 0;
+	//int_packets_sent = 0;
+        foundstr = 0;
+	found = 0;
+	pre_total_retrans = 0;
+	pre_packets_sent = 0;
+	vTransferRetransmissionRate = 0;
+
+	if (!previous_average_tx_Gbits_per_sec)
+		msleep(1000); //nothing going on. Get some rest
+#if 0
+	else 
+		fprintf(tunLogPtr,"%s %s: ***Starting of Retransmission and packets %u***\n", ms_ctime_buf, phase2str(current_phase), countLog);
+#endif
+	pipe = popen(try,"r");
+	if (!pipe)
+	{
+		printf("popen failed!\n");
+		printf("here2222***\n");
+		return (char *)0;
+	}
+
+	int thiscount = 0;
+	int thisfoundcnt = 0;
+	while (!feof(pipe))
+	{
+		thiscount++;
+		// use buffer to read and add to result
+		if (fgets(buffer, 256, pipe) != NULL);
+		else
+			{
+				goto finish_up;
+			}
+
+		foundstr = strstr(buffer,aDest_Ip2_Binary);
+		//should look like example: "11: 012E030A:8B2E 022E030A:1451 01 04DC97C7:00000000 01:00000014 00000000     0        0 13297797 2 00000000367a51de 41 0 0 3722 500 totrt 79""
+                if (foundstr)
+                {
+			thisfoundcnt++;
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+			foundstr = strstr(foundstr,"totrt");
+			if (foundstr)
+			{
+				char aValue[32];
+				int count = 0;
+				memset(aValue,0,32);
+				foundstr = foundstr + 6;
+#if 0
+				if (*foundstr == '0')
+					continue; //no need to count zeros
+#endif
+				while (isdigit(*foundstr))
+                		{
+                        		aValue[count++] = *foundstr;
+					foundstr++;
+				}
+
+				aValue[count] = 0;
+				if (count)
+				{
+				
+					if ((vDebugLevel > 8) && (countLog >= COUNT_TO_LOG))
+					{
+						fprintf(tunLogPtr,"%s %s: ***actual string with retransmission is \"%s\"", ms_ctime_buf, phase2str(current_phase),buffer);
+					}
+
+					pre_total_retrans = strtoul(aValue, (char **)0, 10);
+					total_retrans += pre_total_retrans;
+
+					// get packets sent now
+					memset(aValue,0,32);
+					count = 0;
+					foundstr++;
+					
+					while (isdigit(*foundstr))
+                			{
+                        			aValue[count++] = *foundstr;
+						foundstr++;
+					}
+
+					aValue[count] = 0;
+					if (count)
+					{
+						pre_packets_sent = strtoul(aValue, (char **)0, 10 );
+						packets_sent += pre_packets_sent;
+					}
+
+
+					if ((vDebugLevel > 5) && (countLog >= COUNT_TO_LOG)) 
+					{
+						fprintf(tunLogPtr,"%s %s: ***pre_packets_sent = %lu, pre_total_retransmissions so far  is %lu\n", 
+								ms_ctime_buf, phase2str(current_phase), pre_packets_sent, pre_total_retrans);
+					}
+
+					found = 1;
+				}
+                	}
+		}
+		else
+			continue;
+	}
+
+finish_up:
+	if ((vDebugLevel > 3)) 
+	{
+		fprintf(tunLogPtr,"%s %s: ***thiscount = %d, thisfoundcnt = %d\n", 
+				ms_ctime_buf, phase2str(current_phase), thiscount, thisfoundcnt);
+	}
+	pclose(pipe);
+	if (found)
+	{
+		vTransferRetransmissionRate = (total_retrans/(double)packets_sent) * 100.0;
+
+		if (packets_sent > int_packets_sent)
+		{
+			int_total_retrans = total_retrans - int_total_retrans;
+			int_packets_sent = packets_sent - int_packets_sent;
+		}
+		else
+			{
+				int_total_retrans = 0; //reset at end
+				int_packets_sent = 0;
+			}
+
+		if (int_packets_sent)
+			vIntRetransmissionRate = (int_total_retrans/(double)int_packets_sent) * 100.0;
+		else
+			vIntRetransmissionRate = 0.0;
+
+		if (vRateCount < NUM_RATES_TO_USE)
+		{
+			aSaveRates[vRateCount] = vIntRetransmissionRate;
+			aSaveIntRetrans[vRateCount] = int_total_retrans;
+			aSaveIntPackets[vRateCount] = int_packets_sent;
+			vRateCount++;
+		}
+		else
+			{
+				fRateArrayDone = 1;
+				aSaveRates[0] = vIntRetransmissionRate;
+				aSaveIntRetrans[0] = int_total_retrans;
+				aSaveIntPackets[0] = int_packets_sent;
+				vRateCount = 1;
+			}
+
+		vSomeTran = 0;
+		vSomeIntTran = 0;
+		vSomeIntRetranTran = 0;
+		vSomeIntPacketsTran  = 0;
+		if (fRateArrayDone)
+		{
+			for (x=0; x < NUM_RATES_TO_USE; x++)
+			{
+				vSomeTran = vSomeTran + aSaveRates[x];
+				vSomeIntRetranTran = vSomeIntRetranTran + aSaveIntRetrans[x];
+				vSomeIntPacketsTran  = vSomeIntPacketsTran + aSaveIntPackets[x];
+			}
+			
+			vSomeTran = vSomeTran/NUM_RATES_TO_USE;
+
+			if (vSomeIntPacketsTran)
+			{
+				vSomeIntTran = (vSomeIntRetranTran/(double)vSomeIntPacketsTran) * 100.0;
+				vSomeIntTran = vSomeIntTran/NUM_RATES_TO_USE;
+			}
+			else
+				vSomeIntTran = 0;
+
+		}
+		else
+			{
+				for (x=0; x < vRateCount; x++)
+				{
+					vSomeTran = vSomeTran + aSaveRates[x];
+					vSomeIntRetranTran = vSomeIntRetranTran + aSaveIntRetrans[x];
+					vSomeIntPacketsTran  = vSomeIntPacketsTran + aSaveIntPackets[x];
+				}
+				
+				if (vRateCount > 0)
+				{
+					vSomeTran = vSomeTran/vRateCount;
+				
+					if (vSomeIntPacketsTran)
+					{
+						vSomeIntTran = (vSomeIntRetranTran/(double)vSomeIntPacketsTran) * 100.0;
+						vSomeIntTran = vSomeIntTran/vRateCount;
+					}
+					else
+						vSomeIntTran = 0;
+				}
+			}
+
+		//vRetransmissionRate = vAvgRetransmissionRate = vSomeTran;
+		vAvgRetransmissionRate = vSomeTran;
+		vRetransmissionRate = vAvgIntRetransmissionRate = vSomeIntTran;
+
+		if ((vDebugLevel > 4) && previous_average_tx_Gbits_per_sec && (countLog >= COUNT_TO_LOG))
+		{
+			if (int_total_retrans)
+				fprintf(tunLogPtr,"%s %s: ***RETRAN*** total packets_sent = %lu, total retransmissions = %lu, last_int_packets_sent = %lu, *NEW* last_int_retrans = %lu, vRateCount = %d, vSomeIntRetrans = %lu, vSomeIntPackets = %lu\n", 
+							ms_ctime_buf, phase2str(current_phase), packets_sent, total_retrans, int_packets_sent, int_total_retrans, vRateCount, vSomeIntRetranTran, vSomeIntPacketsTran);
+			else
+				fprintf(tunLogPtr,"%s %s: ***RETRAN*** total packets_sent = %lu, total retransmissions = %lu, last_int_packets_sent = %lu, last_int_retrans = %lu, vRateCount = %d, vSomeIntRetrans = %lu, vSomeIntPackets = %lu\n", 
+							ms_ctime_buf, phase2str(current_phase), packets_sent, total_retrans, int_packets_sent, int_total_retrans, vRateCount, vSomeIntRetranTran, vSomeIntPacketsTran);
+		}
+
+		int_packets_sent = packets_sent;
+		int_total_retrans = total_retrans;
+	}
+	else
+		{
+			int_total_retrans = int_packets_sent = vRateCount = vSomeTran = fRateArrayDone = 0;
+			if ((vDebugLevel > 5) && previous_average_tx_Gbits_per_sec && (countLog >= COUNT_TO_LOG))
+				fprintf(tunLogPtr,"%s %s: ***RETRAN*** No relevant packets found, packets_sent = %lu, total_retrans = %lu\n", 
+									ms_ctime_buf, phase2str(current_phase), packets_sent, total_retrans);
+		}
+
+	fflush(tunLogPtr);
+
+	msleep(100); //sleep 100 millisecs
+
+	if ((vDebugLevel > 3) && previous_average_tx_Gbits_per_sec && (countLog >= COUNT_TO_LOG))
+	{
+		fprintf(tunLogPtr,"%s %s: ***RETRAN*** Retransmission rate of transfer = %.5f,  AvgRetransmissionRate over last %d rates is %.5f, AvgIntRetransmissionRate is %.5f\n", 
+				ms_ctime_buf, phase2str(current_phase), vTransferRetransmissionRate, NUM_RATES_TO_USE, vAvgRetransmissionRate, vAvgIntRetransmissionRate);
+	}
+	
+	if (countLog >= COUNT_TO_LOG)
+		countLog = 0;
+	else	
+		countLog++; //otherwise would output too quickly
+
+	goto retrans;
+
+return (char *) 0;
+}
+#else
 void *doRunFindRetransmissionRate(void * vargp)
 {
 	time_t clk;
@@ -3989,6 +4295,7 @@ finish_up:
 
 return (char *) 0;
 }
+#endif
 #if 0
 double fFindRttUsingPing()
 #else
