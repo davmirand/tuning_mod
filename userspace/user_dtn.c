@@ -192,7 +192,6 @@ static time_t now_time = 0;
 static time_t last_time = 0;
 static int vIamASrcDtn = 0;
 static int vIamADestDtn = 0;
-static int vJustGotConnected = 0;
 static double rtt_threshold = 2.0;
 static int rtt_factor = 4;
 void fStartEvaluationTimer(__u32);
@@ -244,6 +243,7 @@ union uIP {
 };
 
 static union uIP src_ip_addr;
+static union uIP dst_ip_addr;
 
 void qOCC_Hop_TimerID_Handler(int signum, siginfo_t *info, void *ptr);
 void qOCC_TimerID_Handler(int signum, siginfo_t *info, void *ptr);
@@ -394,6 +394,9 @@ static unsigned long rx_kbits_per_sec = 0, tx_kbits_per_sec = 0;
 //= 5 - include additional sink data logging
 //= 6 - include additional information about the link
 //= 7 - include everything else
+//= 8
+//= 9
+//=10 - include more than everything else ;-)
 static int vDebugLevel = 1;
 
 #define SIGINT_MSG "SIGINT received.\n"
@@ -431,24 +434,8 @@ const char *pin_basedir =  "/sys/fs/bpf";
 #include <locale.h>
 #include <time.h>
 
-//Looks like because of the ringbuf stuff
-//#include "../libbpf/src/libbpf.h"
-
 #include <net/if.h>
 #include <linux/if_link.h> /* depend on kernel-headers installed */
-
-#define NUMMETAVALUES   10000
-typedef struct {
-        char timestamp[MS_CTIME_BUF_LEN];
-        unsigned int hop_latency;
-        unsigned int queue_occupancy;
-	unsigned int switch_id;
-} sMetaData_t[NUMMETAVALUES];
-
-
-sMetaData_t metaData;
-unsigned int vMetaDataCount = 0;
-unsigned int vMetaDataClientCount = 0;
 
 typedef struct {
 	int argc;
@@ -490,6 +477,7 @@ sDest_Dtn_IPs_t aDest_Dtn_IPs[MAX_NUM_IP_ATTACHED]; //when I am the source, thes
 
 #ifdef INCLUDE_SRC_PORT
 static __u16 src_port;
+static __u16 dst_port;
 #endif
 
 enum ARGS{
@@ -578,72 +566,49 @@ void tHouseKeeping_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	//while (pthread_mutex_trylock(&dtn_mutex) != 0);
 
-#if 0
-	if (!previous_average_tx_Gbits_per_sec && !vJustGotConnected && vTwiceInaRow)
+	if (vIamADestDtn)
 	{
-		vIamASrcDtn = 0; //reset
-		vIamADestDtn = 0;
-		
-		memset(aSrc_Dtn_IPs, 0, sizeof (aSrc_Dtn_IPs));
-		currently_attached_networks = 0;
-		memset(aDest_Dtn_IPs, 0, sizeof (aDest_Dtn_IPs));
-		currently_dest_networks = 0;
-
-		if (vDebugLevel > 2)
+		for (int i = 0; i < MAX_NUM_IP_ATTACHED; i++)
 		{
-			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-			fprintf(tunLogPtr, "%s %s: ***memset aSrc_Dtns and aDest_Dtns done. previous_average_tx_Gbits_per_sec = %f***\n",
-						ms_ctime_buf, phase2str(current_phase), previous_average_tx_Gbits_per_sec); 
-		}
-	}
-	else
-#endif
-		{
-			vJustGotConnected = 0;
-			if (vIamADestDtn)
+			if (aSrc_Dtn_IPs[i].src_ip_addr)
 			{
-				for (int i = 0; i < MAX_NUM_IP_ATTACHED; i++)
+				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+				if ((clk - aSrc_Dtn_IPs[i].last_time_ip) >= vHouseTime) //probabaly not doing transfers anymore
 				{
-					if (aSrc_Dtn_IPs[i].src_ip_addr)
-					{
-						gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-						if ((clk - aSrc_Dtn_IPs[i].last_time_ip) >= vHouseTime) //probabaly not doing transfers anymore
-						{
-							if (vDebugLevel > 4)
-								fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer removing attached IP address %u from DB, current_source_networks = %d***\n",
-													ms_ctime_buf, phase2str(current_phase), aSrc_Dtn_IPs[i].src_ip_addr, currently_attached_networks); 
-							memset(&aSrc_Dtn_IPs[i],0,sizeof(sSrc_Dtn_IPs_t));
-							currently_attached_networks--;
-						}
-					}
+					if (vDebugLevel > 4)
+						fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer removing attached IP address %u from DB, current_source_networks = %d***\n",
+											ms_ctime_buf, phase2str(current_phase), aSrc_Dtn_IPs[i].src_ip_addr, currently_attached_networks); 
+					memset(&aSrc_Dtn_IPs[i],0,sizeof(sSrc_Dtn_IPs_t));
+					currently_attached_networks--;
 				}
-				if (!currently_attached_networks)
-					vIamADestDtn = 0;
 			}
+		}
+		if (!currently_attached_networks)
+			vIamADestDtn = 0;
+	}
 
 #if 1
-			if (vIamASrcDtn)
+	if (vIamASrcDtn)
+	{
+		for (int i = 0; i < MAX_NUM_IP_ATTACHED; i++)
+		{
+			if (aDest_Dtn_IPs[i].dest_ip_addr)
 			{
-				for (int i = 0; i < MAX_NUM_IP_ATTACHED; i++)
+				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+				if ((clk - aDest_Dtn_IPs[i].last_time_ip) >= vHouseTime) //probabaly not doing transfers anymore
 				{
-					if (aDest_Dtn_IPs[i].dest_ip_addr)
-					{
-						gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-						if ((clk - aDest_Dtn_IPs[i].last_time_ip) >= vHouseTime) //probabaly not doing transfers anymore
-						{
-							if (vDebugLevel > 4)
-								fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer removing attached IP address %u from DB, current_dest_networks = %d***\n",
-													ms_ctime_buf, phase2str(current_phase), aDest_Dtn_IPs[i].dest_ip_addr, currently_dest_networks); 
-							memset(&aDest_Dtn_IPs[i],0,sizeof(sDest_Dtn_IPs_t));
-							currently_dest_networks--;
-						}
-					}
+					if (vDebugLevel > 4)
+						fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer removing attached IP address %u from DB, current_dest_networks = %d***\n",
+											ms_ctime_buf, phase2str(current_phase), aDest_Dtn_IPs[i].dest_ip_addr, currently_dest_networks); 
+					memset(&aDest_Dtn_IPs[i],0,sizeof(sDest_Dtn_IPs_t));
+					currently_dest_networks--;
 				}
-				if (!currently_dest_networks)
-					vIamASrcDtn = 0;
 			}
-#endif
 		}
+		if (!currently_dest_networks)
+			vIamASrcDtn = 0;
+	}
+#endif
 
         //Pthread_mutex_unlock(&dtn_mutex);
 
@@ -1365,6 +1330,8 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		
 		src_ip_addr.y = ntohl(hop_key.flow_key.src_ip);
 		src_port = hop_key.flow_key.src_port;
+		dst_ip_addr.y = ntohl(hop_key.flow_key.dst_ip);
+		dst_port = hop_key.flow_key.dst_port;
 		//check array
 		vSrc_Dtn_IP_Found = 0;
 		First_IP_Index_Not_Exist = 0;
@@ -1465,10 +1432,6 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 #endif
 		}
 #endif
-#ifdef INCLUDE_SRC_PORT
-		//src_port = ntohs(hop_key.flow_key.src_port);
-		//src_port = hop_key.flow_key.src_port;
-#endif
 		hop_key.hop_index++;
 
 	}
@@ -1509,7 +1472,9 @@ void print_flow_key(struct flow_key *key, char ms_ctime_buf[])
 	fprintf(tunLogPtr,"%sFLOW    : \tvlan_id:%hu\n", pLearningSpaces, key->vlan_id);
 #ifdef INCLUDE_SRC_PORT
 	if (src_ip_addr.y)
-		fprintf(tunLogPtr,"%sFLOW    : \tsrc_ip:%u.%u.%u.%u, src_port:%d", pLearningSpaces, src_ip_addr.a[0],src_ip_addr.a[1],src_ip_addr.a[2],src_ip_addr.a[3], src_port);
+		fprintf(tunLogPtr,"%sFLOW    : \tsrc_ip:%u.%u.%u.%u, src_port:%d\n", pLearningSpaces, src_ip_addr.a[0],src_ip_addr.a[1],src_ip_addr.a[2],src_ip_addr.a[3], src_port);
+	if (dst_ip_addr.y)
+		fprintf(tunLogPtr,"%sFLOW    : \tdst_ip:%u.%u.%u.%u, dst_port:%d", pLearningSpaces, dst_ip_addr.a[0],dst_ip_addr.a[1],dst_ip_addr.a[2],dst_ip_addr.a[3], dst_port);
 #else
 	if (src_ip_addr.y)
 		fprintf(tunLogPtr,"%sFLOW    : \tsrc_ip:%u.%u.%u.%u", pLearningSpaces, src_ip_addr.a[0],src_ip_addr.a[1],src_ip_addr.a[2],src_ip_addr.a[3]);
@@ -4124,6 +4089,15 @@ retrans:
 				aValue[count] = 0;
 				if (count)
 				{
+					//if ((vDebugLevel > 2) && (countLog >= COUNT_TO_LOG))
+					if ((vDebugLevel > 2) && (countLog >= 75))
+					//if ((vDebugLevel > 2) && (countLog >= 50))
+					//if ((vDebugLevel > 2) && (countLog >= 0))
+					{
+						fprintf(tunLogPtr,"\n%s %s: ***actual string with retransmission is \"%s\", aDestBin is *%s*, aDest is *%s*", 
+														ms_ctime_buf, phase2str(current_phase),buffer,aDest_Ip2_Binary, aDest_Ip2);
+					}
+
 				
 					if ((vDebugLevel > 8) && (countLog >= COUNT_TO_LOG))
 					{
@@ -4280,12 +4254,20 @@ finish_up:
 
 	msleep(100); //sleep 100 millisecs
 
-	if ((vDebugLevel > 3) && previous_average_tx_Gbits_per_sec && (countLog >= COUNT_TO_LOG))
+	//if ((vDebugLevel > 3) && previous_average_tx_Gbits_per_sec && (countLog >= COUNT_TO_LOG))
+	if ((vDebugLevel > 2) && previous_average_tx_Gbits_per_sec && (countLog >= 75))
+	//if ((vDebugLevel > 2) && previous_average_tx_Gbits_per_sec && (countLog >= 50))
 	{
 		fprintf(tunLogPtr,"%s %s: ***RETRAN*** Retransmission rate of transfer = %.5f,  AvgRetransmissionRate over last %d rates is %.5f, AvgIntRetransmissionRate is %.5f\n", 
 				ms_ctime_buf, phase2str(current_phase), vTransferRetransmissionRate, NUM_RATES_TO_USE, vAvgRetransmissionRate, vAvgIntRetransmissionRate);
 	}
-	
+
+	if ((vDebugLevel > 2) && (vRetransmissionRate > vRetransmissionRateThreshold))
+        {	
+		fprintf(tunLogPtr,"%s %s: ***INFO ABOUT RETRAN RATE***:  Retransmission rate of transfer = %.5f currently greater than vRetransmissionRateThreshold of %.5f\n", 
+				ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
+	}
+
 	if (countLog >= COUNT_TO_LOG)
 		countLog = 0;
 	else	
@@ -5108,6 +5090,7 @@ void * doHandleHpnsshQfactorEnv(void * vargp)
 		else
 			{
 				char *peeraddrpresn = inet_ntoa(peeraddr.sin_addr);
+				sprintf(aDest_Ip2_Binary,"%08X",peeraddr.sin_addr.s_addr);
 				//total_time_passed = 0;
 				if (vDebugLevel > 1)
 				{
@@ -5273,9 +5256,9 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 /*******************/
 
 				char *peeraddrpresn = inet_ntoa(peeraddr.sin_addr);
-				sprintf(aDest_Ip2_Binary,"%02X",peeraddr.sin_addr.s_addr);
+				sprintf(aDest_Ip2_Binary,"%08X",peeraddr.sin_addr.s_addr);
 				if (!vDest_Dtn_IP_Found) //Ip connection did not exist
-					sprintf(aDest_Dtn_IPs[FirstD_IP_Index_Not_Exist].aDest_Ip2_Binary,"%02X",peeraddr.sin_addr.s_addr);
+					sprintf(aDest_Dtn_IPs[FirstD_IP_Index_Not_Exist].aDest_Ip2_Binary,"%08X",peeraddr.sin_addr.s_addr);
 
 				//total_time_passed = 0;
 				if (vDebugLevel > 1)
@@ -5297,7 +5280,6 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 				}
 				//if (currently_dest_networks == MAX_NUM_IP_ATTACHED)
 				//	currently_dest_networks = 0;
-				vJustGotConnected = 1; //try to ensure that we don't clean up DB too early
 			}
 
 		retval = getsockname(connfd, (struct sockaddr *) &localaddr, &localaddrlen);
@@ -5349,8 +5331,6 @@ void read_sock(int sockfd)
 	{
 		if ( (n = Readn(sockfd, &from_cli, sizeof(from_cli))) == 0)
 			return;         /* connection closed by other end */
-
-		printf("msg seq_no = %d, msg buf = %s", from_cli.seq_no, from_cli.msg);
 	}
 }
 
@@ -5582,7 +5562,6 @@ int main(int argc, char **argv)
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	current_phase = LEARNING;
 
-	memset(metaData,0,sizeof(metaData));
 	memset(qinfo_ms_ctime_buf_min,0,sizeof(qinfo_ms_ctime_buf_min));
 	memset(qinfo_ms_ctime_buf_max,0,sizeof(qinfo_ms_ctime_buf_max));
 	memset(&sMsg,0,sizeof(sMsg));
@@ -5596,6 +5575,7 @@ int main(int argc, char **argv)
 	src_ip_addr.y = 0;
 #ifdef INCLUDE_SRC_PORT
 	src_port = 0;
+	dst_port = 0;
 #endif
 	vGoodBitrateValue = (((97/(double)100) * netDeviceSpeed)/(double)1000); //97% of NIC speed is a good bitrate threshold
 	vGoodBitrateValueThatDoesntNeedMessage = (((88/(double)100) * netDeviceSpeed)/(double)1000); //Won't print 'BITRATE IS LOW' message in this case - log gets cumbersome
