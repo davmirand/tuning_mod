@@ -80,6 +80,12 @@
 #define HPNSSH_READALL_FS	144
 #define	HPNSSH_DUMMY		166
 
+typedef unsigned int __u32;
+union uIP {
+         __u32 y;
+         unsigned char  a[4];
+};
+
 struct PeerMsg {
 	unsigned int msg_no;
 	unsigned int seq_no;
@@ -88,7 +94,9 @@ struct PeerMsg {
 	unsigned int queue_occupancy;
 	unsigned int switch_id;
 	char timestamp[MS_CTIME_BUF_LEN];
-	char msg[80];
+	char msg[72];
+	union uIP src_ip_addr;
+	union uIP dst_ip_addr;
 	char * pts;
 	char * ptimes;
 	char * pm;
