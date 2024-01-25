@@ -182,7 +182,7 @@ static int vDidSetChannel = 0;
 static int vCanStartEvaluationTimer = 1;
 static int perf_buffer_poll_start = 0;
 //static time_t total_time_passed = 0;
-static double vRetransmissionRate = 0.0;
+//static double vRetransmissionRate = 0.0;
 static double vGlobal_average_tx_Gbits_per_sec = 0.0;
 static double vMaxPacingRate = 0.9; //90%
 int vResetPacingBack = 0;
@@ -2806,8 +2806,8 @@ return;
 #endif
 
 #if 1
-void fDoQinfoAssessment(unsigned int val, char aSrc_Ip[], char aDest_Ip[]);
-void fDoQinfoAssessment(unsigned int val, char aSrc_Ip[], char aDest_Ip[])
+void fDoQinfoAssessment(unsigned int val, char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr);
+void fDoQinfoAssessment(unsigned int val, char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr)
 {
 
         time_t clk;
@@ -2815,6 +2815,8 @@ void fDoQinfoAssessment(unsigned int val, char aSrc_Ip[], char aDest_Ip[])
         char ms_ctime_buf[MS_CTIME_BUF_LEN];
         char aQdiscVal[512];
         char aNicSetting[1024];
+	int found = 0;
+	double vRetransmissionRate = 0.0;
         //FILE *nicCfgFPtr = 0;
 
         //For now
@@ -2826,11 +2828,24 @@ void fDoQinfoAssessment(unsigned int val, char aSrc_Ip[], char aDest_Ip[])
 
         strcpy(aQdiscVal,"fq");
         gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-        fprintf(tunLogPtr,"%s %s: ***WARNING***: Qinfo message value from destination DTN is %u***\n", ms_ctime_buf, phase2str(current_phase), val);
+        fprintf(tunLogPtr,"%s %s: ***WARNING***: Qinfo message with value %u from destination DTN %s***\n", ms_ctime_buf, phase2str(current_phase), val, aDest_Ip);
 
-        if (vRetransmissionRate > vRetransmissionRateThreshold)
+	for (int i = 0; i < MAX_NUM_IP_ATTACHED; i++)
+	{
+		if (!aDest_Dtn_IPs[i].dest_ip_addr)
+			continue;
+		if (dest_ip_addr != aDest_Dtn_IPs[i].dest_ip_addr)
+			continue;
+
+		vRetransmissionRate = aDest_Dtn_IPs[i].sRetransmission_Cntrs.vRetransmissionRate;
+		found = 1;
+		break;
+	}
+
+        gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+        if (found && (vRetransmissionRate > vRetransmissionRateThreshold))
         {
-                fprintf(tunLogPtr,"%s %s: ***WARNING***: the retransmission rate of %.5f is higher that the retansmission threshold of %.5f.\n", ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
+                fprintf(tunLogPtr,"%s %s: ***WARNING***: The Destination IP %s, with the retransmission rate of %.5f is higher that the retansmission threshold of %.5f.\n", ms_ctime_buf, phase2str(current_phase), aDest_Ip, vRetransmissionRate, vRetransmissionRateThreshold);
                 sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, aQdiscVal, netDevice, (vGlobal_average_tx_Gbits_per_sec * vMaxPacingRate)); //90%
 
                 if (gTuningMode && (current_phase == LEARNING))
@@ -2867,11 +2882,17 @@ void fDoQinfoAssessment(unsigned int val, char aSrc_Ip[], char aDest_Ip[])
                                 }
         }
         else
-        {
-                fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link.:***\n", ms_ctime_buf, phase2str(current_phase));
-                fprintf(tunLogPtr,"%s %s: ***WARNING***: However, the retransmission rate of %.5f is lower that the retansmission threshold of %.5f**\n",
-                                                                                        ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
-        }
+		if (!found)
+        	{
+               		fprintf(tunLogPtr,"%s %s: ***WARNING***: The Destination DTN with IP %s, complained that congestion was on the link...***\n", ms_ctime_buf, phase2str(current_phase), aDest_Ip);
+               		fprintf(tunLogPtr,"%s %s: ***WARNING***: However, We are not currently attached to that DTN, so the link may have been broken... no changes to Pacing in this case....***\n", ms_ctime_buf, phase2str(current_phase));
+        	}
+		else	
+        		{
+                		fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link.:***\n", ms_ctime_buf, phase2str(current_phase));
+                		fprintf(tunLogPtr,"%s %s: ***WARNING***: However, the retransmission rate of %.5f is lower that the retansmission threshold of %.5f**\n",
+                                                                                       ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
+        		}
 return;
 }
 #endif
@@ -4039,7 +4060,7 @@ void *doRunFindRetransmissionRate(void * vargp)
 	sprintf(try,"%s","cat /sys/fs/bpf/tcp4");
 
 retrans:
-	if ((vDebugLevel > 2) && (countLog >= 0))
+	if ((vDebugLevel > 8) && (countLog >= 0))
                   fprintf(tunLogPtr,"%s %s: ***$$$$$$$Back at retrans*** vLastIpFound= %d, ...vIpCount = %d***\n", ms_ctime_buf, phase2str(current_phase), vLastIpFound, vIpCount);
 	while (!vIamASrcDtn)
 	{
@@ -4083,7 +4104,7 @@ retrans:
 		// use buffer to read and add to result
 		if (fgets(buffer, 256, pipe) != NULL)
 		{
-			if ((vDebugLevel > 2) && (countLog >= 0))
+			if ((vDebugLevel > 8) && (countLog >= 0))
                         	fprintf(tunLogPtr,"%s %s: ***^^^^^Heres the buffer %s oop ip addrs vLastIpFound= %d, ...vIpCount = %d***\n", ms_ctime_buf, phase2str(current_phase), buffer, vLastIpFound, vIpCount);
 		}
 		else
@@ -4092,7 +4113,7 @@ retrans:
 			}
 #if 1
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-		if ((vDebugLevel > 2) && (countLog >= 0))
+		if ((vDebugLevel > 8) && (countLog >= 0))
                         fprintf(tunLogPtr,"%s %s: ***^^^^^Back in the while loop ip addrs vLastIpFound= %d, ...vIpCount = %d***\n", ms_ctime_buf, phase2str(current_phase), vLastIpFound, vIpCount);
 //Check this
  		vIpCount = MAX_NUM_IP_ATTACHED;
@@ -4101,7 +4122,8 @@ chk_this:
                 {
        //                 if (vDebugLevel > 2)
 			//if ((vDebugLevel > 2) && (countLog >= 75))
-			if ((vDebugLevel > 2) && (countLog >= 0))
+			//if ((vDebugLevel > 2) && (countLog >= 0))
+			if ((vDebugLevel > 8) && (countLog >= 0))
                                 fprintf(tunLogPtr,"%s %s: ***looking for app ip addrs vLastIpFound= %d, ...vIpCount = %d***\n", ms_ctime_buf, phase2str(current_phase), vLastIpFound, vIpCount);
                         vIpCount--;
                         vLastIpFound++;
@@ -4123,7 +4145,8 @@ chk_this:
 				//FOR Testing purposes
 				//if ((vDebugLevel > 2) && (countLog >= 75))
 				//if ((vDebugLevel > 2) && (countLog >= 50))
-				if ((vDebugLevel > 2) && (countLog >= 0))
+				//if ((vDebugLevel > 2) && (countLog >= 0))
+				if ((vDebugLevel > 8) && (countLog >= 0))
 				{
 					fprintf(tunLogPtr,"\n%s %s: ***using new code *** IPs are *** aDestBin is *%s*, aDest is *%s*\n", 
 									ms_ctime_buf, phase2str(current_phase),aDest_Dtn_IPs[vLastIpFound].aDest_Ip2_Binary, aDest_Dtn_IPs[vLastIpFound].aDest_Ip2);
@@ -5106,7 +5129,7 @@ process_request(int sockfd)
 									ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), ntohl(from_cli.value), aSrc_Ip, aDest_Ip, from_cli.msg);
 			}
 
-			fDoQinfoAssessment(ntohl(from_cli.value), aSrc_Ip, aDest_Ip);
+			fDoQinfoAssessment(ntohl(from_cli.value), aSrc_Ip, aDest_Ip, uDst_Ip.y);
 		}
 		else
 			if (ntohl(from_cli.msg_no) == TEST_MSG)
