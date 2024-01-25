@@ -4013,6 +4013,7 @@ void *doRunFindRetransmissionRate(void * vargp)
 	unsigned long aSaveIntPackets[NUM_RATES_TO_USE];
 	int x, vRateCount = 0;
 	int fRateArrayDone = 0;
+	int vLastIpFound = 0, vIpCount = 0;
 
 	while (aDest_Ip2[0] == 0)
 	{
@@ -4065,10 +4066,7 @@ retrans:
 
 	if (!previous_average_tx_Gbits_per_sec)
 		msleep(1000); //nothing going on. Get some rest
-#if 0
-	else 
-		fprintf(tunLogPtr,"%s %s: ***Starting of Retransmission and packets %u***\n", ms_ctime_buf, phase2str(current_phase), countLog);
-#endif
+	
 	pipe = popen(try,"r");
 	if (!pipe)
 	{
@@ -4085,13 +4083,14 @@ retrans:
 			{
 				goto finish_up;
 			}
-#if 0
+#if 1
 //Check this
  		vIpCount = MAX_NUM_IP_ATTACHED;
-
+chk_this:
                 while (!aDest_Dtn_IPs[vLastIpFound].dest_ip_addr && vIpCount)
                 {
-                        if (vDebugLevel > 5)
+       //                 if (vDebugLevel > 2)
+			if ((vDebugLevel > 2) && (countLog >= 75))
                                 fprintf(tunLogPtr,"%s %s: ***looking for app ip addrs vLastIpFound= %d, ...vIpCount = %d***\n", ms_ctime_buf, phase2str(current_phase), vLastIpFound, vIpCount);
                         vIpCount--;
                         vLastIpFound++;
@@ -4100,88 +4099,97 @@ retrans:
                 }
                 if (vIpCount)
                 {
-                        fGetAppBandWidth(aDest_Dtn_IPs[vLastIpFound].aDest_Ip2, vLastIpFound);
-                        vLastIpFound++;
-                        if (vLastIpFound == MAX_NUM_IP_ATTACHED)
-                                vLastIpFound = 0;
-                }
+			foundstr = strstr(buffer,aDest_Dtn_IPs[vLastIpFound].aDest_Ip2_Binary);
 
 #endif
 
-		foundstr = strstr(buffer,aDest_Ip2_Binary);
-		//should look like example: "11: 012E030A:8B2E 022E030A:1451 01 04DC97C7:00000000 01:00000014 00000000     0        0 13297797 2 00000000367a51de 41 0 0 3722 500 totrt 79""
-                if (foundstr)
-                {
-			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-			foundstr = strstr(foundstr,"totrt");
+		//	foundstr = strstr(buffer,aDest_Ip2_Binary);
+			//should look like example: "11: 012E030A:8B2E 022E030A:1451 01 04DC97C7:00000000 01:00000014 00000000     0        0 13297797 2 00000000367a51de 41 0 0 3722 500 totrt 79""
 			if (foundstr)
 			{
-				char aValue[32];
-				int count = 0;
-				memset(aValue,0,32);
-				foundstr = foundstr + 6;
-#if 0
-				if (*foundstr == '0')
-					continue; //no need to count zeros
-#endif
-				while (isdigit(*foundstr))
-                		{
-                        		aValue[count++] = *foundstr;
-					foundstr++;
-				}
-
-				aValue[count] = 0;
-				if (count)
+				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+#if 1
+				//FOR Testing purposes
+				//if ((vDebugLevel > 2) && (countLog >= 75))
+				//if ((vDebugLevel > 2) && (countLog >= 50))
+				if ((vDebugLevel > 2) && (countLog >= 0))
 				{
-					//if ((vDebugLevel > 2) && (countLog >= COUNT_TO_LOG))
-					if ((vDebugLevel > 8) && (countLog >= 75))
-					//if ((vDebugLevel > 2) && (countLog >= 50))
-					//if ((vDebugLevel > 2) && (countLog >= 0))
-					{
-						fprintf(tunLogPtr,"\n%s %s: ***actual string with retransmission is \"%s\", aDestBin is *%s*, aDest is *%s*", 
-														ms_ctime_buf, phase2str(current_phase),buffer,aDest_Ip2_Binary, aDest_Ip2);
-					}
-
-				
-					if ((vDebugLevel > 8) && (countLog >= COUNT_TO_LOG))
-					{
-						fprintf(tunLogPtr,"%s %s: ***actual string with retransmission is \"%s\"", ms_ctime_buf, phase2str(current_phase),buffer);
-					}
-
-					pre_total_retrans = strtoul(aValue, (char **)0, 10);
-					total_retrans += pre_total_retrans;
-
-					// get packets sent now
+					fprintf(tunLogPtr,"\n%s %s: ***using new code *** IPs are *** aDestBin is *%s*, aDest is *%s*\n", 
+									ms_ctime_buf, phase2str(current_phase),aDest_Dtn_IPs[vLastIpFound].aDest_Ip2_Binary, aDest_Dtn_IPs[vLastIpFound].aDest_Ip2);
+				}
+#endif
+				foundstr = strstr(foundstr,"totrt");
+				if (foundstr)
+				{
+					char aValue[32];
+					int count = 0;
 					memset(aValue,0,32);
-					count = 0;
-					foundstr++;
-					
+					foundstr = foundstr + 6;
+#if 0
+					if (*foundstr == '0')
+						continue; //no need to count zeros
+#endif
 					while (isdigit(*foundstr))
                 			{
-                        			aValue[count++] = *foundstr;
+                       		 		aValue[count++] = *foundstr;
 						foundstr++;
 					}
 
 					aValue[count] = 0;
 					if (count)
 					{
-						pre_packets_sent = strtoul(aValue, (char **)0, 10 );
-						packets_sent += pre_packets_sent;
+						//if ((vDebugLevel > 2) && (countLog >= COUNT_TO_LOG))
+						if ((vDebugLevel > 8) && (countLog >= 75))
+						//if ((vDebugLevel > 2) && (countLog >= 50))
+						//if ((vDebugLevel > 2) && (countLog >= 0))
+						{
+							fprintf(tunLogPtr,"\n%s %s: ***actual string with retransmission is \"%s\", aDestBin is *%s*, aDest is *%s*", 
+															ms_ctime_buf, phase2str(current_phase),buffer,aDest_Ip2_Binary, aDest_Ip2);
+						}
+
+						if ((vDebugLevel > 8) && (countLog >= COUNT_TO_LOG))
+						{
+							fprintf(tunLogPtr,"%s %s: ***actual string with retransmission is \"%s\"", ms_ctime_buf, phase2str(current_phase),buffer);
+						}
+
+						pre_total_retrans = strtoul(aValue, (char **)0, 10);
+						total_retrans += pre_total_retrans;
+
+						// get packets sent now
+						memset(aValue,0,32);
+						count = 0;
+						foundstr++;
+					
+						while (isdigit(*foundstr))
+                				{
+                        				aValue[count++] = *foundstr;
+							foundstr++;
+						}
+
+						aValue[count] = 0;
+						if (count)
+						{
+							pre_packets_sent = strtoul(aValue, (char **)0, 10 );
+							packets_sent += pre_packets_sent;
+						}
+
+						if ((vDebugLevel > 5) && (countLog >= COUNT_TO_LOG)) 
+						{
+							fprintf(tunLogPtr,"%s %s: ***pre_packets_sent = %lu, pre_total_retransmissions so far  is %lu\n", 
+									ms_ctime_buf, phase2str(current_phase), pre_packets_sent, pre_total_retrans);
+						}
+
+						found = 1;
 					}
+       		         	}
+			}
+                       
+			vLastIpFound++;
+			if (vLastIpFound == MAX_NUM_IP_ATTACHED)
+				vLastIpFound = 0;
 
-
-					if ((vDebugLevel > 5) && (countLog >= COUNT_TO_LOG)) 
-					{
-						fprintf(tunLogPtr,"%s %s: ***pre_packets_sent = %lu, pre_total_retransmissions so far  is %lu\n", 
-								ms_ctime_buf, phase2str(current_phase), pre_packets_sent, pre_total_retrans);
-					}
-
-					found = 1;
-				}
-                	}
-		}
-		else
-			continue;
+			 goto chk_this;
+                }
 	}
 
 finish_up:
@@ -4306,7 +4314,7 @@ finish_up:
 				ms_ctime_buf, phase2str(current_phase), vTransferRetransmissionRate, NUM_RATES_TO_USE, vAvgRetransmissionRate, vAvgIntRetransmissionRate);
 	}
 
-	if ((vDebugLevel > 2) && (vRetransmissionRate > vRetransmissionRateThreshold))
+	if ((vDebugLevel > 3) && (vRetransmissionRate > vRetransmissionRateThreshold))
         {	
 		fprintf(tunLogPtr,"%s %s: ***INFO ABOUT RETRAN RATE***:  Retransmission rate of transfer = %.5f currently greater than vRetransmissionRateThreshold of %.5f\n", 
 				ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
