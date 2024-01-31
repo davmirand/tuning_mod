@@ -2315,7 +2315,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 
 #define MAX_TUNING_APPLY	10
 
-double fCheckAppBandwidth(char app[])
+double fCheckAppBandwidth(char app[], char aDest[], __u32 dest_ip_addr)
 {
 	time_t clk;
 	char ctime_buf[27];
@@ -2326,7 +2326,7 @@ double fCheckAppBandwidth(char app[])
 	unsigned long vBandWidthInBits = 0;
 	double vBandWidthInGBits = 0;
 
-	sprintf(try,"bpftrace -e \'BEGIN { zero(@size); zero(@sum); } kprobe:tcp_sendmsg /comm == \"%s\"/ { @size = arg2; } kretprobe:tcp_sendmsg /comm == \"%s\"/ { @sum = @sum + @size; } interval:ms:1002 { exit(); } END { printf(\"%s\", @sum); clear(@size); clear(@sum); }\'",app,app,"%lu");
+	sprintf(try,"bpftrace -e \'BEGIN { zero(@size); zero(@sum); @sck; @sck_common; @daddr; } kprobe:tcp_sendmsg /comm == \"%s\"/ { @size = arg2; @sck = (struct sock *) arg0; @sck_common = (struct sock_common) @sck->__sk_common; @daddr = (@sck_common.skc_daddr); } kretprobe:tcp_sendmsg /comm == \"%s\" && @daddr == %u/ { @sum = @sum + @size; } interval:ms:1002 { exit(); } END { printf(\"%s\", @sum); clear(@size); clear(@sum); clear(@daddr); clear(@sck); clear(@sck_common); }\'",app,app,dest_ip_addr,"%lu");
 
 	pipe = popen(try,"r");
 	if (!pipe)
@@ -2351,7 +2351,7 @@ double fCheckAppBandwidth(char app[])
 			if (vDebugLevel > 2)
 			{
 				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-				fprintf(tunLogPtr,"%s %s: ***The app \"%s\" is using a Bandwidth of %.2f Gb/s\n", ms_ctime_buf, phase2str(current_phase), app, vBandWidthInGBits); //only need this one buffer
+				fprintf(tunLogPtr,"%s %s: ***The app \"%s\" with ip addr %s is using a Bandwidth of %.2f Gb/s\n", ms_ctime_buf, phase2str(current_phase), app, aDest, vBandWidthInGBits); //only need this one buffer
 			}
 			while (fgets(buffer, 128, pipe) != NULL); //dump the buffers after
 			break;
@@ -2425,7 +2425,7 @@ double fGetAppBandWidth(char aDest_Ip2[], int index)
 			if (q)
 			{
 				if (strcmp(previous_value,value) != 0)
-					fCheckAppBandwidth(value);
+					fCheckAppBandwidth(value, aDest_Ip2, aDest_Dtn_IPs[index].dest_ip_addr);
 				else
 					strcpy(previous_value,value);
 			}
