@@ -484,6 +484,7 @@ typedef struct {
 	char aDest_Ip2_Binary[32];
 	time_t last_time_ip;
 	int currently_exist;
+	double vThis_app_tx_Gbits_per_sec;
 	sRetransmission_Cntrs_t sRetransmission_Cntrs;
 } sDest_Dtn_IPs_t;
 sDest_Dtn_IPs_t aDest_Dtn_IPs[MAX_NUM_IP_ATTACHED]; //when I am the source, these are the destinations
@@ -2315,7 +2316,7 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 
 #define MAX_TUNING_APPLY	10
 
-double fCheckAppBandwidth(char app[], char aDest[], __u32 dest_ip_addr)
+double fCheckAppBandwidth(char app[], char aDest[], __u32 dest_ip_addr, int index)
 {
 	time_t clk;
 	char ctime_buf[27];
@@ -2347,6 +2348,8 @@ double fCheckAppBandwidth(char app[], char aDest[], __u32 dest_ip_addr)
 			sscanf(buffer,"%lu", &vBandWidthInBits); //next line
 			vBandWidthInBits = ((8 * vBandWidthInBits) / 1000);	//really became kilobits here
 			vBandWidthInGBits = vBandWidthInBits/(double)(1000000);
+	//		aDest_Dtn_IPs[index].last_time_ip = clk;
+			aDest_Dtn_IPs[index].vThis_app_tx_Gbits_per_sec = vBandWidthInGBits; 
 			
 			if (vDebugLevel > 2)
 			{
@@ -2425,7 +2428,7 @@ double fGetAppBandWidth(char aDest_Ip2[], int index)
 			if (q)
 			{
 				if (strcmp(previous_value,value) != 0)
-					fCheckAppBandwidth(value, aDest_Ip2, aDest_Dtn_IPs[index].dest_ip_addr);
+					fCheckAppBandwidth(value, aDest_Ip2, aDest_Dtn_IPs[index].dest_ip_addr, index);
 				else
 					strcpy(previous_value,value);
 			}
@@ -2817,6 +2820,7 @@ void fDoQinfoAssessment(unsigned int val, char aSrc_Ip[], char aDest_Ip[], __u32
         char aNicSetting[1024];
 	int found = 0;
 	double vRetransmissionRate = 0.0;
+	double vThis_app_tx_Gbits_per_sec;
         //FILE *nicCfgFPtr = 0;
 
         //For now
@@ -2838,6 +2842,7 @@ void fDoQinfoAssessment(unsigned int val, char aSrc_Ip[], char aDest_Ip[], __u32
 			continue;
 
 		vRetransmissionRate = aDest_Dtn_IPs[i].sRetransmission_Cntrs.vRetransmissionRate;
+		vThis_app_tx_Gbits_per_sec = aDest_Dtn_IPs[i].vThis_app_tx_Gbits_per_sec;
 		found = 1;
 		break;
 	}
