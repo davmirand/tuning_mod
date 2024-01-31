@@ -2858,6 +2858,8 @@ void fDoQinfoAssessment(unsigned int val, char aSrc_Ip[], char aDest_Ip[], __u32
                         current_phase = TUNING;
                         fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f. Will adjust the pacing with the following:\n",
                                                                                                                                                         ms_ctime_buf, phase2str(current_phase), vGlobal_average_tx_Gbits_per_sec);
+                        fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the flow. Current average transmitted bytes on this flow is %.2f. Will adjust the pacing with the following:\n",
+                                                                                                                                                        ms_ctime_buf, phase2str(current_phase), vThis_app_tx_Gbits_per_sec);
                         fprintf(tunLogPtr,"%s %s: ***WARNING***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
                         system(aNicSetting);
                         fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!!\n", ms_ctime_buf, phase2str(current_phase));
