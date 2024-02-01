@@ -484,6 +484,7 @@ typedef struct {
 	char aDest_Ip2_Binary[32];
 	time_t last_time_ip;
 	int currently_exist;
+	__u16 vIsVlan;
 	double vThis_app_tx_Gbits_per_sec;
 	sRetransmission_Cntrs_t sRetransmission_Cntrs;
 } sDest_Dtn_IPs_t;
@@ -1447,6 +1448,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
                         strcpy(sMsg[sMsgsIn].msg, "Hello there!!! This is a Start of Traffic  msg...\n");
                         sMsg[sMsgsIn].msg_no = htonl(TEST_MSG);
 			sMsg[sMsgsIn].value = htonl(0);
+			sMsg[sMsgsIn].vlan_id = htons(hop_key.flow_key.vlan_id);
 			sMsg[sMsgsIn].src_ip_addr.y = src_ip_addr.y;
 			sMsg[sMsgsIn].dst_ip_addr.y = dst_ip_addr.y;
 			sMsgSeqNoConn++;
@@ -2819,6 +2821,8 @@ void fDoQinfoAssessment(unsigned int val, char aSrc_Ip[], char aDest_Ip[], __u32
         char aQdiscVal[512];
         char aNicSetting[1024];
 	int found = 0;
+	int vIsVlan = 0;
+
 	double vRetransmissionRate = 0.0;
 	double vThis_app_tx_Gbits_per_sec;
         //FILE *nicCfgFPtr = 0;
@@ -2843,6 +2847,7 @@ void fDoQinfoAssessment(unsigned int val, char aSrc_Ip[], char aDest_Ip[], __u32
 
 		vRetransmissionRate = aDest_Dtn_IPs[i].sRetransmission_Cntrs.vRetransmissionRate;
 		vThis_app_tx_Gbits_per_sec = aDest_Dtn_IPs[i].vThis_app_tx_Gbits_per_sec;
+		vIsVlan = aDest_Dtn_IPs[i].vIsVlan;
 		found = 1;
 		break;
 	}

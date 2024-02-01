@@ -93,8 +93,9 @@ struct PeerMsg {
 	unsigned int hop_latency;
 	unsigned int queue_occupancy;
 	unsigned int switch_id;
+	unsigned short  vlan_id;
 	char timestamp[MS_CTIME_BUF_LEN];
-	char msg[72];
+	char msg[70];
 	union uIP src_ip_addr;
 	union uIP dst_ip_addr;
 	char * pts;
