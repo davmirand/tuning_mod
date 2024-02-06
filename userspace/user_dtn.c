@@ -4007,7 +4007,7 @@ finish_up:
 
 	msleep(100); //sleep 100 millisecs
 
-	if ((vDebugLevel > 3) && previous_average_tx_Gbits_per_sec && (countLog >= COUNT_TO_LOG))
+	if ((vDebugLevel > 6) && previous_average_tx_Gbits_per_sec && (countLog >= COUNT_TO_LOG))
 	{
 		fprintf(tunLogPtr,"%s %s: ***RETRAN*** Retransmission rate of transfer = %.5f,  AvgRetransmissionRate over last %d rates is %.5f, AvgIntRetransmissionRate is %.5f\n", 
 				ms_ctime_buf, phase2str(current_phase), vTransferRetransmissionRate, NUM_RATES_TO_USE, vAvgRetransmissionRate, vAvgIntRetransmissionRate);
@@ -4220,7 +4220,7 @@ chk_this:
 							aDest_Dtn_IPs[vLastIpFound].sRetransmission_Cntrs.packets_sent += pre_packets_sent;
 						}
 
-						if ((vDebugLevel > 5) && (countLog >= COUNT_TO_LOG)) 
+						if ((vDebugLevel > 6) && (countLog >= COUNT_TO_LOG)) 
 						{
 							fprintf(tunLogPtr,"%s %s: ***pre_packets_sent = %lu, pre_total_retransmissions so far  is %lu\n", 
 									ms_ctime_buf, phase2str(current_phase), pre_packets_sent, pre_total_retrans);
@@ -4334,7 +4334,7 @@ finish_up:
 			vAvgRetransmissionRate = vSomeTran;
 			aDest_Dtn_IPs[i].sRetransmission_Cntrs.vRetransmissionRate = vAvgIntRetransmissionRate = vSomeIntTran;
 
-			if ((vDebugLevel > 4) && previous_average_tx_Gbits_per_sec && (countLog >= COUNT_TO_LOG))
+			if ((vDebugLevel > 6) && previous_average_tx_Gbits_per_sec && (countLog >= COUNT_TO_LOG))
 			{
 				if (aDest_Dtn_IPs[i].sRetransmission_Cntrs.int_total_retrans)
 					fprintf(tunLogPtr,"%s %s: ***RETRAN*** To Destination IP %s, total packets_sent = %lu, total retransmissions = %lu, last_int_packets_sent = %lu, *NEW* last_int_retrans = %lu, vRateCount = %d, vSomeIntRetrans = %lu, vSomeIntPackets = %lu\n", 
@@ -4354,14 +4354,14 @@ finish_up:
 		else
 			{
 				aDest_Dtn_IPs[i].sRetransmission_Cntrs.int_total_retrans = aDest_Dtn_IPs[i].sRetransmission_Cntrs.int_packets_sent = aDest_Dtn_IPs[i].sRetransmission_Cntrs.vRateCount = vSomeTran = aDest_Dtn_IPs[i].sRetransmission_Cntrs.fRateArrayDone = 0;
-				if ((vDebugLevel > 5) && previous_average_tx_Gbits_per_sec && (countLog >= COUNT_TO_LOG))
+				if ((vDebugLevel > 6) && previous_average_tx_Gbits_per_sec && (countLog >= COUNT_TO_LOG))
 					fprintf(tunLogPtr,"%s %s: ***RETRAN*** No relevant packets found, packets_sent = %lu, total_retrans = %lu\n", 
 										ms_ctime_buf, phase2str(current_phase), aDest_Dtn_IPs[i].sRetransmission_Cntrs.packets_sent, aDest_Dtn_IPs[i].sRetransmission_Cntrs.total_retrans);
 			}
 
 		fflush(tunLogPtr);
 
-		if ((vDebugLevel > 3) && previous_average_tx_Gbits_per_sec && (countLog >= COUNT_TO_LOG))
+		if ((vDebugLevel > 6) && previous_average_tx_Gbits_per_sec && (countLog >= COUNT_TO_LOG))
 		//if ((vDebugLevel > 2) && previous_average_tx_Gbits_per_sec && (countLog >= 75))
 		//if ((vDebugLevel > 2) && previous_average_tx_Gbits_per_sec && (countLog >= 50))
 		{
@@ -4369,7 +4369,7 @@ finish_up:
 					ms_ctime_buf, phase2str(current_phase), aDest_Dtn_IPs[i].aDest_Ip2, vTransferRetransmissionRate, NUM_RATES_TO_USE, vAvgRetransmissionRate, vAvgIntRetransmissionRate);
 		}
 
-		if ((vDebugLevel > 3) && (aDest_Dtn_IPs[i].sRetransmission_Cntrs.vRetransmissionRate > vRetransmissionRateThreshold))
+		if ((vDebugLevel > 6) && (aDest_Dtn_IPs[i].sRetransmission_Cntrs.vRetransmissionRate > vRetransmissionRateThreshold))
        		{	
 			fprintf(tunLogPtr,"%s %s: ***INFO ABOUT RETRAN RATE***:  To Destination IP %s, Retransmission *CURRENT* rate = %.5f currently greater than vRetransmissionRateThreshold of %.5f\n", 
 					ms_ctime_buf, phase2str(current_phase), aDest_Dtn_IPs[i].aDest_Ip2, aDest_Dtn_IPs[i].sRetransmission_Cntrs.vRetransmissionRate, vRetransmissionRateThreshold);
