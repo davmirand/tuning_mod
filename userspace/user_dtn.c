@@ -459,6 +459,7 @@ typedef struct {
 typedef struct {
 #define MAX_NUM_PORTS_ON_THIS_IP 20
 	__u32 src_ip_addr;
+	char aSrc_Ip2[32];
 	time_t last_time_ip;
         sSrc_Dtn_Ports_t aSrc_port[MAX_NUM_PORTS_ON_THIS_IP];
 	__u16 rsvd;
@@ -594,8 +595,8 @@ void tHouseKeeping_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 				if ((clk - aSrc_Dtn_IPs[i].last_time_ip) >= vHouseTime) //probabaly not doing transfers anymore
 				{
 					if (vDebugLevel > 2)
-						fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer removing attached IP address %u from DB, current_source_networks = %d***\n",
-											ms_ctime_buf, phase2str(current_phase), aSrc_Dtn_IPs[i].src_ip_addr, currently_attached_networks); 
+						fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer removing attached IP address %s (%u) from DB, current_source_networks = %d***\n",
+											ms_ctime_buf, phase2str(current_phase), aSrc_Dtn_IPs[i].aSrc_Ip2, aSrc_Dtn_IPs[i].src_ip_addr, currently_attached_networks); 
 					memset(&aSrc_Dtn_IPs[i],0,sizeof(sSrc_Dtn_IPs_t));
 					currently_attached_networks--;
 				}
@@ -616,8 +617,8 @@ void tHouseKeeping_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 				if ((clk - aDest_Dtn_IPs[i].last_time_ip) >= vHouseTime) //probabaly not doing transfers anymore
 				{
 					if (vDebugLevel > 2)
-						fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer removing attached IP address %u from DB, current_dest_networks = %d***\n",
-											ms_ctime_buf, phase2str(current_phase), aDest_Dtn_IPs[i].dest_ip_addr, currently_dest_networks); 
+						fprintf(tunLogPtr, "%s %s: ***Housekeeping Timer removing attached IP address %s (%u) from DB, current_dest_networks = %d***\n",
+											ms_ctime_buf, phase2str(current_phase), aDest_Dtn_IPs[i].aDest_Ip2, aDest_Dtn_IPs[i].dest_ip_addr, currently_dest_networks); 
 					memset(&aDest_Dtn_IPs[i],0,sizeof(sDest_Dtn_IPs_t));
 					currently_dest_networks--;
 				}
@@ -1384,19 +1385,15 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 		}
 
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-		if (!vSrc_Dtn_IP_Found) //Ip exist 
+		if (!vSrc_Dtn_IP_Found) //Ip exist (not???)
 		{
-			//aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].src_ip_addr = src_ip_addr.y;	
-			//aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].currently_exist = 1;
-			//aSrc_Dtn_IPs[Last_IP_Index_Not_Exist].last_time_ip = clk;
 			--First_IP_Index_Not_Exist;
 			aSrc_Dtn_IPs[First_IP_Index_Not_Exist].src_ip_addr = src_ip_addr.y;	
+			sprintf(aSrc_Dtn_IPs[First_IP_Index_Not_Exist].aSrc_Ip2,"%u.%u.%u.%u", src_ip_addr.a[0], src_ip_addr.a[1], src_ip_addr.a[2], src_ip_addr.a[3]);
 			aSrc_Dtn_IPs[First_IP_Index_Not_Exist].currently_exist = 1;
 			aSrc_Dtn_IPs[First_IP_Index_Not_Exist].last_time_ip = clk;
 			currently_attached_networks++;
 			new_traffic = 1;
-//			if (vDebugLevel > 1)
-//				fprintf(tunLogPtr, "%s %s: ***new traffic got set here3333***\n", ms_ctime_buf, phase2str(current_phase));
 		}
 #endif
 #if 1
@@ -1421,12 +1418,10 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
                 //if ((src_ip_addr.y != ntohl(hop_key.flow_key.src_ip)) || new_traffic)
                 {
 			new_traffic = 0;
-		//	src_ip_addr.y = ntohl(hop_key.flow_key.src_ip);
-		//	src_ip_addr.y = hop_key.flow_key.src_ip;
-			if (vDebugLevel > 1)
+			if (vDebugLevel > 5)
 			{
 				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-				fprintf(tunLogPtr, "%s %s: ***new traffic???***\n", ms_ctime_buf, phase2str(current_phase));
+				fprintf(tunLogPtr, "%s %s: ***new traffic***\n", ms_ctime_buf, phase2str(current_phase));
 			}
 #if 0
 			vIamADestDtn  = 1;
@@ -2317,10 +2312,12 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 }
 
 #define MAX_TUNING_APPLY	10
-
+#define SECS_TO_WAIT_APP_MESSAGE 4
 double fCheckAppBandwidth(char app[], char aDest[], __u32 dest_ip_addr, int index)
 {
 	time_t clk;
+	static time_t now_time = 0; 
+	static time_t last_time = 0;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	char buffer[128];
@@ -2352,12 +2349,37 @@ double fCheckAppBandwidth(char app[], char aDest[], __u32 dest_ip_addr, int inde
 			vBandWidthInGBits = vBandWidthInBits/(double)(1000000);
 	//		aDest_Dtn_IPs[index].last_time_ip = clk;
 			aDest_Dtn_IPs[index].vThis_app_tx_Gbits_per_sec = vBandWidthInGBits; 
-			
-			if (vDebugLevel > 2)
+
+			if (vDebugLevel > 1)
 			{
 				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-				fprintf(tunLogPtr,"%s %s: ***The app \"%s\" with ip addr %s is using a Bandwidth of %.2f Gb/s\n", ms_ctime_buf, phase2str(current_phase), app, aDest, vBandWidthInGBits); //only need this one buffer
+				if (vDebugLevel > 5)
+				{
+					fprintf(tunLogPtr,"%s %s: ***The app \"%s\" to ip addr %s is using a Bandwidth of %.2f Gb/s\n", 
+							ms_ctime_buf, phase2str(current_phase), app, aDest, vBandWidthInGBits); //only need this one buffer
+				}
+				else
+					{
+						if (now_time == 0) //first time thru
+						{
+							now_time = clk;
+							last_time = now_time;
+							fprintf(tunLogPtr,"%s %s: ***The app \"%s\" to ip addr %s is using a Bandwidth of %.2f Gb/s\n", 
+										ms_ctime_buf, phase2str(current_phase), app, aDest, vBandWidthInGBits); //only need this one buffer
+						}
+						else
+							{
+								now_time = clk;
+								if ((now_time - last_time) > SECS_TO_WAIT_APP_MESSAGE)
+								{
+									fprintf(tunLogPtr,"%s %s: ***The app \"%s\" to ip addr %s is using a Bandwidth of %.2f Gb/s\n", 
+												ms_ctime_buf, phase2str(current_phase), app, aDest, vBandWidthInGBits); //only need this one buffer
+									last_time = now_time;
+								}
+							}
+					}
 			}
+
 			while (fgets(buffer, 128, pipe) != NULL); //dump the buffers after
 			break;
 		}
@@ -3445,7 +3467,7 @@ tx_Gbs_off:
 				sFlowCounters[vFlowCount].gFlowCountUsed = 0;
 			}
 
-		if (vDebugLevel > 1)
+		if (vDebugLevel > 5)
 		{
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			fprintf(tunLogPtr, "%s %s: ***New traffic %lu***\n", ms_ctime_buf, phase2str(current_phase), count++);
@@ -4162,7 +4184,7 @@ chk_this:
 					fprintf(tunLogPtr,"\n%s %s: ***using new code *** IPs are *** aDestBin is *%s*, aDest is *%s*\n", 
 									ms_ctime_buf, phase2str(current_phase),aDest_Dtn_IPs[vLastIpFound].aDest_Ip2_Binary, aDest_Dtn_IPs[vLastIpFound].aDest_Ip2);
 				}
-				aDest_Dtn_IPs[vLastIpFound].last_time_ip = clk;
+				//aDest_Dtn_IPs[vLastIpFound].last_time_ip = clk;
 #endif
 				foundstr = strstr(foundstr,"totrt");
 				if (foundstr)
@@ -4175,6 +4197,8 @@ chk_this:
 					if (*foundstr == '0')
 						continue; //no need to count zeros
 #endif
+					aDest_Dtn_IPs[vLastIpFound].last_time_ip = clk;
+
 					while (isdigit(*foundstr))
                 			{
                        		 		aValue[count++] = *foundstr;
