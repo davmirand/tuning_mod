@@ -246,6 +246,7 @@ typedef struct TimerData {
 	union uIP src_ip_addr;
 	union uIP dst_ip_addr;
 	__u32 vQinfo;
+	__u32 vHopDelay;
 } sTimerData_t;
 sTimerData_t sqOCC_TimerID_Data;
 
@@ -572,7 +573,10 @@ void print_hop_key(struct hop_key *key);
 void record_activity(char * pActivity); 
 
 #define SIGALRM_MSG "SIGALRM received.\n"
-int vq_h_TimerIsSet = 0;
+//Just use the vq_TimerIsSet since it al relares to pacing
+//int vq_h_TimerIsSet = 0; 
+
+static int vUseRetransmissionRate = 0; //This will cause us to trigger on queue occupancy alone (if true), if this is what we want
 int vq_TimerIsSet = 0;
 static int vTwiceInaRow = 0;
 
@@ -666,12 +670,39 @@ void qOCC_Hop_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	char activity[MAX_SIZE_TUNING_STRING];
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-	fprintf(tunLogPtr, "%s %s: ***Timer Alarm went off*** still having problems with Queue Occupancy and HopDelays. Time to do something***\n",ms_ctime_buf, phase2str(current_phase)); 
+	if (vDebugLevel > 5)
+		fprintf(tunLogPtr, "%s %s: ***Timer Alarm went off*** still having problems with Queue Occupancy and HopDelays. Will check if we should trigger source***\n",ms_ctime_buf, phase2str(current_phase)); 
 	//***Do something here ***//
-	vq_h_TimerIsSet = 0;
+	//vq_h_TimerIsSet = 0;
+	vq_TimerIsSet = 0;
 	sprintf(activity,"%s %s: ***hop_key.hop_index %X, Doing Something",ctime_buf, phase2str(current_phase), curr_hop_key_hop_index);
 	record_activity(activity); //make sure activity big enough to concatenate additional data -- see record_activity()
 	fflush(tunLogPtr);
+	
+	if (vCanStartEvaluationTimer)
+	{
+		Pthread_mutex_lock(&dtn_mutex);
+
+		while (((sMsgsIn + 1) % SMSGS_BUFFER_SIZE) == sMsgsOut)
+			pthread_cond_wait(&empty, &dtn_mutex);
+
+		strcpy(sMsg[sMsgsIn].msg, "Hello there!!! This is a Qinfo msg...\n");
+		sMsg[sMsgsIn].msg_no = htonl(QINFO_MSG);
+		//sMsg[sMsgsIn].value = htonl(vQinfoUserValue);
+		sMsg[sMsgsIn].value = htonl(sqOCC_TimerID_Data.vQinfo);
+		sMsg[sMsgsIn].vHopDelay = htonl(sqOCC_TimerID_Data.vHopDelay);
+		sMsg[sMsgsIn].src_ip_addr.y = sqOCC_TimerID_Data.src_ip_addr.y;
+		sMsg[sMsgsIn].dst_ip_addr.y = sqOCC_TimerID_Data.dst_ip_addr.y;
+		sMsgSeqNo++;
+		sMsg[sMsgsIn].seq_no = htonl(sMsgSeqNo);
+		cdone = 1;
+		sMsgsIn = (sMsgsIn + 1) % SMSGS_BUFFER_SIZE;
+		Pthread_cond_signal(&full);
+		Pthread_mutex_unlock(&dtn_mutex);
+
+		// Start and wait for (evaluation timer * 10) before trying to trigger source again
+		fStartEvaluationTimer(curr_hop_key_hop_index);
+	}
 	
 	return;
 }
@@ -720,6 +751,7 @@ void qOCC_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 		sMsg[sMsgsIn].msg_no = htonl(QINFO_MSG);
 		//sMsg[sMsgsIn].value = htonl(vQinfoUserValue);
 		sMsg[sMsgsIn].value = htonl(sqOCC_TimerID_Data.vQinfo);
+		sMsg[sMsgsIn].vHopDelay = 0;
 		sMsg[sMsgsIn].src_ip_addr.y = sqOCC_TimerID_Data.src_ip_addr.y;
 		sMsg[sMsgsIn].dst_ip_addr.y = sqOCC_TimerID_Data.dst_ip_addr.y;
 		sMsgSeqNo++;
@@ -1082,13 +1114,33 @@ void fStartEvaluationTimer(__u32 hop_key_hop_index)
 return;
 }
 
-void EvaluateQOcc_and_HopDelay(__u32 hop_key_hop_index)
+void EvaluateQOcc_and_HopDelay(struct hop_key * pHop_key, __u32 vQinfo, __u32 vHopDelay)
 {
 	time_t clk;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	int vRetTimer;
 
+	if (!vq_TimerIsSet)
+	{
+		vRetTimer = timer_settime(qOCC_Hop_TimerID, 0, &sStartTimer, (struct itimerspec *)NULL);
+		if (!vRetTimer)
+		{
+			vq_TimerIsSet = 1;
+			curr_hop_key_hop_index = pHop_key->hop_index;
+			sqOCC_TimerID_Data.src_ip_addr.y = ntohl(pHop_key->flow_key.src_ip);
+			sqOCC_TimerID_Data.dst_ip_addr.y = ntohl(pHop_key->flow_key.dst_ip);
+			sqOCC_TimerID_Data.vQinfo = vQinfo;
+			sqOCC_TimerID_Data.vHopDelay = vHopDelay;
+		}
+		else
+			{
+				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+				fprintf(tunLogPtr,"%s %s: ***WARNING !!! WARNING !!! Could not set Qinfo Occupancy and Hop Delay Timer, vRetTimer = %d,  errno = to %d***\n",
+							ms_ctime_buf, phase2str(current_phase), vRetTimer, errno); 
+			}
+	}
+#if 0
 	if (!vq_h_TimerIsSet)
 	{
 		vRetTimer = timer_settime(qOCC_Hop_TimerID, 0, &sStartTimer, (struct itimerspec *)NULL);
@@ -1105,7 +1157,7 @@ void EvaluateQOcc_and_HopDelay(__u32 hop_key_hop_index)
 		else
 			fprintf(tunLogPtr,"%s %s: ***WARNING !!! WARNING !!! Could not set Timer, vRetTimer = %d,  errno = to %d***\n",ms_ctime_buf, phase2str(current_phase), vRetTimer, errno); 
 	}
-
+#endif
 	return;
 }
 
@@ -1126,6 +1178,7 @@ void EvaluateQOccUserInfo(struct hop_key * pHop_key, __u32 vQinfo)
 			sqOCC_TimerID_Data.src_ip_addr.y = ntohl(pHop_key->flow_key.src_ip);
 			sqOCC_TimerID_Data.dst_ip_addr.y = ntohl(pHop_key->flow_key.dst_ip);
 			sqOCC_TimerID_Data.vQinfo = vQinfo;
+			sqOCC_TimerID_Data.vHopDelay = 0; //no-op
 		}
 		else
 			{
@@ -1244,47 +1297,19 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 			fprintf(tunLogPtr, "%s %s: FLOW    : hop_latency = %u\n",ms_ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
 #endif
 		}
+			
+		vQinfoUserValue = Qinfo;
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 #if 1
 		if ((hop_hop_latency_threshold > vHOP_LATENCY_DELTA) && (Qinfo > vQUEUE_OCCUPANCY_DELTA))
 		{
 			if (vDebugLevel > 0)
 			{
-				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-				fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! Both hop_latency and queue_occupancy is high!!! WARNING !!! WARNING***u\n", ms_ctime_buf, phase2str(current_phase));
-				fprintf(tunLogPtr, "%s %s: ***WARNING hop_latency  = %u\n", ms_ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
-				fprintf(tunLogPtr, "%s %s: ***WARNING queue_occupancy = %u\n", ms_ctime_buf, phase2str(current_phase), Qinfo);
-			}
-
-			EvaluateQOcc_and_HopDelay(hop_key.hop_index);
-		}
-		else
-			{
-				if (vq_h_TimerIsSet)
-				{
-					timer_settime(qOCC_Hop_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
-					vq_h_TimerIsSet = 0;
-				}
-
-				if (hop_hop_latency_threshold > vHOP_LATENCY_DELTA)
-				{
-					if (vDebugLevel > 0)
-					{
-						fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! hop_latency = %u which is high!!! WARNING !!! WARNING***u\n", ms_ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
-					}
-				}
-			}
-
-#if 1
-		//kinda hokey, but will leave this way for now
-		if (Qinfo > vQUEUE_OCCUPANCY_DELTA)  
-		{
-			vQinfoUserValue = Qinfo;
-			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-			if (vDebugLevel > 0)  
-			{
 				if (vDebugLevel > 5)
 				{
-					fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! queue_occupancy = %u which is high!!! WARNING !!! WARNING***\n", ms_ctime_buf, phase2str(current_phase), Qinfo);
+					fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! Both hop_latency and queue_occupancy is high!!! WARNING !!! WARNING***u\n", ms_ctime_buf, phase2str(current_phase));
+					fprintf(tunLogPtr, "%s %s: ***WARNING hop_latency  = %u\n", ms_ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
+					fprintf(tunLogPtr, "%s %s: ***WARNING queue_occupancy = %u\n", ms_ctime_buf, phase2str(current_phase), Qinfo);
 				}
 				else
 					{
@@ -1292,34 +1317,91 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 						{
 							now_time = clk;
 							last_time = now_time;
-							fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! queue_occupancy = %u which is high!!! WARNING !!! WARNING***\n", 
-																	ms_ctime_buf, phase2str(current_phase), Qinfo);
+							fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! Both hop_latency and queue_occupancy is high!!! WARNING !!! WARNING***u\n", ms_ctime_buf, phase2str(current_phase));
+							fprintf(tunLogPtr, "%s %s: ***WARNING hop_latency  = %u\n", ms_ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
+							fprintf(tunLogPtr, "%s %s: ***WARNING queue_occupancy = %u\n", ms_ctime_buf, phase2str(current_phase), Qinfo);
 						}
 						else
 							{
 								now_time = clk;
 								if ((now_time - last_time) > SECS_TO_WAIT_QINFOWARN_MESSAGE)
 								{
-									fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! queue_occupancy = %u which is high!!! WARNING !!! WARNING***\n", 
-																			ms_ctime_buf, phase2str(current_phase), Qinfo);
+									fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! Both hop_latency and queue_occupancy is high!!! WARNING !!! WARNING***u\n", 
+																	ms_ctime_buf, phase2str(current_phase));
+									fprintf(tunLogPtr, "%s %s: ***WARNING hop_latency  = %u\n", ms_ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
+									fprintf(tunLogPtr, "%s %s: ***WARNING queue_occupancy = %u\n", ms_ctime_buf, phase2str(current_phase), Qinfo);
 									last_time = now_time;
 								}
 							}
 					}
 			}
-			//EvaluateQOccUserInfo(hop_key.hop_index);
-			EvaluateQOccUserInfo(&hop_key, vQinfoUserValue);
+
+			EvaluateQOcc_and_HopDelay(&hop_key, vQinfoUserValue, hop_hop_latency_threshold);
 		}
 		else
 			{
-				if (vq_TimerIsSet)
+#if 0
+				if (vq_h_TimerIsSet)
 				{
-					if (vDebugLevel > 4)
-						fprintf(tunLogPtr, "%s %s: ***INFO:  queue_occupancy is %u which is lower than threshold. Turning off Timer***\n", ms_ctime_buf, phase2str(current_phase), Qinfo);
-
-					timer_settime(qOCC_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
-					vq_TimerIsSet = 0;
+					timer_settime(qOCC_Hop_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
+					vq_h_TimerIsSet = 0;
 				}
+#endif
+				if (hop_hop_latency_threshold > vHOP_LATENCY_DELTA)
+				{
+					if (vDebugLevel > 5)
+					{
+						fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! hop_delay = %u which is high!!! WARNING !!! WARNING***u\n", 
+														ms_ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
+					}
+				}
+#if 1
+				//kinda hokey, but will leave this way for now
+				if (Qinfo > vQUEUE_OCCUPANCY_DELTA && vUseRetransmissionRate)  
+				{
+					gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+					if (vDebugLevel > 0)  
+					{
+						if (vDebugLevel > 5)
+						{
+							fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! queue_occupancy = %u which is high!!! WARNING !!! WARNING***\n", ms_ctime_buf, phase2str(current_phase), Qinfo);
+						}
+						else
+							{
+								if (now_time == 0) //first time thru
+								{
+									now_time = clk;
+									last_time = now_time;
+									fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! queue_occupancy = %u which is high!!! WARNING !!! WARNING***\n", 
+																			ms_ctime_buf, phase2str(current_phase), Qinfo);
+								}
+								else
+									{
+										now_time = clk;
+										if ((now_time - last_time) > SECS_TO_WAIT_QINFOWARN_MESSAGE)
+										{
+											fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! queue_occupancy = %u which is high!!! WARNING !!! WARNING***\n", 
+																					ms_ctime_buf, phase2str(current_phase), Qinfo);
+											last_time = now_time;
+										}
+									}
+							}
+					}
+					//EvaluateQOccUserInfo(hop_key.hop_index);
+					EvaluateQOccUserInfo(&hop_key, vQinfoUserValue);
+				}
+				else
+					{
+						if (vq_TimerIsSet)
+						{
+							if (vDebugLevel > 4)
+								fprintf(tunLogPtr, "%s %s: ***INFO:  queue_occupancy and/or hop delay is %u which is lower than threshold. Turning off Timer***\n", 
+																		ms_ctime_buf, phase2str(current_phase), Qinfo);
+							timer_settime(qOCC_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
+							timer_settime(qOCC_Hop_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
+							vq_TimerIsSet = 0;
+						}
+					}
 			}
 #endif
 #endif
@@ -3084,18 +3166,19 @@ start:
 
 		if (vq_TimerIsSet) //Turn off this timer since transmission has stopped
 		{
-			fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on link has stopped for now *** Turning off Queue Occupancy timer:\n",ms_ctime_buf, phase2str(current_phase));
+			fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on link has stopped for now *** Turning off Queue Occupancy/Hop Delay timer:\n",ms_ctime_buf, phase2str(current_phase));
 			timer_settime(qOCC_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
+			timer_settime(qOCC_Hop_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
 			vq_TimerIsSet = 0;
 		}
-
+#if 0
 		if (vq_h_TimerIsSet) //Turn off this timer since transmission has stopped
 		{		
 			fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on link has stopped for now *** Turning off Queue occupancy and Hop Delay timer:",ms_ctime_buf, phase2str(current_phase));
 			timer_settime(qOCC_Hop_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
 			vq_h_TimerIsSet = 0;
 		}
-
+#endif
 		if (!vCanStartEvaluationTimer)
 		{
 			fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on link has stopped for now *** Turning off Evaluation timer:\n",ms_ctime_buf, phase2str(current_phase));

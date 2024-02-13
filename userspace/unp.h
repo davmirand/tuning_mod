@@ -98,6 +98,7 @@ struct PeerMsg {
 	char msg[70];
 	union uIP src_ip_addr;
 	union uIP dst_ip_addr;
+	unsigned int vHopDelay;
 	char * pts;
 	char * ptimes;
 	char * pm;
