@@ -26,7 +26,7 @@
 #include "unp.h"
 #include "user_dtn.h"
 
-#define SMSGS_BUFFER_SIZE 10
+#define SMSGS_BUFFER_SIZE 20
 int sMsgsIn = 0;
 int sMsgsOut = 0;
 unsigned int vHouseKeepingTime = 10000000; //10 million usecs = 10 secs
@@ -726,6 +726,9 @@ void SendResetPacingMsg(struct hop_key * pHop_key)
 	sMsgsIn = (sMsgsIn + 1) % SMSGS_BUFFER_SIZE;
 	Pthread_cond_signal(&full);
 	Pthread_mutex_unlock(&dtn_mutex);
+	
+	// Start and wait for (evaluation timer * 10) before trying to trigger source again
+	fStartEvaluationTimer(curr_hop_key_hop_index);
 return;
 }
 void qOCC_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
@@ -1119,12 +1122,12 @@ void fStartEvaluationTimer(__u32 hop_key_hop_index)
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	int vRetTimer;
 	
-	vSentPacingOver = 1;
 	vRetTimer = timer_settime(qEvaluation_TimerID, 0, &sStartEvaluationTimer, (struct itimerspec *)NULL);
 	if (!vRetTimer)
 	{
 		vCanStartEvaluationTimer = 0;
-		if (vDebugLevel > 4)
+		vSentPacingOver = 1;
+		if (vDebugLevel > 6)
 		{
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			fprintf(tunLogPtr,"%s %s: ***INFO !!! INFO !!! Timer set to %u microseconds for Evaluation***\n",ms_ctime_buf, phase2str(current_phase), gInterval*10); 
@@ -1336,28 +1339,15 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 				}
 				else
 					{
-#if 0
-						if (now_time == 0) //first time thru
+						now_time = clk;
+						if ((now_time - last_time) > SECS_TO_WAIT_QINFOWARN_MESSAGE)
 						{
-							now_time = clk;
-							last_time = now_time;
-							fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! Both hop_latency and queue_occupancy is high!!! WARNING !!! WARNING***u\n", ms_ctime_buf, phase2str(current_phase));
+							fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! Both hop_latency and queue_occupancy is high!!! WARNING !!! WARNING***u\n", 
+															ms_ctime_buf, phase2str(current_phase));
 							fprintf(tunLogPtr, "%s %s: ***WARNING hop_latency  = %u\n", ms_ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
 							fprintf(tunLogPtr, "%s %s: ***WARNING queue_occupancy = %u\n", ms_ctime_buf, phase2str(current_phase), Qinfo);
+							last_time = now_time;
 						}
-						else
-							{
-#endif
-								now_time = clk;
-								if ((now_time - last_time) > SECS_TO_WAIT_QINFOWARN_MESSAGE)
-								{
-									fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! Both hop_latency and queue_occupancy is high!!! WARNING !!! WARNING***u\n", 
-																	ms_ctime_buf, phase2str(current_phase));
-									fprintf(tunLogPtr, "%s %s: ***WARNING hop_latency  = %u\n", ms_ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
-									fprintf(tunLogPtr, "%s %s: ***WARNING queue_occupancy = %u\n", ms_ctime_buf, phase2str(current_phase), Qinfo);
-									last_time = now_time;
-								}
-//							}
 					}
 			}
 
@@ -1393,44 +1383,51 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 						}
 						else
 							{
-#if 0
-								if (now_time == 0) //first time thru
+								now_time = clk;
+								if ((now_time - last_time_qocc) > SECS_TO_WAIT_QINFOWARN_MESSAGE)
 								{
-									now_time = clk;
-									last_time = now_time;
 									fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! queue_occupancy = %u which is high!!! WARNING !!! WARNING***\n", 
 																			ms_ctime_buf, phase2str(current_phase), Qinfo);
+									last_time_qocc = now_time;
 								}
-								else
-									{
-#endif
-										now_time = clk;
-										if ((now_time - last_time_qocc) > SECS_TO_WAIT_QINFOWARN_MESSAGE)
-										{
-											fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! queue_occupancy = %u which is high!!! WARNING !!! WARNING***\n", 
-																					ms_ctime_buf, phase2str(current_phase), Qinfo);
-											last_time_qocc = now_time;
-										}
-//									}
 							}
 					}
 					
 					if (vUseRetransmissionRate)  
 						EvaluateQOccUserInfo(&hop_key, vQinfoUserValue);
+#if 0
+					else
+						{
+							if (vq_TimerIsSet)
+							{
+								if (vDebugLevel > 4)
+									fprintf(tunLogPtr, "%s %s: ***INFO: hop_delay = %u is lower than threshold. Turning off Timer***\n", ms_ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
+								timer_settime(qOCC_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
+								timer_settime(qOCC_Hop_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
+								vq_TimerIsSet = 0;
+							}
+
+							if (vSentPacingOver && vCanStartEvaluationTimer)
+							{
+								SendResetPacingMsg(&hop_key);
+								vSentPacingOver = 0;
+							}
+						}
+#endif
 				}
 				else
 					{
 						if (vq_TimerIsSet)
 						{
 							if (vDebugLevel > 4)
-								fprintf(tunLogPtr, "%s %s: ***INFO:  queue_occupancy and/or hop delay is %u which is lower than threshold. Turning off Timer***\n", 
-																		ms_ctime_buf, phase2str(current_phase), Qinfo);
+								fprintf(tunLogPtr, "%s %s: ***INFO:  queue_occupancy = %u or hop_delay = %u is lower than threshold. Turning off Timer***\n", 
+																		ms_ctime_buf, phase2str(current_phase), Qinfo, hop_hop_latency_threshold);
 							timer_settime(qOCC_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
 							timer_settime(qOCC_Hop_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
 							vq_TimerIsSet = 0;
 						}
 
-						if (vSentPacingOver)
+						if (vSentPacingOver && vCanStartEvaluationTimer)
 						{
 							SendResetPacingMsg(&hop_key);
 							vSentPacingOver = 0;
@@ -1558,7 +1555,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 
                         strcpy(sMsg[sMsgsIn].msg, "Hello there!!! This is a Start of Traffic  msg...\n");
                         sMsg[sMsgsIn].msg_no = htonl(TEST_MSG);
-			sMsg[sMsgsIn].value = htonl(0);
+			sMsg[sMsgsIn].value = 0;
 			sMsg[sMsgsIn].vlan_id = htons(hop_key.flow_key.vlan_id);
 			sMsg[sMsgsIn].src_ip_addr.y = src_ip_addr.y;
 			sMsg[sMsgsIn].dst_ip_addr.y = dst_ip_addr.y;
@@ -3046,12 +3043,12 @@ void fDoResetPacing(char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr)
 			if (gTuningMode && (current_phase == LEARNING))
 			{
 				current_phase = TUNING;
- 				fprintf(tunLogPtr,"%s %s: ***INFO***: *** The Pacing was never changed. No need to reset",ms_ctime_buf, phase2str(current_phase));
+ 				fprintf(tunLogPtr,"%s %s: ***INFO***: *** The Pacing was never changed. No need to reset***\n",ms_ctime_buf, phase2str(current_phase));
 				current_phase = LEARNING;
 			}
 			else
 				{
- 					fprintf(tunLogPtr,"%s %s: ***INFO***: *** The Pacing was never changed. No need to reset",ms_ctime_buf, phase2str(current_phase));
+ 					fprintf(tunLogPtr,"%s %s: ***INFO***: *** The Pacing was never changed. No need to reset***\n",ms_ctime_buf, phase2str(current_phase));
 				}
 		}
 		else
