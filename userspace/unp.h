@@ -67,9 +67,10 @@
 #endif
 #endif
 
-#define TEST_MSG	0
-#define QINFO_MSG	1
-#define HPNSSH_MSG 	2
+#define TEST_MSG		0
+#define QINFO_MSG		1
+#define HPNSSH_MSG 		2
+#define RESET_PACING_MSG	3
 
 //For HPNSSH_MSGs value will be whether to do a read or readall or shutdown
 #define HPNSSH_READ		33

@@ -186,6 +186,7 @@ static int perf_buffer_poll_start = 0;
 static double vGlobal_average_tx_Gbits_per_sec = 0.0;
 static double vMaxPacingRate = 0.9; //90%
 int vResetPacingBack = 0;
+int vSentPacingOver = 0;
 static int new_traffic = 0;
 static int rx_traffic = 0;
 static time_t now_time = 0;
@@ -706,7 +707,27 @@ void qOCC_Hop_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 	
 	return;
 }
+void SendResetPacingMsg(struct hop_key * pHop_key)
+{
+	Pthread_mutex_lock(&dtn_mutex);
 
+	while (((sMsgsIn + 1) % SMSGS_BUFFER_SIZE) == sMsgsOut)
+		pthread_cond_wait(&empty, &dtn_mutex);
+
+	strcpy(sMsg[sMsgsIn].msg, "Hello there!!! This is a Reset Pacing msg...\n");
+	sMsg[sMsgsIn].msg_no = htonl(RESET_PACING_MSG);
+	sMsg[sMsgsIn].value = 0;
+	sMsg[sMsgsIn].vHopDelay = 0;
+	sMsg[sMsgsIn].src_ip_addr.y = ntohl(pHop_key->flow_key.src_ip);
+	sMsg[sMsgsIn].dst_ip_addr.y = ntohl(pHop_key->flow_key.dst_ip);;
+	sMsgSeqNo++;
+	sMsg[sMsgsIn].seq_no = htonl(sMsgSeqNo);
+	cdone = 1;
+	sMsgsIn = (sMsgsIn + 1) % SMSGS_BUFFER_SIZE;
+	Pthread_cond_signal(&full);
+	Pthread_mutex_unlock(&dtn_mutex);
+return;
+}
 void qOCC_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 {
 	time_t clk;
@@ -1098,6 +1119,7 @@ void fStartEvaluationTimer(__u32 hop_key_hop_index)
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	int vRetTimer;
 	
+	vSentPacingOver = 1;
 	vRetTimer = timer_settime(qEvaluation_TimerID, 0, &sStartEvaluationTimer, (struct itimerspec *)NULL);
 	if (!vRetTimer)
 	{
@@ -1392,7 +1414,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 //									}
 							}
 					}
-					//EvaluateQOccUserInfo(hop_key.hop_index);
+					
 					if (vUseRetransmissionRate)  
 						EvaluateQOccUserInfo(&hop_key, vQinfoUserValue);
 				}
@@ -1406,6 +1428,12 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 							timer_settime(qOCC_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
 							timer_settime(qOCC_Hop_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
 							vq_TimerIsSet = 0;
+						}
+
+						if (vSentPacingOver)
+						{
+							SendResetPacingMsg(&hop_key);
+							vSentPacingOver = 0;
 						}
 					}
 			}
@@ -2952,6 +2980,89 @@ return;
 #endif
 
 #if 1
+void fDoResetPacing(char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr);
+void fDoResetPacing(char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr)
+{
+	time_t clk;
+	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
+	char aNicSetting[1024];
+	int found = 0;
+
+	sprintf(aNicSetting,"tc qdisc del dev %s root fq 2>/dev/null", netDevice);
+	
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+	fprintf(tunLogPtr,"%s %s: ***WARNING***: ResetPacing message from destination DTN %s***\n", ms_ctime_buf, phase2str(current_phase), aDest_Ip);
+
+	for (int i = 0; i < MAX_NUM_IP_ATTACHED; i++)
+	{
+		if (!aDest_Dtn_IPs[i].dest_ip_addr)
+			continue;
+		if (dest_ip_addr != aDest_Dtn_IPs[i].dest_ip_addr)
+			continue;
+
+		found = 1;
+		break;
+	}
+
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+
+	if (found && shm_read(&vResetPacingBack, shm) && vResetPacingBack) //reset back the pacing
+	{
+		if (gTuningMode && (current_phase == LEARNING))
+		{
+			vResetPacingBack = 0;
+			shm_write(shm, &vResetPacingBack);
+
+			current_phase = TUNING;
+ 			fprintf(tunLogPtr,"%s %s: ***INFO***: *** resetting back the Pacing with the following:",ms_ctime_buf, phase2str(current_phase));
+			fprintf(tunLogPtr,"%s %s: ***INFO***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+			system(aNicSetting);
+			fprintf(tunLogPtr,"%s %s: ***INFO***: !!!!Pacing has been reset!!!!\n", ms_ctime_buf, phase2str(current_phase));
+			current_phase = LEARNING;
+		}
+		else
+			if (current_phase == TUNING)
+			{
+				vResetPacingBack = 0;
+				shm_write(shm, &vResetPacingBack);
+
+				fprintf(tunLogPtr,"%s %s: ***INFO***: *** resetting back the Pacing with the following:",ms_ctime_buf, phase2str(current_phase));
+				fprintf(tunLogPtr,"%s %s: ***INFO***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+				system(aNicSetting);
+				fprintf(tunLogPtr,"%s %s: ***INFO***: !!!!Pacing has been resetted!!!!\n", ms_ctime_buf, phase2str(current_phase));
+			}
+			else
+				{
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: The pacing was changed and should be changed back, but Learning Mode is on.***", ms_ctime_buf, phase2str(current_phase));
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: The simplest way to change back is to turn off Learning Mode and the Tuning Module will do it for you***\n", ms_ctime_buf, phase2str(current_phase));
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: Do the following from the Tuning Module directory to turn off Learning mode: \"./tuncli -l off\"\n", ms_ctime_buf, phase2str(current_phase));
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: You probably want to turn back on Learning mode after waiting a couple seconds with the following: \"./tuncli -l on\"\n", ms_ctime_buf, phase2str(current_phase));
+				}
+	}
+	else
+		if (found && shm_read(&vResetPacingBack, shm) && !vResetPacingBack) //reset back the pacing
+		{
+			if (gTuningMode && (current_phase == LEARNING))
+			{
+				current_phase = TUNING;
+ 				fprintf(tunLogPtr,"%s %s: ***INFO***: *** The Pacing was never changed. No need to reset",ms_ctime_buf, phase2str(current_phase));
+				current_phase = LEARNING;
+			}
+			else
+				{
+ 					fprintf(tunLogPtr,"%s %s: ***INFO***: *** The Pacing was never changed. No need to reset",ms_ctime_buf, phase2str(current_phase));
+				}
+		}
+		else
+			if (!found)
+			{
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: Some Destination DTN with IP %s, wanted the Pacing on the link resetted...***\n", ms_ctime_buf, phase2str(current_phase), aDest_Ip);
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: However, We are not currently attached to that DTN, so the link may have been broken... no changes to Pacing in this case....***\n", ms_ctime_buf, phase2str(current_phase));
+			}
+return;
+}
+
 void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr);
 void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr)
 {
@@ -3251,6 +3362,12 @@ start:
 			fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on link has stopped for now *** Turning off Evaluation timer:\n",ms_ctime_buf, phase2str(current_phase));
 			timer_settime(qEvaluation_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
 			vCanStartEvaluationTimer = 1;
+		}
+
+		if (vSentPacingOver)
+		{
+			fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on link has stopped for now *** Turning off SentPacingOver flag:\n",ms_ctime_buf, phase2str(current_phase));
+			vSentPacingOver = 0;
 		}
 
 		if (shm_read(&vResetPacingBack, shm) && vResetPacingBack) //nothing happening - reset back the pacing
@@ -5296,7 +5413,7 @@ process_request(int sockfd)
 		}
 
 
-		if ((ntohl(from_cli.msg_no) == QINFO_MSG) || (ntohl(from_cli.msg_no) == TEST_MSG))
+		if ((ntohl(from_cli.msg_no) == QINFO_MSG) || (ntohl(from_cli.msg_no) == TEST_MSG) || (ntohl(from_cli.msg_no) == RESET_PACING_MSG) )
 		{
 			uSrc_Ip.y  = ntohl(from_cli.src_ip_addr.y);
 			uDst_Ip.y  = ntohl(from_cli.dst_ip_addr.y);
@@ -5317,22 +5434,34 @@ process_request(int sockfd)
 			fDoQinfoAssessment(ntohl(from_cli.value), ntohl(from_cli.vHopDelay), aSrc_Ip, aDest_Ip, uDst_Ip.y);
 		}
 		else
-			if (ntohl(from_cli.msg_no) == TEST_MSG)
+			if (ntohl(from_cli.msg_no) == RESET_PACING_MSG)
 			{
 				if (vDebugLevel > 0)
 				{
-					fprintf(tunLogPtr,"\n%s %s: ***Received a message %u from destination DTN...***\n", 
-									ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
-					fprintf(tunLogPtr,"%s %s: ***msg_no = %d, my_ip = %s, dest_ip = %s, msg buf = %s", 
-									ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), aSrc_Ip, aDest_Ip, from_cli.msg);
+					fprintf(tunLogPtr,"\n%s %s: ***Received Reset Pacing message %u from destination DTN...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
+					fprintf(tunLogPtr,"%s %s: ***msg_no = %d, msg value = %u, my_ip = %s, dest_ip = %s, msg buf = %s", 
+										ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), ntohl(from_cli.value), aSrc_Ip, aDest_Ip, from_cli.msg);
 				}
+
+				fDoResetPacing(aSrc_Ip, aDest_Ip, uDst_Ip.y);
 			}
 			else
-				if (vDebugLevel > 2)
+				if (ntohl(from_cli.msg_no) == TEST_MSG)
 				{
-					fprintf(tunLogPtr,"\n%s %s: ***Received unknown message from some DTN???..., msg buf = %s***\n", 
-									ms_ctime_buf, phase2str(current_phase), from_cli.msg);
+					if (vDebugLevel > 0)
+					{
+						fprintf(tunLogPtr,"\n%s %s: ***Received a message %u from destination DTN...***\n", 
+										ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
+						fprintf(tunLogPtr,"%s %s: ***msg_no = %d, my_ip = %s, dest_ip = %s, msg buf = %s", 
+										ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), aSrc_Ip, aDest_Ip, from_cli.msg);
+					}
 				}
+				else
+					if (vDebugLevel > 2)
+					{
+						fprintf(tunLogPtr,"\n%s %s: ***Received unknown message from some DTN???..., msg buf = %s***\n", 
+										ms_ctime_buf, phase2str(current_phase), from_cli.msg);
+					}
 
 		fflush(tunLogPtr);
 	}
