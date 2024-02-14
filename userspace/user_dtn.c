@@ -1711,6 +1711,37 @@ void check_req(http_s *h, char aResp[])
 		goto after_check;
 	}
 	
+	if (strstr(pReqData,"GET /-r#"))
+	{
+		int vNewUseRetransmissionRate = 0;
+		/* Change debug level of Tuning Module */
+		char *p = (pReqData + sizeof("GET /-d#")) - 1;
+		while (isdigit(*p))
+		{
+			aNumber[count++] = *p;
+			p++;
+		}
+	
+		vNewUseRetransmissionRate = atoi(aNumber);
+
+		if (vNewUseRetransmissionRate > 0)
+		{
+			vNewUseRetransmissionRate = 1;
+			sprintf(aResp,"Changed to now use RetransmissionRate in determining pacing adjustment from %d to %d!\n", vUseRetransmissionRate, vNewUseRetransmissionRate);
+		}
+		else
+			sprintf(aResp,"Changed to not use RetransmissionRate in determining pacing adjustment from %d to %d!\n", vUseRetransmissionRate, vNewUseRetransmissionRate);
+		
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		if (vNewUseRetransmissionRate)
+			fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to use RetransmissionRate in determining pacing adjustment***\n", ms_ctime_buf, phase2str(current_phase));
+		else
+			fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to *NOT* use RetransmissionRate in determining pacing adjustment***\n", ms_ctime_buf, phase2str(current_phase));
+
+		vUseRetransmissionRate = vNewUseRetransmissionRate;
+		goto after_check;
+	}
+	
 	if (strstr(pReqData,"GET /-l#on"))
 	{
 		/* Put Tuning Module in learning mode */
@@ -2915,8 +2946,8 @@ return;
 #endif
 
 #if 1
-void fDoQinfoAssessment(unsigned int val, char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr);
-void fDoQinfoAssessment(unsigned int val, char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr)
+void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr);
+void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr)
 {
 
         time_t clk;
@@ -2957,7 +2988,47 @@ void fDoQinfoAssessment(unsigned int val, char aSrc_Ip[], char aDest_Ip[], __u32
 	}
 
         gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-        if (found && (vRetransmissionRate > vRetransmissionRateThreshold))
+        if (found && hop_delay)
+        {
+                fprintf(tunLogPtr,"%s %s: ***WARNING***: The Destination IP %s, has a queue occupamcy of %u and a hop_delay of %u which is with the retransmission rate of %.5f is higher that the retansmission threshold of %.5f.\n", ms_ctime_buf, phase2str(current_phase), aDest_Ip, vRetransmissionRate, vRetransmissionRateThreshold);
+                sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, aQdiscVal, netDevice, (vGlobal_average_tx_Gbits_per_sec * vMaxPacingRate)); //90%
+
+                if (gTuningMode && (current_phase == LEARNING))
+                {
+                        current_phase = TUNING;
+                        fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f Gb/s. Will adjust the pacing based on this value.\n",
+                                                                                                                                                        ms_ctime_buf, phase2str(current_phase), vGlobal_average_tx_Gbits_per_sec);
+                        fprintf(tunLogPtr,"%s %s: ****INFO*****: Current average transmitted bytes on this flow is %.2f Gb/s. \n", ms_ctime_buf, phase2str(current_phase), vThis_app_tx_Gbits_per_sec);
+                        fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+                        system(aNicSetting);
+                        //fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!!\n", ms_ctime_buf, phase2str(current_phase));
+                        current_phase = LEARNING;
+                        vResetPacingBack = 1;
+			shm_write(shm, &vResetPacingBack);
+
+                        fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!! %d\n", ms_ctime_buf, phase2str(current_phase), vResetPacingBack);
+                        current_phase = LEARNING;
+                }
+                else
+                        if (current_phase == TUNING)
+                        {
+                                fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f Gb/s. Will adjust the pacing based on this value.\n",
+                                                                                                                                                                ms_ctime_buf, phase2str(current_phase), vGlobal_average_tx_Gbits_per_sec);
+                                fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+                                system(aNicSetting);
+                                fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!!\n", ms_ctime_buf, phase2str(current_phase));
+                                vResetPacingBack = 1;
+				shm_write(shm, &vResetPacingBack);
+                        }
+                        else
+                                {
+                                        fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f Gb/s. Try running the following:\n",
+                                                                                                                                                        ms_ctime_buf, phase2str(current_phase), vGlobal_average_tx_Gbits_per_sec);
+                                        fprintf(tunLogPtr,"%s %s: ***WARNING***: \"%s\"\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+                                }
+        }
+	else
+        if (found && !hop_delay && (vRetransmissionRate > vRetransmissionRateThreshold)) //!hop_delay means we are also using ueue occuoancy and retransmission rate
         {
                 fprintf(tunLogPtr,"%s %s: ***WARNING***: The Destination IP %s, with the retransmission rate of %.5f is higher that the retansmission threshold of %.5f.\n", ms_ctime_buf, phase2str(current_phase), aDest_Ip, vRetransmissionRate, vRetransmissionRateThreshold);
                 sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, aQdiscVal, netDevice, (vGlobal_average_tx_Gbits_per_sec * vMaxPacingRate)); //90%
@@ -5247,7 +5318,7 @@ process_request(int sockfd)
 									ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), ntohl(from_cli.value), aSrc_Ip, aDest_Ip, from_cli.msg);
 			}
 
-			fDoQinfoAssessment(ntohl(from_cli.value), aSrc_Ip, aDest_Ip, uDst_Ip.y);
+			fDoQinfoAssessment(ntohl(from_cli.value), ntohl(from_cli.vHopDelay), aSrc_Ip, aDest_Ip, uDst_Ip.y);
 		}
 		else
 			if (ntohl(from_cli.msg_no) == TEST_MSG)
