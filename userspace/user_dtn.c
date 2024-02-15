@@ -679,7 +679,6 @@ void qOCC_Hop_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 	sprintf(activity,"%s %s: ***hop_key.hop_index %X, Doing Something",ctime_buf, phase2str(current_phase), curr_hop_key_hop_index);
 	record_activity(activity); //make sure activity big enough to concatenate additional data -- see record_activity()
 	fflush(tunLogPtr);
-	
 	if (vCanStartEvaluationTimer)
 	{
 		Pthread_mutex_lock(&dtn_mutex);
@@ -728,7 +727,7 @@ void SendResetPacingMsg(struct hop_key * pHop_key)
 	Pthread_mutex_unlock(&dtn_mutex);
 	
 	// Start and wait for (evaluation timer * 10) before trying to trigger source again
-	fStartEvaluationTimer(curr_hop_key_hop_index);
+	//fStartEvaluationTimer(curr_hop_key_hop_index);
 return;
 }
 void qOCC_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
@@ -1372,7 +1371,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 				}
 #if 1
 				//kinda hokey, but will leave this way for now
-				if (Qinfo > vQUEUE_OCCUPANCY_DELTA)  
+				if (vUseRetransmissionRate && (Qinfo > vQUEUE_OCCUPANCY_DELTA))
 				{
 					gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 					if (vDebugLevel > 0)  
@@ -1393,42 +1392,26 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 							}
 					}
 					
-					if (vUseRetransmissionRate)  
-						EvaluateQOccUserInfo(&hop_key, vQinfoUserValue);
-#if 0
-					else
-						{
-							if (vq_TimerIsSet)
-							{
-								if (vDebugLevel > 4)
-									fprintf(tunLogPtr, "%s %s: ***INFO: hop_delay = %u is lower than threshold. Turning off Timer***\n", ms_ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
-								timer_settime(qOCC_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
-								timer_settime(qOCC_Hop_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
-								vq_TimerIsSet = 0;
-							}
-
-							if (vSentPacingOver && vCanStartEvaluationTimer)
-							{
-								SendResetPacingMsg(&hop_key);
-								vSentPacingOver = 0;
-							}
-						}
-#endif
+					EvaluateQOccUserInfo(&hop_key, vQinfoUserValue);
 				}
 				else
 					{
+						gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 						if (vq_TimerIsSet)
 						{
-							if (vDebugLevel > 4)
+							if (vDebugLevel > 6)
 								fprintf(tunLogPtr, "%s %s: ***INFO:  queue_occupancy = %u or hop_delay = %u is lower than threshold. Turning off Timer***\n", 
 																		ms_ctime_buf, phase2str(current_phase), Qinfo, hop_hop_latency_threshold);
-							timer_settime(qOCC_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
+							if (vUseRetransmissionRate)
+								timer_settime(qOCC_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
+
 							timer_settime(qOCC_Hop_TimerID, 0, &sDisableTimer, (struct itimerspec *)NULL);
 							vq_TimerIsSet = 0;
 						}
 
 						if (vSentPacingOver && vCanStartEvaluationTimer)
 						{
+							fprintf(tunLogPtr, "%s %s: ***INFO:  SSSSssending reset message***\n", ms_ctime_buf, phase2str(current_phase));
 							SendResetPacingMsg(&hop_key);
 							vSentPacingOver = 0;
 						}
