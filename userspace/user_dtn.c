@@ -706,6 +706,32 @@ void qOCC_Hop_TimerID_Handler(int signum, siginfo_t *info, void *ptr)
 	
 	return;
 }
+
+void SendResetCleanUpPacingMsg()
+{
+	Pthread_mutex_lock(&dtn_mutex);
+
+	while (((sMsgsIn + 1) % SMSGS_BUFFER_SIZE) == sMsgsOut)
+		pthread_cond_wait(&empty, &dtn_mutex);
+
+	strcpy(sMsg[sMsgsIn].msg, "Hello there!!! This is a Reset CleanUp Pacing msg...\n");
+	sMsg[sMsgsIn].msg_no = htonl(CLEANUP_RESET_PACING_MSG);
+	sMsg[sMsgsIn].value = 0;
+	sMsg[sMsgsIn].vHopDelay = 0;
+	sMsg[sMsgsIn].src_ip_addr.y = src_ip_addr.y;
+	sMsg[sMsgsIn].dst_ip_addr.y = 0;
+	sMsgSeqNo++;
+	sMsg[sMsgsIn].seq_no = htonl(sMsgSeqNo);
+	cdone = 1;
+	sMsgsIn = (sMsgsIn + 1) % SMSGS_BUFFER_SIZE;
+	Pthread_cond_signal(&full);
+	Pthread_mutex_unlock(&dtn_mutex);
+	
+	// Start and wait for (evaluation timer * 10) before trying to trigger source again
+	//fStartEvaluationTimer(curr_hop_key_hop_index);
+return;
+}
+
 void SendResetPacingMsg(struct hop_key * pHop_key)
 {
 	Pthread_mutex_lock(&dtn_mutex);
@@ -1242,6 +1268,7 @@ void record_activity(char *pActivity)
 }
 
 #define SECS_TO_WAIT_QINFOWARN_MESSAGE 20
+#define SECS_TO_WAIT_QINFOWARN_MESSAGE_5 25
 void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 {
 	void *data_end = data + size;
@@ -1250,7 +1277,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 	long long flow_hop_latency_threshold = 0;
 	time_t clk;
 	time_t now_time = 0;
-	static time_t last_time = 0, last_time_qocc = 0;
+	static time_t last_time = 0, last_time_qocc = 0, last_time_hopd = 0;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 
@@ -1361,21 +1388,13 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 					vq_h_TimerIsSet = 0;
 				}
 #endif
-				if (hop_hop_latency_threshold > vHOP_LATENCY_DELTA)
-				{
-					if (vDebugLevel > 5)
-					{
-						fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! hop_delay = %u which is high!!! WARNING !!! WARNING***u\n", 
-														ms_ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
-					}
-				}
 #if 1
 				//kinda hokey, but will leave this way for now
 				if (vUseRetransmissionRate && (Qinfo > vQUEUE_OCCUPANCY_DELTA))
 				{
-					gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 					if (vDebugLevel > 0)  
 					{
+						gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 						if (vDebugLevel > 6)
 						{
 							fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! queue_occupancy = %u which is high!!! WARNING !!! WARNING***\n", ms_ctime_buf, phase2str(current_phase), Qinfo);
@@ -1396,10 +1415,48 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 				}
 				else
 					{
-						gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+						if (vDebugLevel > 0)  
+						{
+							gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+							if (vDebugLevel > 6)
+							{
+								if (Qinfo > vQUEUE_OCCUPANCY_DELTA)
+									fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! queue_occupancy = %u which is high!!! WARNING !!! WARNING***\n", 
+																			ms_ctime_buf, phase2str(current_phase), Qinfo);
+				
+								if (hop_hop_latency_threshold > vHOP_LATENCY_DELTA)
+									fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! hop_delay = %u which is high!!! WARNING !!! WARNING***u\n", 
+																ms_ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
+							}
+							else
+								{
+									if (Qinfo > vQUEUE_OCCUPANCY_DELTA)
+									{
+										now_time = clk;
+										if ((now_time - last_time_qocc) > SECS_TO_WAIT_QINFOWARN_MESSAGE_5)
+										{
+											fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! queue_occupancy = %u which is high!!! WARNING !!! WARNING***\n", 
+																					ms_ctime_buf, phase2str(current_phase), Qinfo);
+											last_time_qocc = now_time;
+										}
+									}
+								
+									if (hop_hop_latency_threshold > vHOP_LATENCY_DELTA)
+									{
+										now_time = clk;
+										if ((now_time - last_time_hopd) > SECS_TO_WAIT_QINFOWARN_MESSAGE_5)
+										{
+											fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! hop_delay = %u which is high!!! WARNING !!! WARNING***u\n", 
+																		ms_ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
+											last_time_hopd = now_time;
+										}
+									}
+								}
+						}
+
 						if (vq_TimerIsSet)
 						{
-							if (vDebugLevel > 6)
+							if (vDebugLevel > 8)
 								fprintf(tunLogPtr, "%s %s: ***INFO:  queue_occupancy = %u or hop_delay = %u is lower than threshold. Turning off Timer***\n", 
 																		ms_ctime_buf, phase2str(current_phase), Qinfo, hop_hop_latency_threshold);
 							if (vUseRetransmissionRate)
@@ -1411,7 +1468,9 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 
 						if (vSentPacingOver && vCanStartEvaluationTimer)
 						{
-							fprintf(tunLogPtr, "%s %s: ***INFO:  SSSSssending reset message***\n", ms_ctime_buf, phase2str(current_phase));
+							if (vDebugLevel > 1)
+								fprintf(tunLogPtr, "%s %s: ***INFO:  SSSSssending reset message***\n", ms_ctime_buf, phase2str(current_phase));
+
 							SendResetPacingMsg(&hop_key);
 							vSentPacingOver = 0;
 						}
@@ -2960,6 +3019,70 @@ return;
 #endif
 
 #if 1
+void fDoCleanupResetPacing(void);
+void fDoCleanupResetPacing(void)
+{
+	time_t clk;
+	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
+	char aNicSetting[1024];
+	int found = 0;
+
+	sprintf(aNicSetting,"tc qdisc del dev %s root fq 2>/dev/null", netDevice);
+	
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+	fprintf(tunLogPtr,"%s %s: ***WARNING***: Received *CleanupResetPacing* message from a destination DTN...***\n", ms_ctime_buf, phase2str(current_phase));
+
+	if (shm_read(&vResetPacingBack, shm) && vResetPacingBack) //reset back the pacing
+	{
+		if (gTuningMode && (current_phase == LEARNING))
+		{
+			vResetPacingBack = 0;
+			shm_write(shm, &vResetPacingBack);
+
+			current_phase = TUNING;
+ 			fprintf(tunLogPtr,"%s %s: ***INFO***: *** resetting back the Pacing with the following:",ms_ctime_buf, phase2str(current_phase));
+			fprintf(tunLogPtr,"%s %s: ***INFO***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+			system(aNicSetting);
+			fprintf(tunLogPtr,"%s %s: ***INFO***: !!!!Pacing has been reset!!!!\n", ms_ctime_buf, phase2str(current_phase));
+			current_phase = LEARNING;
+		}
+		else
+			if (current_phase == TUNING)
+			{
+				vResetPacingBack = 0;
+				shm_write(shm, &vResetPacingBack);
+
+				fprintf(tunLogPtr,"%s %s: ***INFO***: *** resetting back the Pacing with the following:",ms_ctime_buf, phase2str(current_phase));
+				fprintf(tunLogPtr,"%s %s: ***INFO***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+				system(aNicSetting);
+				fprintf(tunLogPtr,"%s %s: ***INFO***: !!!!Pacing has been resetted!!!!\n", ms_ctime_buf, phase2str(current_phase));
+			}
+			else
+				{
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: The pacing was changed and should be changed back, but Learning Mode is on.***", ms_ctime_buf, phase2str(current_phase));
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: The simplest way to change back is to turn off Learning Mode and the Tuning Module will do it for you***\n", ms_ctime_buf, phase2str(current_phase));
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: Do the following from the Tuning Module directory to turn off Learning mode: \"./tuncli -l off\"\n", ms_ctime_buf, phase2str(current_phase));
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: You probably want to turn back on Learning mode after waiting a couple seconds with the following: \"./tuncli -l on\"\n", ms_ctime_buf, phase2str(current_phase));
+				}
+	}
+	else
+		if (shm_read(&vResetPacingBack, shm) && !vResetPacingBack) //reset back the pacing
+		{
+			if (gTuningMode && (current_phase == LEARNING))
+			{
+				current_phase = TUNING;
+ 				fprintf(tunLogPtr,"%s %s: ***INFO***: *** Pacing must have been reset already or never changed. Nothing to do here***\n",ms_ctime_buf, phase2str(current_phase));
+				current_phase = LEARNING;
+			}
+			else
+				{
+ 					fprintf(tunLogPtr,"%s %s: ***INFO***: *** Pacing must have been reset already or never changed. Nothing to do here***\n",ms_ctime_buf, phase2str(current_phase));
+				}
+		}
+return;
+}
+
 void fDoResetPacing(char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr);
 void fDoResetPacing(char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr)
 {
@@ -3346,7 +3469,8 @@ start:
 
 		if (vSentPacingOver)
 		{
-			fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on link has stopped for now *** Turning off SentPacingOver flag:\n",ms_ctime_buf, phase2str(current_phase));
+			fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on link has stopped for now *** Turning off SentPacingOver flag and will try to Cleanup pacing on peer:\n",ms_ctime_buf, phase2str(current_phase));
+			SendResetCleanUpPacingMsg();
 			vSentPacingOver = 0;
 		}
 
@@ -5400,6 +5524,12 @@ process_request(int sockfd)
 			sprintf(aSrc_Ip,"%u.%u.%u.%u", uSrc_Ip.a[0], uSrc_Ip.a[1], uSrc_Ip.a[2], uSrc_Ip.a[3]);
 			sprintf(aDest_Ip,"%u.%u.%u.%u", uDst_Ip.a[0], uDst_Ip.a[1], uDst_Ip.a[2], uDst_Ip.a[3]);
 		}
+		else
+			if (ntohl(from_cli.msg_no) == CLEANUP_RESET_PACING_MSG)
+			{
+				uSrc_Ip.y  = ntohl(from_cli.src_ip_addr.y);
+				sprintf(aSrc_Ip,"%u.%u.%u.%u", uSrc_Ip.a[0], uSrc_Ip.a[1], uSrc_Ip.a[2], uSrc_Ip.a[3]);
+			}
 
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		if (ntohl(from_cli.msg_no) == QINFO_MSG)
@@ -5437,11 +5567,24 @@ process_request(int sockfd)
 					}
 				}
 				else
-					if (vDebugLevel > 2)
+					if (ntohl(from_cli.msg_no) == CLEANUP_RESET_PACING_MSG)
 					{
-						fprintf(tunLogPtr,"\n%s %s: ***Received unknown message from some DTN???..., msg buf = %s***\n", 
-										ms_ctime_buf, phase2str(current_phase), from_cli.msg);
+						if (vDebugLevel > 0)
+						{
+							fprintf(tunLogPtr,"\n%s %s: ***Received a message %u from a destination DTN...***\n", 
+											ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.seq_no));
+							fprintf(tunLogPtr,"%s %s: ***msg_no = %d, my_ip = %s, msg buf = %s", 
+											ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), aSrc_Ip, from_cli.msg);
+						}
+				
+						fDoCleanupResetPacing();
 					}
+					else
+						if (vDebugLevel > 2)
+						{
+							fprintf(tunLogPtr,"\n%s %s: ***Received unknown message from some DTN???..., msg buf = %s***\n", 
+											ms_ctime_buf, phase2str(current_phase), from_cli.msg);
+						}
 
 		fflush(tunLogPtr);
 	}
