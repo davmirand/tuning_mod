@@ -184,6 +184,7 @@ static int perf_buffer_poll_start = 0;
 //static time_t total_time_passed = 0;
 //static double vRetransmissionRate = 0.0;
 static double vGlobal_average_tx_Gbits_per_sec = 0.0;
+static double vGlobal_average_rx_Gbits_per_sec = 0.0;
 static double vMaxPacingRate = 0.9; //90%
 int vResetPacingBack = 0;
 int vSentPacingOver = 0;
@@ -196,6 +197,7 @@ static int vIamADestDtn = 0;
 static double rtt_threshold = 2.0;
 static int rtt_factor = 4;
 void fStartEvaluationTimer(__u32);
+void fGetTxBitRate(void);
 time_t calculate_delta_for_csv(void);
 time_t calculate_delta_for_csv(void)
 {
@@ -1454,7 +1456,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 						if (vSentPacingOver && vCanStartEvaluationTimer)
 						{
 							if (vDebugLevel > 1)
-								fprintf(tunLogPtr, "%s %s: ***INFO:  SSSSssending reset message***\n", ms_ctime_buf, phase2str(current_phase));
+								fprintf(tunLogPtr, "%s %s: ***INFO:  Sending Reset Pacing message***\n", ms_ctime_buf, phase2str(current_phase));
 
 							SendResetPacingMsg(&hop_key);
 							vSentPacingOver = 0;
@@ -3153,6 +3155,9 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 	double vThis_average_tx_Gbits_per_sec = 0.0, vNewPacingValue = 0.0;;
 
 	strcpy(aQdiscVal,"fq");
+	if (gTuningMode)
+		current_phase = TUNING;
+
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***WARNING***: Qinfo message with value %u from destination DTN %s***\n", ms_ctime_buf, phase2str(current_phase), val, aDest_Ip);
 
@@ -3172,22 +3177,44 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 
 
 	vThis_average_tx_Gbits_per_sec = vGlobal_average_tx_Gbits_per_sec;
+
+	fprintf(tunLogPtr,"%s %s: ***WARNING***: tx is %.2f Gb/s on the link \n", ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
+
+	if (vThis_average_tx_Gbits_per_sec < 0.5) //tx bits on link not propagated properly yet
+	{
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***WARNING***: Average TX Gb/s is %.2f and appears to not be calculated properly yet. Will check...\n", 
+					ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
+			//vThis_average_tx_Gbits_per_sec = netDeviceSpeed/(double)1000;
+			//vAdjustSpeed = 1;
+		fGetTxBitRate();
+		vThis_average_tx_Gbits_per_sec = vGlobal_average_tx_Gbits_per_sec;
+		
+		fprintf(tunLogPtr,"%s %s: ***WARNING***: After recalculation, Average TX Gb/s is %.2f...\n", 
+					ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
+	}
+	
 	vNewPacingValue = vThis_average_tx_Gbits_per_sec * vMaxPacingRate;
+	if (vNewPacingValue > 34.0) //somehow the maxrate can't be over 34.3 - saw during testing
+	{
+		fprintf(tunLogPtr,"%s %s: ***WARNING***: Pacing Value is over 34.0. Pacing cannot be set over 34.3. Setting to 34.0...\n", 
+													ms_ctime_buf, phase2str(current_phase));
+		vNewPacingValue = 34.0;
+	}
+
 	sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, aQdiscVal, netDevice, vNewPacingValue); //90%
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	if (found && hop_delay)
 	{
 		fprintf(tunLogPtr,"%s %s: ***WARNING***: The Destination IP %s, has a queue occupancy of %u and a hop_delay of %u.\n", ms_ctime_buf, phase2str(current_phase), aDest_Ip, val, hop_delay);
 		//sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, aQdiscVal, netDevice, (vGlobal_average_tx_Gbits_per_sec * vMaxPacingRate)); //90%
-		if (gTuningMode && (current_phase == LEARNING))
+		if (gTuningMode)
 		{
-			current_phase = TUNING;
 			fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f Gb/s. Will adjust the pacing based on this value.\n",
 																				ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
 			fprintf(tunLogPtr,"%s %s: ****INFO*****: Current average transmitted bytes on this flow is %.2f Gb/s. \n", ms_ctime_buf, phase2str(current_phase), vThis_app_tx_Gbits_per_sec);
 			fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
 			system(aNicSetting);
-			//fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!!\n", ms_ctime_buf, phase2str(current_phase));
 			current_phase = LEARNING;
 			vResetPacingBack = 1;
 			shm_write(shm, &vResetPacingBack);
@@ -3196,22 +3223,11 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 			current_phase = LEARNING;
 		}
  		else
-			if (current_phase == TUNING)
 			{
-				fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f Gb/s. Will adjust the pacing based on this value.\n",
-																				ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
-				fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
-				system(aNicSetting);
-				fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!!\n", ms_ctime_buf, phase2str(current_phase));
-				vResetPacingBack = 1;
-				shm_write(shm, &vResetPacingBack);
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f Gb/s. Try running the following:\n",
+																		ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: \"%s\"\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
 			}
-			else
-				{
-					fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f Gb/s. Try running the following:\n",
-																			ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
-					fprintf(tunLogPtr,"%s %s: ***WARNING***: \"%s\"\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
-				}
 	}
 	else
  		if (found && !hop_delay && (vRetransmissionRate > vRetransmissionRateThreshold)) //!hop_delay means we are also using ueue occuoancy and retransmission rate
@@ -3219,38 +3235,23 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 			fprintf(tunLogPtr,"%s %s: ***WARNING***: The Destination IP %s, with the retransmission rate of %.5f is higher that the retansmission threshold of %.5f.\n", ms_ctime_buf, phase2str(current_phase), aDest_Ip, vRetransmissionRate, vRetransmissionRateThreshold);
 		//	sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, aQdiscVal, netDevice, (vGlobal_average_tx_Gbits_per_sec * vMaxPacingRate)); //90%
 
-			if (gTuningMode && (current_phase == LEARNING))
+			if (gTuningMode)
 			{
-				current_phase = TUNING;
 				fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f Gb/s. Will adjust the pacing based on this value.\n",
 																				ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
 				fprintf(tunLogPtr,"%s %s: ****INFO*****: Current average transmitted bytes on this flow is %.2f Gb/s. \n", ms_ctime_buf, phase2str(current_phase), vThis_app_tx_Gbits_per_sec);
 				fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
 				system(aNicSetting);
-				current_phase = LEARNING;
 				vResetPacingBack = 1;
 				shm_write(shm, &vResetPacingBack);
-
 				fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!! %d\n", ms_ctime_buf, phase2str(current_phase), vResetPacingBack);
-				current_phase = LEARNING;
 			}
 			else
-				if (current_phase == TUNING)
 				{
-					fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f Gb/s. Will adjust the pacing based on this value.\n",
-																					ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
-					fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
-					system(aNicSetting);
-					fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!!\n", ms_ctime_buf, phase2str(current_phase));
-					vResetPacingBack = 1;
-					shm_write(shm, &vResetPacingBack);
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f Gb/s. Try running the following:\n",
+																			ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: \"%s\"\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
 				}
-				else
-					{
-						fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current average transmitted bytes on the link is %.2f Gb/s. Try running the following:\n",
-																				ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
-						fprintf(tunLogPtr,"%s %s: ***WARNING***: \"%s\"\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
-					}
 		}
 		else
 			if (!found)
@@ -3264,10 +3265,191 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 					fprintf(tunLogPtr,"%s %s: ***WARNING***: However, the retransmission rate of %.5f is lower that the retansmission threshold of %.5f**\n",
 												ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
 				}
+	fflush(tunLogPtr);
+
+	if (gTuningMode)
+		current_phase = LEARNING; // set back
 return;
 }
 #endif
+
 #define SECS_TO_WAIT_TX_RX_MESSAGE 20
+void fGetTxBitRate()
+{
+	time_t clk;
+	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
+	char buffer[128];
+	FILE *pipe;
+	unsigned long last_tx_bytes = 0, last_rx_bytes = 0;	
+	int check_bitrate_interval = 0;
+	unsigned long rx_before, rx_now, rx_bytes_tot;
+	unsigned long tx_before, tx_now, tx_bytes_tot;
+	double average_tx_kbits_per_sec = 0.0;
+	double average_tx_Gbits_per_sec = 0.0;
+	double average_rx_Gbits_per_sec = 0.0;
+	double average_rx_kbits_per_sec = 0.0;
+	double tx_jitter = 0.30;
+	char try[1024];
+	int stage = 0;
+
+	sprintf(try,"bpftrace -e \'BEGIN { @name;} kprobe:dev_get_stats { $nd = (struct net_device *) arg0; @name = $nd->name; } kretprobe:dev_get_stats /@name == \"%s\"/ { $rtnl = (struct rtnl_link_stats64 *) retval; $rx_bytes = $rtnl->rx_bytes; $tx_bytes = $rtnl->tx_bytes; printf(\"%s %s\\n\", $tx_bytes, $rx_bytes); } interval:s:1 { exit(); } END { clear(@name); }\'",netDevice,"%lu","%lu");
+
+start:
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+	fprintf(tunLogPtr,"%s %s: ***using TxBitRate()***\n", ms_ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
+#if 0
+	vIamASrcDtn = 1;
+	if (previous_average_tx_Gbits_per_sec && vIamASrcDtn)
+	{
+		vIpCount = MAX_NUM_IP_ATTACHED;
+                        
+		while (!aDest_Dtn_IPs[vLastIpFound].dest_ip_addr && vIpCount)
+		{
+			if (vDebugLevel > 8)
+				fprintf(tunLogPtr,"%s %s: ***looking for app ip addrs vLastIpFound= %d, ...vIpCount = %d***\n", ms_ctime_buf, phase2str(current_phase), vLastIpFound, vIpCount);
+			vIpCount--;
+                        vLastIpFound++;
+                        if (vLastIpFound == MAX_NUM_IP_ATTACHED)
+				vLastIpFound = 0;
+                }
+		if (vIpCount)
+		{
+			fGetAppBandWidth(aDest_Dtn_IPs[vLastIpFound].aDest_Ip2, vLastIpFound);
+                        vLastIpFound++;
+                        if (vLastIpFound == MAX_NUM_IP_ATTACHED)
+				vLastIpFound = 0;
+		}
+	//	sleep(1);
+	}
+#endif
+#if 1
+	rx_before =  rx_now = rx_bytes_tot = rx_kbits_per_sec = 0;
+	tx_before =  tx_now = tx_bytes_tot = tx_kbits_per_sec = 0;
+	last_tx_bytes = last_rx_bytes = 0;	
+#endif
+	tx_bytes_tot = 0;
+	rx_bytes_tot = 0;	
+	tx_kbits_per_sec = 0;
+	rx_kbits_per_sec = 0;
+
+	pipe = popen(try,"r");
+	if (!pipe)
+	{
+		printf("popen failed!\n");
+		return;
+	}
+
+	// read for 2 lines of process:
+	if (!feof(pipe))
+	{
+		// use buffer to read and add to result
+		if (fgets(buffer, 128, pipe) != NULL);
+			//printf("buffer0 is %s",buffer);		
+		else
+			{
+				printf("Not working****\n");
+				return;
+			}
+	}
+
+	if (!feof(pipe))
+	{	
+ 		if (fgets(buffer, 128, pipe) != NULL)
+		{
+			//printf("buffer1 is %s",buffer);		
+			sscanf(buffer,"%lu %lu", &tx_before, &rx_before);
+			//printf("tx_bytes = %lu, rx_bytes = %lu\n",tx_before,rx_before);
+			check_bitrate_interval++;
+			stage = 1;
+		}
+		else
+			{
+				printf("Not working****\n");
+				return;
+			}
+	}
+
+	while (!feof(pipe) && stage)
+	{
+		if (fgets(buffer, 128, pipe) != NULL)
+		{
+			//printf("buffer2 is %s",buffer);		
+			sscanf(buffer,"%lu %lu", &tx_now, &rx_now);
+			if(tx_now != 0)
+			{
+				last_tx_bytes = tx_now;
+				last_rx_bytes = rx_now;
+			}
+			tx_now = 0;
+			rx_now = 0;
+		}
+	}
+	pclose(pipe);
+
+	tx_bytes_tot =  last_tx_bytes - tx_before;
+	rx_bytes_tot =  last_rx_bytes - rx_before;
+
+	//tx_kbits_per_sec = ((8 * tx_bytes_tot) / 1024) / secs_passed;
+	//rx_kbits_per_sec = ((8 * rx_bytes_tot) / 1024) / secs_passed;;
+	tx_kbits_per_sec = ((8 * tx_bytes_tot) / 1000);
+	rx_kbits_per_sec = ((8 * rx_bytes_tot) / 1000);
+
+	average_tx_kbits_per_sec += tx_kbits_per_sec;	
+	average_rx_kbits_per_sec += rx_kbits_per_sec;
+	if (check_bitrate_interval >= BITRATE_INTERVAL) 
+	{
+		//average_tx_bits_per_sec = average_tx_bits_per_sec/check_bitrate_interval;
+		average_tx_kbits_per_sec = average_tx_kbits_per_sec/(double)check_bitrate_interval;
+		average_tx_Gbits_per_sec = average_tx_kbits_per_sec/(double)(1000000);
+		average_rx_kbits_per_sec = average_rx_kbits_per_sec/(double)check_bitrate_interval;;
+		average_rx_Gbits_per_sec = average_rx_kbits_per_sec/(double)(1000000);;
+		check_bitrate_interval = 0;
+		
+		if (average_tx_Gbits_per_sec)
+		{
+			//Sanity checking here - need to further investigate how this could happen
+			if (average_tx_Gbits_per_sec > (netDeviceSpeed/1000))
+			{
+				//can't be - something off - don't use as a recorded value 
+				if (vDebugLevel > 0)
+				{
+					gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+					fprintf(tunLogPtr,"%s %s: ***ERROR GetTx BITRATE*** average_tx_Gbits_per_sec = %.2f Gb/s is above maximum Bandwidth of %.2f... skipping this value\n",ms_ctime_buf, phase2str(current_phase), average_tx_Gbits_per_sec, netDeviceSpeed/1000.0);
+				}
+				average_tx_Gbits_per_sec = 0.0;
+				average_tx_kbits_per_sec = 0.0;
+				average_rx_kbits_per_sec = 0.0;
+				average_rx_Gbits_per_sec = 0.0;
+				goto move_along;
+			}
+			
+			average_tx_Gbits_per_sec = average_tx_Gbits_per_sec + tx_jitter;
+		}
+	}
+
+	if (!check_bitrate_interval)
+	{
+		vGlobal_average_tx_Gbits_per_sec = average_tx_Gbits_per_sec;
+		return;
+	}
+
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+	
+ck_stage:
+	if (stage)
+	{
+		stage = 0;
+		goto start;
+	}
+
+	fprintf(tunLogPtr, "%s %s: ***Problems*** stage not set...\n", ms_ctime_buf, phase2str(current_phase));
+	fflush(tunLogPtr);
+move_along:
+return;
+}
+
 void * fDoRunGetThresholds(void * vargp)
 {
 	time_t clk, now_time = 0, last_time = 0;
@@ -3539,8 +3721,14 @@ start:
 		}
 	}
 
+	if (!check_bitrate_interval)
+	{
+		vGlobal_average_tx_Gbits_per_sec = average_tx_Gbits_per_sec;
+		vGlobal_average_rx_Gbits_per_sec = average_rx_Gbits_per_sec;
+	}
+
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-			
+	
 	if (vDebugLevel > 6 && tx_kbits_per_sec)
 	{
 		fprintf(tunLogPtr,"%s %s: DEV %s: TX : %.2f Gb/s RX : %.2f Gb/s\n", ms_ctime_buf, phase2str(current_phase), netDevice, tx_kbits_per_sec/(double)(1000000), rx_kbits_per_sec/(double)(1000000));
@@ -3572,6 +3760,7 @@ start:
 			}
 	}
 
+	//vGlobal_average_tx_Gbits_per_sec = average_tx_Gbits_per_sec;
 
 	if (vDebugLevel > 1 && average_tx_Gbits_per_sec)
 	{
@@ -3608,7 +3797,7 @@ start:
 
 	if (!check_bitrate_interval)
 	{
-		vGlobal_average_tx_Gbits_per_sec = average_tx_Gbits_per_sec;
+	//	vGlobal_average_tx_Gbits_per_sec = average_tx_Gbits_per_sec;
 
 		if (tune == 3 && average_tx_Gbits_per_sec)
 		{
