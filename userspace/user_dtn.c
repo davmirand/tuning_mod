@@ -1346,7 +1346,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 			{
 				if (vDebugLevel > 5)
 				{
-					fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! Both hop_latency and queue_occupancy is high!!! WARNING !!! WARNING***u\n", ms_ctime_buf, phase2str(current_phase));
+					fprintf(tunLogPtr, "%s %s: ***WARNING !!!! WARNING !!! Both hop_latency and queue_occupancy is high!!! WARNING !!! WARNING***\n", ms_ctime_buf, phase2str(current_phase));
 					fprintf(tunLogPtr, "%s %s: ***WARNING hop_latency  = %u\n", ms_ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
 					fprintf(tunLogPtr, "%s %s: ***WARNING queue_occupancy = %u\n", ms_ctime_buf, phase2str(current_phase), Qinfo);
 				}
@@ -1355,7 +1355,7 @@ void sample_func(struct threshold_maps *ctx, int cpu, void *data, __u32 size)
 						now_time = clk;
 						if ((now_time - last_time) > SECS_TO_WAIT_QINFOWARN_MESSAGE)
 						{
-							fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! Both hop_latency and queue_occupancy is high!!! WARNING !!! WARNING***u\n", 
+							fprintf(tunLogPtr, "%s %s: ***WARNING !!! WARNING !!! Both hop_latency and queue_occupancy is high!!! WARNING !!! WARNING***\n", 
 															ms_ctime_buf, phase2str(current_phase));
 							fprintf(tunLogPtr, "%s %s: ***WARNING hop_latency  = %u\n", ms_ctime_buf, phase2str(current_phase), hop_hop_latency_threshold);
 							fprintf(tunLogPtr, "%s %s: ***WARNING queue_occupancy = %u\n", ms_ctime_buf, phase2str(current_phase), Qinfo);
@@ -1804,6 +1804,7 @@ void check_req(http_s *h, char aResp[])
 		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change Tuning Module learning mode from %s to on***\n", ms_ctime_buf, phase2str(current_phase), aMode);
 		
 		gTuningMode = 0;
+		current_phase = LEARNING;
 		fprintf(tunLogPtr,"%s %s: ***Tuning Module is now in learning mode***\n", ms_ctime_buf, phase2str(current_phase));
 		goto after_check;
 	}
@@ -1824,6 +1825,7 @@ void check_req(http_s *h, char aResp[])
 		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change Tuning Module learning mode from %s to off***\n", ms_ctime_buf, phase2str(current_phase), aMode);
 		
 		gTuningMode = 1;
+		current_phase = TUNING;
 		fprintf(tunLogPtr,"%s %s: ***Tuning Module is now *not* in learning mode***\n", ms_ctime_buf, phase2str(current_phase));
 		goto after_check;
 	}
@@ -2306,148 +2308,150 @@ void check_if_bitrate_too_low(double average_tx_Gbits_per_sec, int * applied, in
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	if (average_tx_Gbits_per_sec < vGoodBitrateValue)
 	{
+#if 0
 		if (current_phase == TUNING)
 		{
 			fprintf(tunLogPtr, "%s %s: Trying to tune net.ipv4.tcp_wmem, but already TUNING something else.  Will retry later if still need TUNING***\n",ms_ctime_buf, phase2str(current_phase));
 
 		}
 		else
-			{
-				pipe = popen("sysctl net.ipv4.tcp_wmem","r");
-				if (!pipe)
-				{
-					printf("popen failed!\n");
-					return ;
-				}
+#endif
+			//{
+		pipe = popen("sysctl net.ipv4.tcp_wmem","r");
+		if (!pipe)
+		{
+			printf("popen failed!\n");
+			return ;
+		}
 				
-				while (!feof(pipe))
+		while (!feof(pipe))
+		{
+ 			if (fgets(buffer, 256, pipe) != NULL)
+			{
+				sscanf(buffer,"%s %c %u %d %u", kernel_parameter, &equal_sign, &kminimum, &kdefault, &kmaximum);
+				break;
+			}
+			else
 				{
- 					if (fgets(buffer, 256, pipe) != NULL)
-					{
-						sscanf(buffer,"%s %c %u %d %u", kernel_parameter, &equal_sign, &kminimum, &kdefault, &kmaximum);
-						break;
-					}
-					else
-						{
-							printf("***ERROR: problem getting buffer from popen, returning!!!***\n");
-							pclose(pipe);
-							return ;
-						}
-				}
-				pclose(pipe);
-
-				if (!my_tune_max)
-				{
-					printf("***ERROR: Strange error. Could not find net.ipv4.tcp_wmem in local database!!!***\n");
+					printf("***ERROR: problem getting buffer from popen, returning!!!***\n");
+					pclose(pipe);
 					return ;
 				}
+		}
+		pclose(pipe);
 
-				if (gTuningMode && current_phase == LEARNING)
+		if (!my_tune_max)
+		{
+			printf("***ERROR: Strange error. Could not find net.ipv4.tcp_wmem in local database!!!***\n");
+			return ;
+		}
+
+		if (gTuningMode)
+		{
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+			//current_phase = TUNING;
+			//fprintf(tunLogPtr, "%s %s: Changed current phase***\n",ctime_buf, phase2str(current_phase));
+			//do something
+			if (my_tune_max <= kmaximum) //already high
+			{
+				if (vDebugLevel > 5)
 				{
-					gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-					current_phase = TUNING;
-					//fprintf(tunLogPtr, "%s %s: Changed current phase***\n",ctime_buf, phase2str(current_phase));
-					//do something
-					if (my_tune_max <= kmaximum) //already high
+					fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ms_ctime_buf, phase2str(current_phase), buffer);
+					fprintf(tunLogPtr, "%s %s: *** Current Tuning of net.ipv4.tcp_wmem appears sufficient***\n", ms_ctime_buf, phase2str(current_phase));
+				}
+					
+				*nothing_done = 1;
+			}
+			else
+				{
+					//char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING];
+					char aApplyDefTunNoStdOut[MAX_SIZE_SYSTEM_SETTING_STRING+32];
+					char activity[MAX_SIZE_TUNING_STRING];
+					char aName[100];
+					char aValue[128];
+
+					sprintf(aName,"net.ipv4.tcp_wmem");
+					if (*tune == 1) //apply up
 					{
-						if (vDebugLevel > 5)
-						{
-							fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ms_ctime_buf, phase2str(current_phase), buffer);
-							fprintf(tunLogPtr, "%s %s: *** Current Tuning of net.ipv4.tcp_wmem appears sufficient***\n", ms_ctime_buf, phase2str(current_phase));
-						}
-						
-						*nothing_done = 1;
+						sprintf(aApplyDefTun,"sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"", kminimum, kdefault, kmaximum+KTUNING_DELTA);
+						sprintf(aValue, "%u %d %u", kminimum, kdefault, kmaximum+KTUNING_DELTA);
 					}
 					else
+						if (*tune == 2)
 						{
-							//char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING];
-							char aApplyDefTunNoStdOut[MAX_SIZE_SYSTEM_SETTING_STRING+32];
-							char activity[MAX_SIZE_TUNING_STRING];
-							char aName[100];
-							char aValue[128];
-
-							sprintf(aName,"net.ipv4.tcp_wmem");
-							if (*tune == 1) //apply up
+							if (kmaximum > 600000)
 							{
-								sprintf(aApplyDefTun,"sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"", kminimum, kdefault, kmaximum+KTUNING_DELTA);
-								sprintf(aValue, "%u %d %u", kminimum, kdefault, kmaximum+KTUNING_DELTA);
+								sprintf(aApplyDefTun,"sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"", kminimum, kdefault, kmaximum - KTUNING_DELTA);
+								sprintf(aValue, "%u %d %u", kminimum, kdefault, kmaximum-KTUNING_DELTA);
 							}
 							else
-								if (*tune == 2)
 								{
-									if (kmaximum > 600000)
-									{
-										sprintf(aApplyDefTun,"sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"", kminimum, kdefault, kmaximum - KTUNING_DELTA);
-										sprintf(aValue, "%u %d %u", kminimum, kdefault, kmaximum-KTUNING_DELTA);
-									}
-									else
-										{
-								
-											fprintf(tunLogPtr, "%s %s: ***Could not apply tuning since the maximum value of wmem would be less than %d...***\n",ms_ctime_buf, phase2str(current_phase), 600000 - KTUNING_DELTA);
-											current_phase = LEARNING; //change back phase to LEARNING
-											*nothing_done = 1;
-											return;	
-										}
+						
+									fprintf(tunLogPtr, "%s %s: ***Could not apply tuning since the maximum value of wmem would be less than %d...***\n",
+																		ms_ctime_buf, phase2str(current_phase), 600000 - KTUNING_DELTA);
+									//current_phase = LEARNING; //change back phase to LEARNING
+									*nothing_done = 1;
+									return;	
 								}
-								else
-									if (*tune == 3)
-									{
-										fprintf(tunLogPtr,"%s %s: ***No better change found. Using ***%s***\n\n", ms_ctime_buf, phase2str(current_phase), aApplyDefTun);
-									}
-									else
-										{
-											fprintf(tunLogPtr, "%s %s: ***Could not apply tuning*** invalid value for tune %d***\n",ms_ctime_buf, phase2str(current_phase), *tune);
-											current_phase = LEARNING; //change back phase to LEARNING
-											*nothing_done = 1;
-											return;	
-										}
-
-							fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ms_ctime_buf, phase2str(current_phase), buffer);
-							strcpy(aApplyDefTunNoStdOut,aApplyDefTun);
-							strcat(aApplyDefTunNoStdOut," >/dev/null"); //so it won't print to stderr on console
-							system(aApplyDefTunNoStdOut);
-
-							delta = delta + calculate_delta_for_csv();
-							fprintf(csvLogPtr,"%lu,%s,%s\n",delta,aName,aValue);
-							fflush(csvLogPtr);
-
-							fprintf(tunLogPtr, "%s %s: ***APPLIED TUNING***: %s\n\n",ms_ctime_buf, phase2str(current_phase), aApplyDefTun);
-
-							sprintf(activity,"%s %s: ***ACTIVITY=APPLIED TUNING***: %s",ms_ctime_buf, phase2str(current_phase), aApplyDefTun);
-							record_activity(activity); //make sure activity big enough to concatenate additional data -- see record_activity()
-
-							*applied = 1;
-					
-							current_phase = LEARNING;
-							//fprintf(tunLogPtr, "%s %s: Changed current phase***\n",ctime_buf, phase2str(current_phase));
-						}
-
-					current_phase = LEARNING; //change back phase to LEARNING
-				}
-				else
-					if (current_phase == LEARNING)
-					{
-						if (my_tune_max <= kmaximum) //already high
-						{
-							*nothing_done = 1;
-							if (vDebugLevel > 5)
-							{
-								fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ms_ctime_buf, phase2str(current_phase), buffer);
-								fprintf(tunLogPtr, "%s %s: *** Current Tuning of net.ipv4.tcp_wmem appears sufficient***\n", ms_ctime_buf, phase2str(current_phase));
-							}
 						}
 						else
+							if (*tune == 3)
 							{
-								*suggested = 1;
-								if (vDebugLevel > 0)
-								{
-									//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
-									fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: *%s",ms_ctime_buf, phase2str(current_phase), buffer);
-									fprintf(tunLogPtr, "%s %s: ***SUGGESTED TUNING***: *sudo sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"\n\n",ms_ctime_buf, phase2str(current_phase), kminimum, kdefault, kmaximum+KTUNING_DELTA);
-								}
+								fprintf(tunLogPtr,"%s %s: ***No better change found. Using ***%s***\n\n", ms_ctime_buf, phase2str(current_phase), aApplyDefTun);
 							}
+							else
+								{
+									fprintf(tunLogPtr, "%s %s: ***Could not apply tuning*** invalid value for tune %d***\n",ms_ctime_buf, phase2str(current_phase), *tune);
+									//current_phase = LEARNING; //change back phase to LEARNING
+									*nothing_done = 1;
+									return;	
+								}
+
+					fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ms_ctime_buf, phase2str(current_phase), buffer);
+					strcpy(aApplyDefTunNoStdOut,aApplyDefTun);
+					strcat(aApplyDefTunNoStdOut," >/dev/null"); //so it won't print to stderr on console
+					system(aApplyDefTunNoStdOut);
+
+					delta = delta + calculate_delta_for_csv();
+					fprintf(csvLogPtr,"%lu,%s,%s\n",delta,aName,aValue);
+					fflush(csvLogPtr);
+
+					fprintf(tunLogPtr, "%s %s: ***APPLIED TUNING***: %s\n\n",ms_ctime_buf, phase2str(current_phase), aApplyDefTun);
+
+					sprintf(activity,"%s %s: ***ACTIVITY=APPLIED TUNING***: %s",ms_ctime_buf, phase2str(current_phase), aApplyDefTun);
+					record_activity(activity); //make sure activity big enough to concatenate additional data -- see record_activity()
+
+					*applied = 1;
+			
+			//		current_phase = LEARNING;
+					//fprintf(tunLogPtr, "%s %s: Changed current phase***\n",ctime_buf, phase2str(current_phase));
+				}
+
+			//current_phase = LEARNING; //change back phase to LEARNING
+		}
+		else
+			{
+				if (my_tune_max <= kmaximum) //already high
+				{
+					*nothing_done = 1;
+					if (vDebugLevel > 5)
+					{
+						fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ms_ctime_buf, phase2str(current_phase), buffer);
+						fprintf(tunLogPtr, "%s %s: *** Current Tuning of net.ipv4.tcp_wmem appears sufficient***\n", ms_ctime_buf, phase2str(current_phase));
+					}
+				}
+				else
+					{
+						*suggested = 1;
+						if (vDebugLevel > 0)
+						{
+							//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
+							fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: *%s",ms_ctime_buf, phase2str(current_phase), buffer);
+							fprintf(tunLogPtr, "%s %s: ***SUGGESTED TUNING***: *sudo sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"\n\n",ms_ctime_buf, phase2str(current_phase), kminimum, kdefault, kmaximum+KTUNING_DELTA);
+						}
 					}
 			}
+			//}
 
 		if ((vDebugLevel > 1) && (average_tx_Gbits_per_sec < vGoodBitrateValueThatDoesntNeedMessage ))
 		{
@@ -3007,45 +3011,34 @@ void fDoCleanupResetPacing(void)
 
 	if (shm_read(&vResetPacingBack, shm) && vResetPacingBack) //reset back the pacing
 	{
-		if (gTuningMode && (current_phase == LEARNING))
+		if (gTuningMode)
 		{
 			vResetPacingBack = 0;
 			shm_write(shm, &vResetPacingBack);
 
-			current_phase = TUNING;
+			//current_phase = TUNING;
  			fprintf(tunLogPtr,"%s %s: ***INFO***: *** resetting back the Pacing with the following:",ms_ctime_buf, phase2str(current_phase));
 			fprintf(tunLogPtr,"%s %s: ***INFO***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
 			system(aNicSetting);
 			fprintf(tunLogPtr,"%s %s: ***INFO***: !!!!Pacing has been reset!!!!\n", ms_ctime_buf, phase2str(current_phase));
-			current_phase = LEARNING;
+			//current_phase = LEARNING;
 		}
 		else
-			if (current_phase == TUNING)
 			{
-				vResetPacingBack = 0;
-				shm_write(shm, &vResetPacingBack);
-
-				fprintf(tunLogPtr,"%s %s: ***INFO***: *** resetting back the Pacing with the following:",ms_ctime_buf, phase2str(current_phase));
-				fprintf(tunLogPtr,"%s %s: ***INFO***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
-				system(aNicSetting);
-				fprintf(tunLogPtr,"%s %s: ***INFO***: !!!!Pacing has been resetted!!!!\n", ms_ctime_buf, phase2str(current_phase));
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: The pacing was changed and should be changed back, but Learning Mode is on.***", ms_ctime_buf, phase2str(current_phase));
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: The simplest way to change back is to turn off Learning Mode and the Tuning Module will do it for you***\n", ms_ctime_buf, phase2str(current_phase));
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: Do the following from the Tuning Module directory to turn off Learning mode: \"./tuncli -l off\"\n", ms_ctime_buf, phase2str(current_phase));
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: You probably want to turn back on Learning mode after waiting a couple seconds with the following: \"./tuncli -l on\"\n", ms_ctime_buf, phase2str(current_phase));
 			}
-			else
-				{
-					fprintf(tunLogPtr,"%s %s: ***WARNING***: The pacing was changed and should be changed back, but Learning Mode is on.***", ms_ctime_buf, phase2str(current_phase));
-					fprintf(tunLogPtr,"%s %s: ***WARNING***: The simplest way to change back is to turn off Learning Mode and the Tuning Module will do it for you***\n", ms_ctime_buf, phase2str(current_phase));
-					fprintf(tunLogPtr,"%s %s: ***WARNING***: Do the following from the Tuning Module directory to turn off Learning mode: \"./tuncli -l off\"\n", ms_ctime_buf, phase2str(current_phase));
-					fprintf(tunLogPtr,"%s %s: ***WARNING***: You probably want to turn back on Learning mode after waiting a couple seconds with the following: \"./tuncli -l on\"\n", ms_ctime_buf, phase2str(current_phase));
-				}
 	}
 	else
-		if (shm_read(&vResetPacingBack, shm) && !vResetPacingBack) //reset back the pacing
+		if (shm_read(&vResetPacingBack, shm) && !vResetPacingBack) //do not reset back the pacing
 		{
-			if (gTuningMode && (current_phase == LEARNING))
+			if (gTuningMode)
 			{
-				current_phase = TUNING;
+				//current_phase = TUNING;
  				fprintf(tunLogPtr,"%s %s: ***INFO***: *** Pacing must have been reset already or never changed. Nothing to do here***\n",ms_ctime_buf, phase2str(current_phase));
-				current_phase = LEARNING;
+				//current_phase = LEARNING;
 			}
 			else
 				{
@@ -3085,45 +3078,34 @@ void fDoResetPacing(char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr)
 
 	if (found && shm_read(&vResetPacingBack, shm) && vResetPacingBack) //reset back the pacing
 	{
-		if (gTuningMode && (current_phase == LEARNING))
+		if (gTuningMode)
 		{
 			vResetPacingBack = 0;
 			shm_write(shm, &vResetPacingBack);
 
-			current_phase = TUNING;
+			//current_phase = TUNING;
  			fprintf(tunLogPtr,"%s %s: ***INFO***: *** resetting back the Pacing with the following:",ms_ctime_buf, phase2str(current_phase));
 			fprintf(tunLogPtr,"%s %s: ***INFO***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
 			system(aNicSetting);
 			fprintf(tunLogPtr,"%s %s: ***INFO***: !!!!Pacing has been reset!!!!\n", ms_ctime_buf, phase2str(current_phase));
-			current_phase = LEARNING;
+			//current_phase = LEARNING;
 		}
 		else
-			if (current_phase == TUNING)
 			{
-				vResetPacingBack = 0;
-				shm_write(shm, &vResetPacingBack);
-
-				fprintf(tunLogPtr,"%s %s: ***INFO***: *** resetting back the Pacing with the following:",ms_ctime_buf, phase2str(current_phase));
-				fprintf(tunLogPtr,"%s %s: ***INFO***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
-				system(aNicSetting);
-				fprintf(tunLogPtr,"%s %s: ***INFO***: !!!!Pacing has been resetted!!!!\n", ms_ctime_buf, phase2str(current_phase));
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: The pacing was changed and should be changed back, but Learning Mode is on.***", ms_ctime_buf, phase2str(current_phase));
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: The simplest way to change back is to turn off Learning Mode and the Tuning Module will do it for you***\n", ms_ctime_buf, phase2str(current_phase));
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: Do the following from the Tuning Module directory to turn off Learning mode: \"./tuncli -l off\"\n", ms_ctime_buf, phase2str(current_phase));
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: You probably want to turn back on Learning mode after waiting a couple seconds with the following: \"./tuncli -l on\"\n", ms_ctime_buf, phase2str(current_phase));
 			}
-			else
-				{
-					fprintf(tunLogPtr,"%s %s: ***WARNING***: The pacing was changed and should be changed back, but Learning Mode is on.***", ms_ctime_buf, phase2str(current_phase));
-					fprintf(tunLogPtr,"%s %s: ***WARNING***: The simplest way to change back is to turn off Learning Mode and the Tuning Module will do it for you***\n", ms_ctime_buf, phase2str(current_phase));
-					fprintf(tunLogPtr,"%s %s: ***WARNING***: Do the following from the Tuning Module directory to turn off Learning mode: \"./tuncli -l off\"\n", ms_ctime_buf, phase2str(current_phase));
-					fprintf(tunLogPtr,"%s %s: ***WARNING***: You probably want to turn back on Learning mode after waiting a couple seconds with the following: \"./tuncli -l on\"\n", ms_ctime_buf, phase2str(current_phase));
-				}
 	}
 	else
 		if (found && shm_read(&vResetPacingBack, shm) && !vResetPacingBack) //reset back the pacing
 		{
-			if (gTuningMode && (current_phase == LEARNING))
+			if (gTuningMode)
 			{
-				current_phase = TUNING;
+				//current_phase = TUNING;
  				fprintf(tunLogPtr,"%s %s: ***INFO***: *** The Pacing was never changed. No need to reset***\n",ms_ctime_buf, phase2str(current_phase));
-				current_phase = LEARNING;
+				//current_phase = LEARNING;
 			}
 			else
 				{
@@ -3155,9 +3137,10 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 	double vThis_average_tx_Gbits_per_sec = 0.0, vNewPacingValue = 0.0;;
 
 	strcpy(aQdiscVal,"fq");
+#if 0
 	if (gTuningMode)
 		current_phase = TUNING;
-
+#endif
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***WARNING***: Qinfo message with value %u from destination DTN %s***\n", ms_ctime_buf, phase2str(current_phase), val, aDest_Ip);
 
@@ -3215,12 +3198,12 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 			fprintf(tunLogPtr,"%s %s: ****INFO*****: Current average transmitted bytes on this flow is %.2f Gb/s. \n", ms_ctime_buf, phase2str(current_phase), vThis_app_tx_Gbits_per_sec);
 			fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
 			system(aNicSetting);
-			current_phase = LEARNING;
+//			current_phase = TUNING;
 			vResetPacingBack = 1;
 			shm_write(shm, &vResetPacingBack);
 
 			fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!! %d\n", ms_ctime_buf, phase2str(current_phase), vResetPacingBack);
-			current_phase = LEARNING;
+//			current_phase = LEARNING;
 		}
  		else
 			{
@@ -3266,9 +3249,10 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 												ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
 				}
 	fflush(tunLogPtr);
-
+#if 0
 	if (gTuningMode)
 		current_phase = LEARNING; // set back
+#endif
 return;
 }
 #endif
@@ -3633,49 +3617,38 @@ start:
 
 		if (shm_read(&vResetPacingBack, shm) && vResetPacingBack) //nothing happening - reset back the pacing
 		{
-			if (gTuningMode && (current_phase == LEARNING))
+			if (gTuningMode)
 			{
 				vResetPacingBack = 0;
 				shm_write(shm, &vResetPacingBack);	    
 
-				current_phase = TUNING;
+				//current_phase = TUNING;
 				fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on link has stopped for now *** resetting back the Pacing with the following:",ms_ctime_buf, phase2str(current_phase));
 				fprintf(tunLogPtr,"%s %s: ***INFO***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
 				system(aNicSetting);
 				fprintf(tunLogPtr,"%s %s: ***INFO***: !!!!Pacing has been reset!!!!\n", ms_ctime_buf, phase2str(current_phase));
-				current_phase = LEARNING;
+				//current_phase = LEARNING;
 			}
 			else
-				if (current_phase == TUNING)
 				{
-					vResetPacingBack = 0;
-					shm_write(shm, &vResetPacingBack);	    
-
-					fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on link has stopped for now *** resetting back the Pacing with the following:",ms_ctime_buf, phase2str(current_phase));
-					fprintf(tunLogPtr,"%s %s: ***INFO***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
-					system(aNicSetting);
-					fprintf(tunLogPtr,"%s %s: ***INFO***: !!!!Pacing has been resetted!!!!\n", ms_ctime_buf, phase2str(current_phase));
-				}
-				else
+					if (((vPacingCount++) > 5) && (vDebugLevel > 0))
 					{
-						if (((vPacingCount++) > 5) && (vDebugLevel > 0))
-						{
-							vPacingCount = 0;
-							fprintf(tunLogPtr,"%s %s: ***WARNING***: Activity on link has stopped for now, but the pacing was changed and should be changed back.***", ms_ctime_buf, phase2str(current_phase));
-							fprintf(tunLogPtr,"%s %s: ***WARNING***: The simplest way to change back is to turn off Learning Mode and the Tuning Module will do it for you***\n", ms_ctime_buf, phase2str(current_phase));
-							fprintf(tunLogPtr,"%s %s: ***WARNING***: Do the following from the Tuning Module directory to turn off Learning mode: \"./tuncli -l off\"\n", ms_ctime_buf, phase2str(current_phase));
-							fprintf(tunLogPtr,"%s %s: ***WARNING***: You probably want to turn back on Learning mode after waiting a couple seconds with the following: \"./tuncli -l on\"\n", 
-																									ms_ctime_buf, phase2str(current_phase));
-						}
+						vPacingCount = 0;
+						fprintf(tunLogPtr,"%s %s: ***WARNING***: Activity on link has stopped for now, but the pacing was changed and should be changed back.***", ms_ctime_buf, phase2str(current_phase));
+						fprintf(tunLogPtr,"%s %s: ***WARNING***: The simplest way to change back is to turn off Learning Mode and the Tuning Module will do it for you***\n", ms_ctime_buf, phase2str(current_phase));
+						fprintf(tunLogPtr,"%s %s: ***WARNING***: Do the following from the Tuning Module directory to turn off Learning mode: \"./tuncli -l off\"\n", ms_ctime_buf, phase2str(current_phase));
+						fprintf(tunLogPtr,"%s %s: ***WARNING***: You probably want to turn back on Learning mode after waiting a couple seconds with the following: \"./tuncli -l on\"\n", 
+																								ms_ctime_buf, phase2str(current_phase));
 					}
+				}
 		}
 	}
 	else
-	{
-		vTwiceInaRow = 0;
-		if (vDebugLevel > 9)
-			fprintf(tunLogPtr,"%s %s: ***INFO***: Activity is on the link***\n",ms_ctime_buf, phase2str(current_phase));
-	}
+		{
+			vTwiceInaRow = 0;
+			if (vDebugLevel > 9)
+				fprintf(tunLogPtr,"%s %s: ***INFO***: Activity is on the link***\n",ms_ctime_buf, phase2str(current_phase));
+		}
 		
 	
 	average_tx_kbits_per_sec += tx_kbits_per_sec;	
@@ -3743,20 +3716,20 @@ start:
 		{
 			sprintf(buffer,"ethtool -L %s rx %d tx %d  combined %d",netDevice, netDevice_rx_channel_cfg_curr_val, netDevice_tx_channel_cfg_curr_val, 
 																netDevice_combined_channel_cfg_curr_val);
-			current_phase = TUNING;
+			//current_phase = TUNING;
 			fprintf(tunLogPtr,"%s %s: ***WARNING: File Transfer has stopped... Running the following command to set back %s channels::: %s\n",
 												ms_ctime_buf, phase2str(current_phase), netDevice, buffer);
 			system(buffer);
-			current_phase = LEARNING;
+			//current_phase = LEARNING;
 		}
 		else
 			{
 				sprintf(buffer,"ethtool -L %s combined %d",netDevice,  netDevice_combined_channel_cfg_curr_val);
-				current_phase = TUNING;
+				//current_phase = TUNING;
 				fprintf(tunLogPtr,"%s %s: ***WARNING: File Transfer has stopped... Running the following command to set back %s channels::: %s\n",
 														ms_ctime_buf, phase2str(current_phase), netDevice, buffer);
 				system(buffer);
-				current_phase = LEARNING;
+				//current_phase = LEARNING;
 			}
 	}
 
@@ -4054,123 +4027,124 @@ void fDoManageRtt(double highest_rtt_ms, int * applied, int * suggested, int * n
 	//remember average_tx_Gbits_per_sec is a bogus value
 	if (average_tx_Gbits_per_sec < vGoodBitrateValue)
 	{
+#if 0
 		if (current_phase == TUNING)
 		{
 			fprintf(tunLogPtr, "%s %s: Trying to tune net.ipv4.tcp_wmem, but already TUNING something else.  Will retry later if still need TUNING***\n",ms_ctime_buf, phase2str(current_phase));
 		}
 		else
+#endif
+//			{
+		pipe = popen("sysctl net.ipv4.tcp_wmem","r");
+		if (!pipe)
+		{
+			printf("popen failed!\n");
+			return ;
+		}
+
+		while (!feof(pipe))
+		{
+			if (fgets(buffer, 256, pipe) != NULL)
 			{
-				pipe = popen("sysctl net.ipv4.tcp_wmem","r");
-				if (!pipe)
+				sscanf(buffer,"%s %c %u %d %u", kernel_parameter, &equal_sign, &kminimum, &kdefault, &kmaximum);
+				break;
+			}
+			else
 				{
-					printf("popen failed!\n");
+					printf("***ERROR: problem getting buffer from popen, returning!!!***\n");
+					pclose(pipe);
 					return ;
 				}
+		}
+		pclose(pipe);
 
-				while (!feof(pipe))
+		if (!my_tune_max)
+		{
+			printf("***ERROR: Strange error. Could not find net.ipv4.tcp_wmem in local database!!!***\n");
+			return ;
+		}
+
+		if (gTuningMode)
+		{
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+			//		current_phase = TUNING;
+			//fprintf(tunLogPtr, "%s %s: Changed current phase***\n",ctime_buf, phase2str(current_phase));
+			//do something
+			if (my_tune_max <= kmaximum) //already high
+			{
+				if (vDebugLevel > 5)
 				{
-					if (fgets(buffer, 256, pipe) != NULL)
-					{
-						sscanf(buffer,"%s %c %u %d %u", kernel_parameter, &equal_sign, &kminimum, &kdefault, &kmaximum);
-						break;
-					}
-					else
-						{
-							printf("***ERROR: problem getting buffer from popen, returning!!!***\n");
-							pclose(pipe);
-							return ;
-						}
+					fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ms_ctime_buf, phase2str(current_phase), buffer);
+					fprintf(tunLogPtr, "%s %s: *** Current Tuning of net.ipv4.tcp_wmem appears sufficient***\n", ms_ctime_buf, phase2str(current_phase));
 				}
-				pclose(pipe);
-
-				if (!my_tune_max)
-				{
-					printf("***ERROR: Strange error. Could not find net.ipv4.tcp_wmem in local database!!!***\n");
-					return ;
-				}
-
-				if (gTuningMode && current_phase == LEARNING)
-				{
-					gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-					current_phase = TUNING;
-					//fprintf(tunLogPtr, "%s %s: Changed current phase***\n",ctime_buf, phase2str(current_phase));
-					//do something
-					if (my_tune_max <= kmaximum) //already high
-					{
-						if (vDebugLevel > 5)
-						{
-							fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ms_ctime_buf, phase2str(current_phase), buffer);
-							fprintf(tunLogPtr, "%s %s: *** Current Tuning of net.ipv4.tcp_wmem appears sufficient***\n", ms_ctime_buf, phase2str(current_phase));
-						}
 						
-						*nothing_done = 1;
-					}
+				*nothing_done = 1;
+			}
+			else
+				{
+					//char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING];
+					char aApplyDefTunNoStdOut[MAX_SIZE_SYSTEM_SETTING_STRING+32];
+
+					if (*tune == 1) //apply up
+						sprintf(aApplyDefTun,"sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"", kminimum, kdefault, kmaximum+KTUNING_DELTA);
 					else
+						if (*tune == 2)
 						{
-							//char aApplyDefTun[MAX_SIZE_SYSTEM_SETTING_STRING];
-							char aApplyDefTunNoStdOut[MAX_SIZE_SYSTEM_SETTING_STRING+32];
-
-							if (*tune == 1) //apply up
-								sprintf(aApplyDefTun,"sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"", kminimum, kdefault, kmaximum+KTUNING_DELTA);
+							if (kmaximum > 600000)
+								sprintf(aApplyDefTun,"sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"", kminimum, kdefault, kmaximum - KTUNING_DELTA);
 							else
-								if (*tune == 2)
 								{
-									if (kmaximum > 600000)
-										sprintf(aApplyDefTun,"sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"", kminimum, kdefault, kmaximum - KTUNING_DELTA);
-									else
-										{
 
-											fprintf(tunLogPtr, "%s %s: ***Could not apply tuning since the maximum value of wmem would be less than %d...***\n",ms_ctime_buf, phase2str(current_phase), 600000 - KTUNING_DELTA);
-											current_phase = LEARNING; //change back phase to LEARNING
-											*nothing_done = 1;
-											return;
-										}
+									fprintf(tunLogPtr, "%s %s: ***Could not apply tuning since the maximum value of wmem would be less than %d...***\n",ms_ctime_buf, phase2str(current_phase), 600000 - KTUNING_DELTA);
+									//current_phase = LEARNING; //change back phase to LEARNING
+									*nothing_done = 1;
+									return;
 								}
-								else
-									if (*tune == 3)
-									{
-										fprintf(tunLogPtr,"%s %s: ***No better change found. Using ***%s***\n\n", ms_ctime_buf, phase2str(current_phase), aApplyDefTun);
-									}
-									else
-										{
-											fprintf(tunLogPtr, "%s %s: ***Could not apply tuning*** invalid value for tune %d***\n",ms_ctime_buf, phase2str(current_phase), *tune);
-											current_phase = LEARNING; //change back phase to LEARNING
-											*nothing_done = 1;
-											return;
-										}
-
-										fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ms_ctime_buf, phase2str(current_phase), buffer);
-										strcpy(aApplyDefTunNoStdOut,aApplyDefTun);
-										strcat(aApplyDefTunNoStdOut," >/dev/null"); //so it won't print to stderr on console
-										system(aApplyDefTunNoStdOut);
-										fprintf(tunLogPtr, "%s %s: ***APPLIED TUNING***: %s\n\n",ms_ctime_buf, phase2str(current_phase), aApplyDefTun);
-										*applied = 1;
-
-										current_phase = LEARNING;
-										//fprintf(tunLogPtr, "%s %s: Changed current phase***\n",ctime_buf, phase2str(current_phase));
-						}
-
-						current_phase = LEARNING; //change back phase to LEARNING
-				}
-				else
-					if (current_phase == LEARNING)
-					{
-						if (my_tune_max <= kmaximum) //already high
-						{
-							*nothing_done = 1;
 						}
 						else
+							if (*tune == 3)
 							{
-								*suggested = 1;
-								if (vDebugLevel > 0)
-								{
-									//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
-									fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: *%s",ms_ctime_buf, phase2str(current_phase), buffer);
-									fprintf(tunLogPtr, "%s %s: ***SUGGESTED TUNING***: *sudo sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"\n\n",ms_ctime_buf, phase2str(current_phase), kminimum, kdefault, kmaximum+KTUNING_DELTA);
-								}
+								fprintf(tunLogPtr,"%s %s: ***No better change found. Using ***%s***\n\n", ms_ctime_buf, phase2str(current_phase), aApplyDefTun);
 							}
+							else
+								{
+									fprintf(tunLogPtr, "%s %s: ***Could not apply tuning*** invalid value for tune %d***\n",ms_ctime_buf, phase2str(current_phase), *tune);
+									//current_phase = LEARNING; //change back phase to LEARNING
+									*nothing_done = 1;
+									return;
+								}
+
+								fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: %s",ms_ctime_buf, phase2str(current_phase), buffer);
+								strcpy(aApplyDefTunNoStdOut,aApplyDefTun);
+								strcat(aApplyDefTunNoStdOut," >/dev/null"); //so it won't print to stderr on console
+								system(aApplyDefTunNoStdOut);
+								fprintf(tunLogPtr, "%s %s: ***APPLIED TUNING***: %s\n\n",ms_ctime_buf, phase2str(current_phase), aApplyDefTun);
+								*applied = 1;
+
+								//current_phase = LEARNING;
+								//fprintf(tunLogPtr, "%s %s: Changed current phase***\n",ctime_buf, phase2str(current_phase));
+				}
+
+				//current_phase = LEARNING; //change back phase to LEARNING
+		}
+		else
+			{
+				if (my_tune_max <= kmaximum) //already high
+				{
+					*nothing_done = 1;
+				}
+				else
+					{
+						*suggested = 1;
+						if (vDebugLevel > 0)
+						{
+							//don't apply - just log suggestions - decided to use a debug level here because this file could fill up if user never accepts recommendation
+							fprintf(tunLogPtr, "%s %s: ***CURRENT TUNING***: *%s",ms_ctime_buf, phase2str(current_phase), buffer);
+							fprintf(tunLogPtr, "%s %s: ***SUGGESTED TUNING***: *sudo sysctl -w net.ipv4.tcp_wmem=\"%u %d %u\"\n\n",ms_ctime_buf, phase2str(current_phase), kminimum, kdefault, kmaximum+KTUNING_DELTA);
+						}
 					}
 			}
+			//}
 	}
 
 	fflush(tunLogPtr);
@@ -5067,16 +5041,16 @@ void fDoSetChannels(void)
 			if (!netDevice_only_combined_channel_cfg)
 			{
 				sprintf(buffer,"ethtool -L %s rx 0 tx %d  combined %d",netDevice, tx_to_use, combined_to_use);
-				if (gTuningMode && current_phase == LEARNING) //need to fix so that current_phase always has the right mode
+				if (gTuningMode) //need to fix so that current_phase always has the right mode - done 2/21/2024 ;-)
 				{
-					current_phase = TUNING;
+					//current_phase = TUNING;
 					fprintf(tunLogPtr,"%s %s: ***WARNING: running the following command to fix ksoftirqd resource issue::: %s\n", 
 														ms_ctime_buf, phase2str(current_phase),  buffer);
 					fprintf(tunLogPtr,"%s %s: ***WARNING: Also, please make sure you are running your application using a core in the Nic's NUMA***\n",
 														ms_ctime_buf, phase2str(current_phase));
 					system(buffer);
 					vDidSetChannel = 1;
-					current_phase = LEARNING;
+					//current_phase = LEARNING;
 				}
 				else
 					{
@@ -5112,16 +5086,16 @@ void fDoSetChannels(void)
 				if (!netDevice_only_combined_channel_cfg)
 				{
 					sprintf(buffer,"ethtool -L %s rx 0 tx %d  combined %d",netDevice, tx_to_use, combined_to_use);
-					if (gTuningMode && current_phase == LEARNING) //need to fix so that current_phase always has the right mode
+					if (gTuningMode) //need to fix so that current_phase always has the right mode - done 2/21/2024 ;-)
 					{
-						current_phase = TUNING;
+						//current_phase = TUNING;
 						fprintf(tunLogPtr,"%s %s: ***WARNING: running the following command to fix ksoftirqd resource issue::: %s\n", 
 														ms_ctime_buf, phase2str(current_phase),  buffer);
 						fprintf(tunLogPtr,"%s %s: ***WARNING: Also, please make sure you are running your application using a core in the Nic's NUMA***\n",
 																ms_ctime_buf, phase2str(current_phase));
 						system(buffer);
 						vDidSetChannel = 1;
-						current_phase = LEARNING;
+						//current_phase = LEARNING;
 					}
 					else
 						{
@@ -5133,23 +5107,6 @@ void fDoSetChannels(void)
 				}
 				else
 					{
-#if 0
-						sprintf(buffer,"ethtool -L %s combined %d",netDevice, combined_to_use);
-						if (gTuningMode && (current_phase == LEARNING)) //need to fix so that current_phase always has the right mode
-						{
-							current_phase = TUNING;
-							fprintf(tunLogPtr,"%s %s: ***WARNING: running the following command to fix ksoftirqd resource issue::: %s\n", 
-															ms_ctime_buf, phase2str(current_phase), buffer);
-							system(buffer);
-							vDidSetChannel = 1;
-							current_phase = LEARNING;
-						}
-						else
-							{	
-								fprintf(tunLogPtr,"%s %s: ***WARNING: please run the following command to fix ksoftirqd resource issue::: %s\n", 
-															ms_ctime_buf, phase2str(current_phase), buffer);
-							}
-#endif
 						fprintf(tunLogPtr,"%s %s: ***WARNING: No known fix for ksoftirqd issue on this NIC at this point:::\n", ms_ctime_buf, phase2str(current_phase));
 						fprintf(tunLogPtr,"%s %s: ***WARNING: Please use tools like \"ethtool -L and/or ethtool -X\" to see if you can resolve this issue:::\n", 
 																			ms_ctime_buf, phase2str(current_phase));
@@ -6107,7 +6064,7 @@ cli_again:
 	Pthread_cond_signal(&empty);
 	Pthread_mutex_unlock(&dtn_mutex);
 
-	if (vDebugLevel > 1)
+	if (vDebugLevel > 4)
 	{
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		fprintf(tunLogPtr,"%s %s: ***Sending message %d to source DTN...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg2.seq_no));
