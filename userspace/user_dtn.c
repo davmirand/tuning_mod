@@ -3165,7 +3165,8 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 
 #ifdef USEGLOBALRETRAN
 	vRetransmissionRate = vGlobalRetransmissionRate;
-	fprintf(tunLogPtr,"%s %s: ***INFO***: Using Global Retransmissionrate \n", ms_ctime_buf, phase2str(current_phase));
+	if (vDebugLevel > 2)
+		fprintf(tunLogPtr,"%s %s: ***INFO***: Using Global Retransmissionrate \n", ms_ctime_buf, phase2str(current_phase));
 #endif
 
 
@@ -4363,11 +4364,8 @@ retrans:
 		return (char *)0;
 	}
 
-	int thiscount = 0;
-	int thisfoundcnt = 0;
 	while (!feof(pipe))
 	{
-		thiscount++;
 		// use buffer to read and add to result
 		if (fgets(buffer, 256, pipe) != NULL);
 		else
@@ -4379,7 +4377,6 @@ retrans:
 		//should look like example: "11: 012E030A:8B2E 022E030A:1451 01 04DC97C7:00000000 01:00000014 00000000     0        0 13297797 2 00000000367a51de 41 0 0 3722 500 totrt 79""
                 if (foundstr)
                 {
-			thisfoundcnt++;
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			foundstr = strstr(foundstr,"totrt");
 			if (foundstr)
@@ -4444,11 +4441,6 @@ retrans:
 	}
 
 finish_up:
-	if ((vDebugLevel > 3)) 
-	{
-		fprintf(tunLogPtr,"%s %s: ***thiscount = %d, thisfoundcnt = %d\n", 
-				ms_ctime_buf, phase2str(current_phase), thiscount, thisfoundcnt);
-	}
 	pclose(pipe);
 	if (found)
 	{
@@ -4561,12 +4553,19 @@ finish_up:
 	fflush(tunLogPtr);
 
 	msleep(100); //sleep 100 millisecs
-
+#if 1
 	if ((vDebugLevel > 6) && previous_average_tx_Gbits_per_sec && (countLog >= COUNT_TO_LOG))
 	{
 		fprintf(tunLogPtr,"%s %s: ***RETRAN*** Retransmission rate of transfer = %.5f,  AvgRetransmissionRate over last %d rates is %.5f, AvgIntRetransmissionRate is %.5f\n", 
 				ms_ctime_buf, phase2str(current_phase), vTransferRetransmissionRate, NUM_RATES_TO_USE, vAvgRetransmissionRate, vAvgIntRetransmissionRate);
 	}
+#else
+	if ((vDebugLevel > 1) && previous_average_tx_Gbits_per_sec)
+	{
+		fprintf(tunLogPtr,"%s %s: ***RETRAN*** Retransmission rate of transfer = %.5f,  AvgRetransmissionRate over last %d rates is %.5f, AvgIntRetransmissionRate is %.5f\n", 
+				ms_ctime_buf, phase2str(current_phase), vTransferRetransmissionRate, NUM_RATES_TO_USE, vAvgRetransmissionRate, vAvgIntRetransmissionRate);
+	}
+#endif
 	
 	if (countLog >= COUNT_TO_LOG)
 		countLog = 0;
