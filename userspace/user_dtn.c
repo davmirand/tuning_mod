@@ -6068,7 +6068,14 @@ void * fDoRunSendMessageToPeer(void * vargp)
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	int sockfd;
 	struct sockaddr_in servaddr;
+#define USELOCALMSGSTRUCT 0
+#if USELOCALMSGSTRUCT
 	struct PeerMsg sMsg2;
+#else
+	int localMsgCount = 0;
+	unsigned int seqno = 0;
+#endif
+
 	int check = 0;
 	char aSrc_Ip[32];
 
@@ -6081,8 +6088,9 @@ cli_again:
 	
 	while(sMsgsIn == sMsgsOut)
 		Pthread_cond_wait(&full, &dtn_mutex);
-	
+#if USELOCALMSGSTRUCT
 	memcpy(&sMsg2,&sMsg[sMsgsOut],sizeof(sMsg2));
+#endif
 	sMsgsOut = (sMsgsOut + 1) % SMSGS_BUFFER_SIZE;
 	cdone = 0;
 	Pthread_cond_signal(&empty);
@@ -6093,11 +6101,19 @@ cli_again:
 	bzero(&servaddr, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_port = htons(gSource_Dtn_Port);
+#if USELOCALMSGSTRUCT
 	if (sMsg2.src_ip_addr.y)
 	{
 		sprintf(aSrc_Ip,"%u.%u.%u.%u", sMsg2.src_ip_addr.a[0], sMsg2.src_ip_addr.a[1], sMsg2.src_ip_addr.a[2], sMsg2.src_ip_addr.a[3]);
 		Inet_pton(AF_INET, aSrc_Ip, &servaddr.sin_addr);
 	}
+#else
+	if (sMsg[localMsgCount].src_ip_addr.y)
+	{
+		sprintf(aSrc_Ip,"%u.%u.%u.%u", sMsg[localMsgCount].src_ip_addr.a[0], sMsg[localMsgCount].src_ip_addr.a[1], sMsg[localMsgCount].src_ip_addr.a[2], sMsg[localMsgCount].src_ip_addr.a[3]);
+		Inet_pton(AF_INET, aSrc_Ip, &servaddr.sin_addr);
+	}
+#endif
 	else
 	{
 		fprintf(stdout, "Source (Peer) IP address is zero. Can't connect to it****\n");
@@ -6108,29 +6124,47 @@ cli_again:
 	{
 		goto cli_again;
 	}
-	
+#if USELOCALMSGSTRUCT
 	sMsg2.src_ip_addr.y = htonl(sMsg2.src_ip_addr.y);
 	sMsg2.dst_ip_addr.y = htonl(sMsg2.dst_ip_addr.y);
 	str_cli_nohpn(sockfd, &sMsg2);         /* do it all */
+	if (vDebugLevel > 0)
+	{
+		fprintf(tunLogPtr,"%s %s: ***Sent message %d to source DTN...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg2.seq_no));
+		fflush(tunLogPtr);
+	}
+#else
+	sMsg[localMsgCount].src_ip_addr.y = htonl(sMsg[localMsgCount].src_ip_addr.y);
+	sMsg[localMsgCount].dst_ip_addr.y = htonl(sMsg[localMsgCount].dst_ip_addr.y);
+	str_cli_nohpn(sockfd, &sMsg[localMsgCount]);         /* do it all */
+	seqno = ntohl(sMsg[localMsgCount].seq_no);
+	if (vDebugLevel > 0)
+	{
+		fprintf(tunLogPtr,"%s %s: ****Sent message %d to source DTN...****\n", ms_ctime_buf, phase2str(current_phase), seqno);
+		fflush(tunLogPtr);
+	}
+	localMsgCount = (localMsgCount + 1) % SMSGS_BUFFER_SIZE;
+#endif
 
 	check = shutdown(sockfd, SHUT_WR);
 //	close(sockfd); - use shutdown instead of close
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	if (!check)
 	{
-		if (vDebugLevel > 0)
-		{
-			fprintf(tunLogPtr,"%s %s: ***Sent message %d to source DTN...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg2.seq_no));
-			fflush(tunLogPtr);
-		}
-		
 		read_sock(sockfd); //final read to wait on close from other end
-
+#if USELOCALMSGSTRUCT
 		if (vDebugLevel > 6)
 		{
 			fprintf(tunLogPtr,"%s %s: ***Sent message %d to source DTN, after read_sock()...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg2.seq_no));
 			fflush(tunLogPtr);
 		}
+#else
+		if (vDebugLevel > 6)
+		{
+			fprintf(tunLogPtr,"%s %s: ***Sent message %d to source DTN, after read_sock()...***\n", ms_ctime_buf, phase2str(current_phase), seqno);
+			fflush(tunLogPtr);
+		}
+#endif
 	}
 	else
 		{
