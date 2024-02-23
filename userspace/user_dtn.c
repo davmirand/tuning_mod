@@ -3632,7 +3632,7 @@ start:
 			vCanStartEvaluationTimer = 1;
 		}
 
-		if (vSentPacingOver && vTwiceInaRow)
+		if (vSentPacingOver && vTwiceInaRow && vCanStartEvaluationTimer)
 		{
 			fprintf(tunLogPtr,"%s %s: ***INFO***: Activity on link has stopped for now *** Turning off SentPacingOver flag and will try to Cleanup pacing on peer:\n",ms_ctime_buf, phase2str(current_phase));
 			SendResetCleanUpPacingMsg();
@@ -5540,7 +5540,17 @@ Readn(int fd, void *ptr, size_t nbytes)
         ssize_t         n;
 
         if ( (n = readn(fd, ptr, nbytes)) < 0)
-                err_sys("readn error");
+	{
+		time_t clk;
+        	char ctime_buf[27];
+		char ms_ctime_buf[MS_CTIME_BUF_LEN];
+                
+		err_sys("readn error");
+	
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"\n%s %s: ***readn error***\n", ms_ctime_buf, phase2str(current_phase));
+		fflush(tunLogPtr);
+	}
         return(n);
 }
 
@@ -6068,7 +6078,7 @@ void * fDoRunSendMessageToPeer(void * vargp)
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	int sockfd;
 	struct sockaddr_in servaddr;
-#define USELOCALMSGSTRUCT 0
+#define USELOCALMSGSTRUCT 1
 #if USELOCALMSGSTRUCT
 	struct PeerMsg sMsg2;
 #else
@@ -6128,11 +6138,13 @@ cli_again:
 	sMsg2.src_ip_addr.y = htonl(sMsg2.src_ip_addr.y);
 	sMsg2.dst_ip_addr.y = htonl(sMsg2.dst_ip_addr.y);
 	str_cli_nohpn(sockfd, &sMsg2);         /* do it all */
+#if 0
 	if (vDebugLevel > 0)
 	{
 		fprintf(tunLogPtr,"%s %s: ***Sent message %d to source DTN...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg2.seq_no));
 		fflush(tunLogPtr);
 	}
+#endif
 #else
 	sMsg[localMsgCount].src_ip_addr.y = htonl(sMsg[localMsgCount].src_ip_addr.y);
 	sMsg[localMsgCount].dst_ip_addr.y = htonl(sMsg[localMsgCount].dst_ip_addr.y);
@@ -6151,9 +6163,14 @@ cli_again:
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	if (!check)
 	{
+		if (vDebugLevel > 0)
+		{
+			fprintf(tunLogPtr,"%s %s: ***Sent message %d to source DTN...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg2.seq_no));
+			fflush(tunLogPtr);
+		}
 		read_sock(sockfd); //final read to wait on close from other end
 #if USELOCALMSGSTRUCT
-		if (vDebugLevel > 6)
+		if (vDebugLevel > 0)
 		{
 			fprintf(tunLogPtr,"%s %s: ***Sent message %d to source DTN, after read_sock()...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg2.seq_no));
 			fflush(tunLogPtr);
