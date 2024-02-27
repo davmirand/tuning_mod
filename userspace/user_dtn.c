@@ -5534,6 +5534,47 @@ readn(int fd, void *vptr, size_t n)
 }
 /* end readn */
 
+ssize_t                                         /* Read "n" bytes from a descriptor. */
+readn2(int fd, void *vptr, size_t n)
+{
+	time_t clk;
+        char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
+	char mychar;
+	int y, saveerrno, x = 0;
+
+readn2_again:
+	y = recv(fd, &mychar, 1, MSG_DONTWAIT|MSG_PEEK);
+	saveerrno = errno;
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+        if (!y) //cpnnection dropped on client side
+        {
+                if (vDebugLevel > 0)
+                {
+			fprintf(tunLogPtr,"%s %s: ***INFO***: client closed connection, returning from readn2, errno = %d\n", 
+											ms_ctime_buf, phase2str(current_phase), saveerrno);
+                        fflush(tunLogPtr);
+		}
+		return y;
+         }
+         else
+		 if (x < 5)
+		 {
+			x++;
+                	if (vDebugLevel > 2)
+                	{
+				fprintf(tunLogPtr,"%s %s: ***INFO***: in readn2, x = %d, y = %d, errno = %d\n", 
+									ms_ctime_buf, phase2str(current_phase), x, y, saveerrno);
+				fflush(tunLogPtr);
+			}
+			msleep(50);
+         		goto readn2_again;
+		 }
+
+	return -1;
+}
+/* end readn2 */
+
 ssize_t
 Readn(int fd, void *ptr, size_t nbytes)
 {
@@ -5550,6 +5591,29 @@ Readn(int fd, void *ptr, size_t nbytes)
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		fprintf(tunLogPtr,"\n%s %s: ***readn error***\n", ms_ctime_buf, phase2str(current_phase));
 		fflush(tunLogPtr);
+	}
+        return(n);
+}
+
+ssize_t
+Readn2(int fd, void *ptr, size_t nbytes)
+{
+        ssize_t         n;
+
+        if ( (n = readn2(fd, ptr, nbytes)) < 0)
+	{
+		time_t clk;
+        	char ctime_buf[27];
+		char ms_ctime_buf[MS_CTIME_BUF_LEN];
+                
+		//err_sys("readn error");
+
+		if (vDebugLevel > 6)
+		{	
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+			fprintf(tunLogPtr,"\n%s %s: ***readn2 error***\n", ms_ctime_buf, phase2str(current_phase));
+			fflush(tunLogPtr);
+		}
 	}
         return(n);
 }
@@ -5668,6 +5732,11 @@ process_request(int sockfd)
 	{
 		if ( (n = Readn(sockfd, &from_cli, sizeof(from_cli))) == 0)
 		{
+			if (vDebugLevel > 0)
+			{
+				fprintf(tunLogPtr,"\n%s %s: ***returning from QINFO OR START process request***\n", ms_ctime_buf, phase2str(current_phase));
+				fflush(tunLogPtr);
+			}
 			return;         /* connection closed by other end */
 		}
 
@@ -5897,7 +5966,13 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 			if (errno == EINTR)
 				continue;  /* back to for() */
 			else
-				err_sys("accept error");
+			{
+				//err_sys("accept error");
+				fprintf(tunLogPtr,"%s %s: ***accept error:***, errno = %d\n", ms_ctime_buf, phase2str(current_phase), errno);
+				fflush(tunLogPtr);
+				continue;
+			}
+			//BUG here - fix - either continue or exit
 		}
 #if 1
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
@@ -5906,6 +5981,7 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 		if (retval == -1) 
 		{
 			fprintf(tunLogPtr,"%s %s: ***Peer error:***\n", ms_ctime_buf, phase2str(current_phase));
+			fflush(tunLogPtr);
 		//	perror("getpeername()");
 		}
 		else
@@ -6024,6 +6100,15 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 
 			Close(listenfd); /* close listening socket */
 			process_request(connfd);/* process the request */
+			if (vDebugLevel > 0)
+			{
+				fprintf(tunLogPtr,"%s %s: ***Explicit close:\n", ms_ctime_buf, phase2str(current_phase));
+				fflush(tunLogPtr);
+			}
+
+			shutdown(connfd, SHUT_RDWR);
+			//msleep(250);
+			close(connfd); //explicit close
 			exit(0);
 		}
 #endif	
@@ -6038,11 +6123,27 @@ void read_sock(int sockfd)
 {
 	ssize_t                 n;
 	struct PeerMsg             from_cli;
+	time_t clk;
+	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 
 	for ( ; ; ) 
 	{
-		if ( (n = Readn(sockfd, &from_cli, sizeof(from_cli))) == 0)
+		//gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		
+		//fprintf(tunLogPtr,"%s %s: ***Before Readn...***\n", ms_ctime_buf, phase2str(current_phase));
+		//fflush(tunLogPtr);
+	
+		if ( (n = Readn2(sockfd, &from_cli, sizeof(from_cli))) == 0)
 			return;         /* connection closed by other end */
+
+		if (vDebugLevel > 6)
+		{
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+			fprintf(tunLogPtr,"%s %s: ***After Readn...***\n", ms_ctime_buf, phase2str(current_phase));
+			fflush(tunLogPtr);
+		}
+		return;
 	}
 }
 
@@ -6076,7 +6177,7 @@ void * fDoRunSendMessageToPeer(void * vargp)
 	time_t clk;
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
-	int sockfd;
+	int sockfd, vRetFromClose;
 	struct sockaddr_in servaddr;
 #define USELOCALMSGSTRUCT 1
 #if USELOCALMSGSTRUCT
@@ -6160,24 +6261,27 @@ cli_again:
 
 	check = shutdown(sockfd, SHUT_WR);
 //	close(sockfd); - use shutdown instead of close
-	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	if (!check)
 	{
 		if (vDebugLevel > 0)
 		{
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			fprintf(tunLogPtr,"%s %s: ***Sent message %d to source DTN...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg2.seq_no));
 			fflush(tunLogPtr);
 		}
+		//msleep(250);
 		read_sock(sockfd); //final read to wait on close from other end
 #if USELOCALMSGSTRUCT
-		if (vDebugLevel > 0)
+		if (vDebugLevel > 6)
 		{
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			fprintf(tunLogPtr,"%s %s: ***Sent message %d to source DTN, after read_sock()...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg2.seq_no));
 			fflush(tunLogPtr);
 		}
 #else
 		if (vDebugLevel > 6)
 		{
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 			fprintf(tunLogPtr,"%s %s: ***Sent message %d to source DTN, after read_sock()...***\n", ms_ctime_buf, phase2str(current_phase), seqno);
 			fflush(tunLogPtr);
 		}
@@ -6187,11 +6291,23 @@ cli_again:
 		{
 			if (vDebugLevel > 0)
 			{
+				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 				fprintf(tunLogPtr,"%s %s: ***shutdown failed, check = %d\n", ms_ctime_buf, phase2str(current_phase), check);
 				fflush(tunLogPtr);
 			}
 			//printf("shutdown failed, check = %d\n",check);
 		}
+
+	vRetFromClose = close(sockfd); //also close after shutdown
+	if (vRetFromClose == -1)
+		if (vDebugLevel > 0)
+		{
+			int saveerrno = errno;
+			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+			fprintf(tunLogPtr,"%s %s: ***close failed, errno = %d\n", ms_ctime_buf, phase2str(current_phase), saveerrno);
+			fflush(tunLogPtr);
+		}
+
 
 	goto cli_again;
 
