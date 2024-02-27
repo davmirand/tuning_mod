@@ -553,7 +553,7 @@ static time_t qinfo_clk_max = 0;
 static char qinfo_ms_ctime_buf_max[MS_CTIME_BUF_LEN];
 
 static __u32 vQinfoUserValue = 0; //Eventually Initialize this value with vQUEUE_OCCUPANCY_DELTA
-static double vRetransmissionRateThreshold = 1; //Percentage 
+static double vRetransmissionRateThreshold = 0.002; //Percentage 
 static __u32 ingress_time = 0;
 static __u32 egress_time = 0;
 static __u32 hop_hop_latency_threshold = 0;
@@ -3137,7 +3137,7 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 
 	double vRetransmissionRate = 0.0;
 	double vThis_app_tx_Gbits_per_sec;
-	double vThis_average_tx_Gbits_per_sec = 0.0, vNewPacingValue = 0.0;
+	double vThis_average_tx_Gbits_per_sec = 0.0, vCheckFirst_tx_Gbits_per_sec = 0.0, vNewPacingValue = 0.0;
 	double vFDevSpeed = (netDeviceSpeed/1000.00);
 	double vCurrentPacing = 0.0;
 
@@ -3171,10 +3171,6 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 
 
 #if 0
-	vThis_average_tx_Gbits_per_sec = vGlobal_average_tx_Gbits_per_sec;
-
-	fprintf(tunLogPtr,"%s %s: ***WARNING***: tx is %.2f Gb/s on the link \n", ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
-
 	if (vThis_average_tx_Gbits_per_sec < 0.5) //tx bits on link not propagated properly yet
 	{
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
@@ -3188,7 +3184,22 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 		fprintf(tunLogPtr,"%s %s: ***WARNING***: After recalculation, Average TX Gb/s is %.2f...\n", 
 					ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
 	}
-#endif	
+#endif
+
+#if 1	
+	vCheckFirst_tx_Gbits_per_sec = vGlobal_average_tx_Gbits_per_sec; //check first and use the higher of the 2
+	fGetTxBitRate();
+	vThis_average_tx_Gbits_per_sec = vGlobal_average_tx_Gbits_per_sec;
+	
+	fprintf(tunLogPtr,"%s %s: ***WARNING***: vCheckFirst is %.2f Gb/s, vCheckSecond is %.2f Gb/s on the link \n", ms_ctime_buf, phase2str(current_phase), vCheckFirst_tx_Gbits_per_sec, vThis_average_tx_Gbits_per_sec);
+
+	if (vCheckFirst_tx_Gbits_per_sec > vThis_average_tx_Gbits_per_sec)
+		vThis_average_tx_Gbits_per_sec = vCheckFirst_tx_Gbits_per_sec;
+
+	vNewPacingValue = vThis_average_tx_Gbits_per_sec * vMaxPacingRate;
+	vCurrentPacing = vNewPacingValue; 
+#else
+	
 	//vNewPacingValue = vThis_average_tx_Gbits_per_sec * vMaxPacingRate;
 	if (shm_read(&sResetPacingBack, shm) && sResetPacingBack.set)
 	{
@@ -3206,17 +3217,18 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 			vNewPacingValue =  vFDevSpeed * vMaxPacingRate; //pacing not set, use NIC speed as part of the calculation
 			vCurrentPacing = vFDevSpeed;
 		}
+#endif
 	
 	if (vNewPacingValue > 34.0) //somehow the maxrate can't be over 34.3 - saw during testing
 	{
-//		fprintf(tunLogPtr,"%s %s: ***WARNING***: Pacing Value is over 34.0. Pacing cannot be set over 34.3. Setting to 34.0...\n", ms_ctime_buf, phase2str(current_phase));
+		fprintf(tunLogPtr,"%s %s: ***WARNING***: Pacing Value would be over 34.0. Pacing cannot be set over 34.3. Setting to 34.0...\n", ms_ctime_buf, phase2str(current_phase));
 		vNewPacingValue = 34.0;
 	}
 
-	if (vNewPacingValue < 0.2)
+	if (vNewPacingValue < 2.0)
 	{
-		fprintf(tunLogPtr,"%s %s: ***WARNING***: Pacing Value is below 0.2 Gb/s. Will adjust to 0.2 Gb/s...\n", ms_ctime_buf, phase2str(current_phase));
-		vNewPacingValue = 0.2;
+		fprintf(tunLogPtr,"%s %s: ***WARNING***: Pacing Value would be  below 2.0 Gb/s. Will adjust to 2.0 Gb/s...\n", ms_ctime_buf, phase2str(current_phase));
+		vNewPacingValue = 2.0;
 	}
 
 	sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, aQdiscVal, netDevice, vNewPacingValue); //90%
@@ -3227,8 +3239,8 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 		
 		if (gTuningMode)
 		{
-			fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current pacing on the link is %.2f Gb/s. Will adjust the pacing based on this value.\n",
-																				ms_ctime_buf, phase2str(current_phase), vCurrentPacing);
+			fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current bitrate on the link is %.2f Gb/s. Will adjust the pacing based on this value.\n",
+																				ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
 			//fprintf(tunLogPtr,"%s %s: ****INFO*****: Current average transmitted bytes on this flow is %.2f Gb/s. \n", ms_ctime_buf, phase2str(current_phase), vThis_app_tx_Gbits_per_sec);
 			fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
 			system(aNicSetting);
@@ -3239,8 +3251,8 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 		}
  		else
 			{
-				fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current pacing on the link is %.2f Gb/s. Try running the following:\n",
-																		ms_ctime_buf, phase2str(current_phase), vCurrentPacing);
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current bitrate on the link is %.2f Gb/s. Try running the following:\n",
+																		ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
 				fprintf(tunLogPtr,"%s %s: ***WARNING***: \"%s\"\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
 			}
 	}
@@ -3252,8 +3264,8 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 
 			if (gTuningMode)
 			{
-				fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current pacing on the link is %.2f Gb/s. Will adjust the pacing based on this value.\n",
-																				ms_ctime_buf, phase2str(current_phase), vCurrentPacing);
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current bitrate on the link is %.2f Gb/s. Will adjust the pacing based on this value.\n",
+																				ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
 				//fprintf(tunLogPtr,"%s %s: ****INFO*****: Current average transmitted bytes on this flow is %.2f Gb/s. \n", ms_ctime_buf, phase2str(current_phase), vThis_app_tx_Gbits_per_sec);
 				fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
 				system(aNicSetting);
@@ -3264,7 +3276,8 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 			}
 			else
 				{
-					fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current pacing on the link is %.2f Gb/s. Try running the following:\n", ms_ctime_buf, phase2str(current_phase), vCurrentPacing);
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current bitrate on the link is %.2f Gb/s. Try running the following:\n", 
+																			ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
 					fprintf(tunLogPtr,"%s %s: ***WARNING***: \"%s\"\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
 				}
 		}
@@ -3276,7 +3289,7 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 			}
 			else	
 				{
-					fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link.:***\n", ms_ctime_buf, phase2str(current_phase));
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link with a current bitrate of %.2f Gb/s.:***\n", ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
 					fprintf(tunLogPtr,"%s %s: ***WARNING***: However, the retransmission rate of %.5f is lower that the retansmission threshold of %.5f**\n",
 												ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
 				}
