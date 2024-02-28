@@ -3191,7 +3191,8 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 	fGetTxBitRate();
 	vThis_average_tx_Gbits_per_sec = vGlobal_average_tx_Gbits_per_sec;
 	
-	fprintf(tunLogPtr,"%s %s: ***WARNING***: vCheckFirst is %.2f Gb/s, vCheckSecond is %.2f Gb/s on the link \n", ms_ctime_buf, phase2str(current_phase), vCheckFirst_tx_Gbits_per_sec, vThis_average_tx_Gbits_per_sec);
+	if (vDebugLevel > 0)
+		fprintf(tunLogPtr,"%s %s: ***WARNING***: vCheckFirst is %.2f Gb/s, vCheckSecond is %.2f Gb/s on the link \n", ms_ctime_buf, phase2str(current_phase), vCheckFirst_tx_Gbits_per_sec, vThis_average_tx_Gbits_per_sec);
 
 	if (vCheckFirst_tx_Gbits_per_sec > vThis_average_tx_Gbits_per_sec)
 		vThis_average_tx_Gbits_per_sec = vCheckFirst_tx_Gbits_per_sec;
@@ -6279,7 +6280,13 @@ cli_again:
 		if (vDebugLevel > 0)
 		{
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-			fprintf(tunLogPtr,"%s %s: ***Sent message %d to source DTN...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg2.seq_no));
+			if (sMsg2.msg_no && sMsg2.value)
+				fprintf(tunLogPtr,"%s %s: ***Sent QINFO message %d to source DTN...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg2.seq_no));
+			else
+				if (sMsg2.msg_no)
+					fprintf(tunLogPtr,"%s %s: ***Sent RESET message %d to source DTN...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg2.seq_no));
+				else
+					fprintf(tunLogPtr,"%s %s: ***Sent START message %d to source DTN...***\n", ms_ctime_buf, phase2str(current_phase), ntohl(sMsg2.seq_no));
 			fflush(tunLogPtr);
 		}
 		//msleep(250);
