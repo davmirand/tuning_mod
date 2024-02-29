@@ -1807,7 +1807,7 @@ void check_req(http_s *h, char aResp[])
 		else
 			strcpy(aMode,"on");
 
-		sprintf(aResp,"Tuning Module is in learning mode!!!\n");
+		sprintf(aResp,"Tuning Module has turned on learning mode!!!\n");
 		
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change Tuning Module learning mode from %s to on***\n", ms_ctime_buf, phase2str(current_phase), aMode);
@@ -1828,14 +1828,14 @@ void check_req(http_s *h, char aResp[])
 		else
 			strcpy(aMode,"on");
 
-		sprintf(aResp,"Tuning Module has turned off learning mode!!!\n");
+		sprintf(aResp,"Tuning Module has turned on tuning mode!!!\n");
 		
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to change Tuning Module learning mode from %s to off***\n", ms_ctime_buf, phase2str(current_phase), aMode);
 		
 		gTuningMode = 1;
 		current_phase = TUNING;
-		fprintf(tunLogPtr,"%s %s: ***Tuning Module is now *not* in learning mode***\n", ms_ctime_buf, phase2str(current_phase));
+		fprintf(tunLogPtr,"%s %s: ***Tuning Module is now in *tuning* mode***\n", ms_ctime_buf, phase2str(current_phase));
 		goto after_check;
 	}
 
@@ -6333,7 +6333,52 @@ cli_again:
 
 return ((char *)0);
 }
+//Test kafka
+//
+#if 0
+#include <glib.h>
+#include "../../librdkafka/src/rdkafka.h"
+void fUseKafka(void)
+{
 
+	char hostname[128];
+char errstr[512];
+
+rd_kafka_conf_t *conf = rd_kafka_conf_new();
+
+if (gethostname(hostname, sizeof(hostname))) {
+ fprintf(stderr, "%% Failed to lookup hostname\n");
+ exit(1);
+}
+
+if (rd_kafka_conf_set(conf, "client.id", hostname,
+                     errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+ fprintf(stderr, "%% %s\n", errstr);
+ exit(1);
+}
+
+if (rd_kafka_conf_set(conf, "group.id", "foo",
+                     errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+ fprintf(stderr, "%% %s\n", errstr);
+ exit(1);
+}
+
+if (rd_kafka_conf_set(conf, "bootstrap.servers", "host1:9092,host2:9092",
+                     errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+ fprintf(stderr, "%% %s\n", errstr);
+ exit(1);
+}
+
+/* Create Kafka consumer handle */
+rd_kafka_t *rk;
+if (!(rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf,
+                       errstr, sizeof(errstr)))) {
+ fprintf(stderr, "%% Failed to create new consumer: %s\n", errstr);
+ exit(1);
+}
+
+}
+#endif
 int main(int argc, char **argv) 
 {
 	int vRetFromRunBpfThread, vRetFromRunBpfJoin;
