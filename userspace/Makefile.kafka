@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+MYPRODUCER_TARGETS := kaf_producer
+MYCONSUMER_TARGETS := kaf_consumer
+CC ?= gcc
+CFLAGS ?= -g
+
+CFLAGS += -I/usr/include/glib-2.0/
+CFLAGS += -I/usr/lib/x86_64-linux-gnu/glib-2.0/include/
+
+all: $(MYPRODUCER_TARGETS) $(MYCONSUMER_TARGETS)
+
+
+clean:
+	rm -f $(MYPRODUCER_TARGETS) $(MYCONSUMER_TARGETS)
+
+$(MYPRODUCER_TARGETS): %: %.c 
+	$(CC) -Wall $(CFLAGS) -g -o $@ $< -lrdkafka
+
+$(MYCONSUMER_TARGETS): %: %.c
+	$(CC) -Wall $(CFLAGS) -g -o $@ $< -lrdkafka
+
