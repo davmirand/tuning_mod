@@ -417,6 +417,7 @@ static unsigned long rx_kbits_per_sec = 0, tx_kbits_per_sec = 0;
 static int vDebugLevel = 1;
 
 #define SIGINT_MSG "SIGINT received.\n"
+static volatile sig_atomic_t run_kconsumer = 1;
 void sig_int_handler(int signum, siginfo_t *info, void *ptr)
 {
 	//write(STDERR_FILENO, SIGINT_MSG, sizeof(SIGINT_MSG));
@@ -426,6 +427,9 @@ void sig_int_handler(int signum, siginfo_t *info, void *ptr)
 
 	if (csvLogPtr)
 		fclose(csvLogPtr);
+
+	run_kconsumer = 0;
+	sleep(2);
 
 	exit(0);
 }
@@ -6333,8 +6337,157 @@ cli_again:
 
 return ((char *)0);
 }
-//Test kafka
-//
+
+#include <glib.h>
+#include <librdkafka/rdkafka.h>
+//static volatile sig_atomic_t run_kconsumer = 1;
+/**
+ * @brief Signal termination of program
+ */
+#if 0
+static void stop(int sig) 
+{
+	run_kconsumer = 0;
+}
+#endif
+#include "kafka/common.c"
+void * fDoRunKafkaConsume(void * vargp)
+{
+        time_t clk;
+        char ctime_buf[27];
+        char ms_ctime_buf[MS_CTIME_BUF_LEN];
+
+        gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+        fprintf(tunLogPtr,"%s %s: ***Starting Consumer for kafka messages  thread ...***\n", ms_ctime_buf, phase2str(current_phase));
+        fflush(tunLogPtr);
+
+	rd_kafka_t *consumer;
+	rd_kafka_conf_t *conf;
+	rd_kafka_resp_err_t err;
+	char errstr[512];
+
+	// Parse the configuration.
+	// See https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md
+	const char *config_file = "config.ini";
+
+	g_autoptr(GError) error = NULL;
+	g_autoptr(GKeyFile) key_file = g_key_file_new();
+	if (!g_key_file_load_from_file (key_file, config_file, G_KEY_FILE_NONE, &error)) 
+	{
+		g_error ("Error loading config file: %s", error->message);
+		return ((char *)1);
+	}
+
+	// Load the relevant configuration sections.
+	conf = rd_kafka_conf_new();
+	load_config_group(conf, key_file, "default");
+	load_config_group(conf, key_file, "consumer");
+
+	// Create the Consumer instance.
+	consumer = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+	if (!consumer) 
+	{
+		g_error("Failed to create new consumer: %s", errstr);
+		return ((char *)1);
+	}
+
+	rd_kafka_poll_set_consumer(consumer);
+
+	// Configuration object is now owned, and freed, by the rd_kafka_t instance.
+	conf = NULL;
+
+	// Convert the list of topics to a format suitable for librdkafka.
+	const char *topic = "poems_1";
+	rd_kafka_topic_partition_list_t *subscription = rd_kafka_topic_partition_list_new(1);
+	rd_kafka_topic_partition_list_add(subscription, topic, RD_KAFKA_PARTITION_UA);
+
+	// Subscribe to the list of topics.
+	err = rd_kafka_subscribe(consumer, subscription);
+	if (err) 
+	{
+		g_error("Failed to subscribe to %d topics: %s", subscription->cnt, rd_kafka_err2str(err));
+		rd_kafka_topic_partition_list_destroy(subscription);
+		rd_kafka_destroy(consumer);
+		return ((char *)1);
+	}
+
+	rd_kafka_topic_partition_list_destroy(subscription);
+
+	// Install a signal handler for clean shutdown.
+	//signal(SIGINT, stop);
+
+	// Start polling for messages.
+    	while (run_kconsumer) 
+	{
+		rd_kafka_message_t *consumer_message;
+
+		consumer_message = rd_kafka_consumer_poll(consumer, 1000);
+		if (!consumer_message) 
+		{
+			if (vDebugLevel > 7)
+			{
+				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+				fprintf(tunLogPtr,"%s %s: ***No message for kafka consumer, Waiting... ***\n", ms_ctime_buf, phase2str(current_phase));
+				fflush(tunLogPtr);
+				//g_message("Waiting...");
+			}
+			continue;
+		}
+
+		if (consumer_message->err) 
+		{
+			if (consumer_message->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) 
+			{
+				/* We can ignore this error - it just means we've read
+                 		 * everything and are waiting for more data.
+                 		 */
+			} 
+			else 
+				{
+					g_message("Consumer error: %s", rd_kafka_message_errstr(consumer_message));
+					return ((char *)1);
+				}
+		} 
+		else 
+			{
+			
+				if (vDebugLevel > 3)
+				{
+					gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+					fprintf(tunLogPtr,"%s %s: **Consumed event from topic %s: key = %.*s value = %s****\n", ms_ctime_buf, phase2str(current_phase), 
+										rd_kafka_topic_name(consumer_message->rkt),
+										(int)consumer_message->key_len,
+										(char *)consumer_message->key,
+										(char *)consumer_message->payload);
+					fflush(tunLogPtr);
+#if 0
+					g_message("Consumed event from topic %s: key = %.*s value = %s",
+						rd_kafka_topic_name(consumer_message->rkt),
+						(int)consumer_message->key_len,
+						(char *)consumer_message->key,
+						(char *)consumer_message->payload);
+#endif
+				}
+			}
+
+		// Free the message when we're done.
+		rd_kafka_message_destroy(consumer_message);
+	}
+
+	// Close the consumer: commit final offsets and leave the group.
+	g_message( "Closing consumer");
+	rd_kafka_consumer_close(consumer);
+
+	// Destroy the consumer.
+	rd_kafka_destroy(consumer);
+
+	while (1) 
+		sleep (5); //wait for exit
+
+return ((char *) 0);
+}
+
+//other kafka with plain C and no glib
 #if 0
 #include <glib.h>
 #include "../../librdkafka/src/rdkafka.h"
@@ -6393,6 +6546,9 @@ int main(int argc, char **argv)
 
 	int vRetFromRunFindRetransmissionRateThread, vRetFromRunFindRetransmissionRateJoin;
 	pthread_t doRunFindRetransmissionRateThread_id;
+
+	int vRetFromRunKafkaConsumeThread, vRetFromRunKafkaConsumeJoin;
+	pthread_t doRunKafkaConsumeThread_id;
 
 #ifdef HPNSSH_QFACTOR
 	int vRetFromHandleHpnsshQfactorEnvThread, vRetFromHandleHpnsshQfactorEnvJoin;
@@ -6589,6 +6745,10 @@ int main(int argc, char **argv)
 
 	//Send messages tp HpnsshQfactor server for simulated testing
 #endif
+	
+	//Start kafka consumer thread
+	vRetFromRunKafkaConsumeThread = pthread_create(&doRunKafkaConsumeThread_id, NULL, fDoRunKafkaConsume, &sArgv); 
+
 	if (vRetFromRunBpfThread == 0)
     		vRetFromRunBpfJoin = pthread_join(doRunBpfCollectionThread_id, NULL);
 	
@@ -6617,6 +6777,9 @@ int main(int argc, char **argv)
 	if (vRetFromHandleHpnsshQfactorEnvThread == 0)
 		vRetFromHandleHpnsshQfactorEnvJoin = pthread_join(doHandleHpnsshQfactorEnvThread_id, NULL);
 #endif
+
+	if (vRetFromRunKafkaConsumeThread == 0)
+    		vRetFromRunKafkaConsumeJoin = pthread_join(doRunKafkaConsumeThread_id, NULL);
 
 leave:
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);

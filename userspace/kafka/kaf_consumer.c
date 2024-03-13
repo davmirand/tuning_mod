@@ -83,7 +83,7 @@ int main (int argc, char **argv)
 	{
 		rd_kafka_message_t *consumer_message;
 
-		consumer_message = rd_kafka_consumer_poll(consumer, 500);
+		consumer_message = rd_kafka_consumer_poll(consumer, 1000);
 		if (!consumer_message) 
 		{
 			g_message("Waiting...");
