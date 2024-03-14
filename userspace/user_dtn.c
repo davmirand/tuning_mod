@@ -3142,8 +3142,8 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 	double vRetransmissionRate = 0.0;
 	double vThis_app_tx_Gbits_per_sec;
 	double vThis_average_tx_Gbits_per_sec = 0.0, vCheckFirst_tx_Gbits_per_sec = 0.0, vNewPacingValue = 0.0;
-	double vFDevSpeed = (netDeviceSpeed/1000.00);
-	double vCurrentPacing = 0.0;
+	//double vFDevSpeed = (netDeviceSpeed/1000.00);
+	//double vCurrentPacing = 0.0;
 
 	strcpy(aQdiscVal,"fq");
 #if 0
@@ -3202,7 +3202,7 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 		vThis_average_tx_Gbits_per_sec = vCheckFirst_tx_Gbits_per_sec;
 
 	vNewPacingValue = vThis_average_tx_Gbits_per_sec * vMaxPacingRate;
-	vCurrentPacing = vNewPacingValue; 
+	//vCurrentPacing = vNewPacingValue; 
 #else
 	
 	//vNewPacingValue = vThis_average_tx_Gbits_per_sec * vMaxPacingRate;
@@ -6340,16 +6340,6 @@ return ((char *)0);
 
 #include <glib.h>
 #include <librdkafka/rdkafka.h>
-//static volatile sig_atomic_t run_kconsumer = 1;
-/**
- * @brief Signal termination of program
- */
-#if 0
-static void stop(int sig) 
-{
-	run_kconsumer = 0;
-}
-#endif
 #include "kafka/common.c"
 void * fDoRunKafkaConsume(void * vargp)
 {
@@ -6374,7 +6364,7 @@ void * fDoRunKafkaConsume(void * vargp)
 	g_autoptr(GKeyFile) key_file = g_key_file_new();
 	if (!g_key_file_load_from_file (key_file, config_file, G_KEY_FILE_NONE, &error)) 
 	{
-		g_error ("Error loading config file: %s", error->message);
+		g_error ("Error loading config file: %s, file is %s", error->message, config_file);
 		return ((char *)1);
 	}
 
@@ -6412,9 +6402,6 @@ void * fDoRunKafkaConsume(void * vargp)
 	}
 
 	rd_kafka_topic_partition_list_destroy(subscription);
-
-	// Install a signal handler for clean shutdown.
-	//signal(SIGINT, stop);
 
 	// Start polling for messages.
     	while (run_kconsumer) 
@@ -6745,9 +6732,9 @@ int main(int argc, char **argv)
 
 	//Send messages tp HpnsshQfactor server for simulated testing
 #endif
-	
-	//Start kafka consumer thread
-	vRetFromRunKafkaConsumeThread = pthread_create(&doRunKafkaConsumeThread_id, NULL, fDoRunKafkaConsume, &sArgv); 
+
+	if (gUseApacheKafka)	//Start kafka consumer thread
+		vRetFromRunKafkaConsumeThread = pthread_create(&doRunKafkaConsumeThread_id, NULL, fDoRunKafkaConsume, &sArgv); 
 
 	if (vRetFromRunBpfThread == 0)
     		vRetFromRunBpfJoin = pthread_join(doRunBpfCollectionThread_id, NULL);
@@ -6778,7 +6765,7 @@ int main(int argc, char **argv)
 		vRetFromHandleHpnsshQfactorEnvJoin = pthread_join(doHandleHpnsshQfactorEnvThread_id, NULL);
 #endif
 
-	if (vRetFromRunKafkaConsumeThread == 0)
+	if (gUseApacheKafka && vRetFromRunKafkaConsumeThread == 0)
     		vRetFromRunKafkaConsumeJoin = pthread_join(doRunKafkaConsumeThread_id, NULL);
 
 leave:
