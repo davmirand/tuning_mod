@@ -78,7 +78,7 @@ There are a few relevant directories here:
 - bpftrace
 - GNU make
 - git
-- librdkafka and glib (used with Apache Kafka framework)
+- librdkafka and libglib2.0 and libglib2.0-dev (used with Apache Kafka framework)
 - pkg-config
 
 In order to compile and work with the Tuning Module, do the following:
