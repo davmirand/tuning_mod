@@ -5,8 +5,7 @@ https://github.com/torvalds/linux.git
 It was then modified to output total_retrans and segs_out to help 
 with figuring out number of retransmission on a transfer.
 
-The following header files were also taken from repo to help with compiling 
-the file along with changes to the Makefile:
+The following header files were also taken from repo to help with compiling the file:
 
 bpf_iter.h - ./tools/testing/selftests/bpf/progs/bpf_iter.h
 bpf_tracing_net.h - ./tools/testing/selftests/bpf/progs/bpf_tracing_net.h
