@@ -85,8 +85,7 @@ In order to compile and work with the Tuning Module, do the following:
 -	Initialize the git submodule ```libbpf```
 	* The libbpf source is provided thru the git submodule. 
 	* ```libbpf``` is a library that allows the bpf programs to run.
-	* To use the module it must be initialized by running the following commands in the Tuning Module
-	root directory:
+	* To use the module it must be initialized by running the following commands in the Tuning Module's root directory:
 ```bash
 git submodule update --init
 ```
@@ -95,6 +94,7 @@ git submodule update --init
 -	Run ```sudo apt install pkg-config```
 -	Run ```make``` in ```userspace/``` to create Tuning Module's binaries
 -	Run ```make``` in ```cli/``` to create a directory call ```tmp``` which contains the binary ```tuncli```
+-	Run ```sudo make -f Makefile.iter``` in Tuning Module's root directory to create ```iter``` object file
 
 **Make a zip package to install Tuning Module:**
 -	go to ```packaging``` directory
