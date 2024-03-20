@@ -5567,7 +5567,7 @@ readn2_again:
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
         if (!y) //cpnnection dropped on client side
         {
-                if (vDebugLevel > 0)
+                if (vDebugLevel > 4)
                 {
 			fprintf(tunLogPtr,"%s %s: ***INFO***: client closed connection, returning from readn2, errno = %d\n", 
 											ms_ctime_buf, phase2str(current_phase), saveerrno);
@@ -5750,7 +5750,7 @@ process_request(int sockfd)
 	{
 		if ( (n = Readn(sockfd, &from_cli, sizeof(from_cli))) == 0)
 		{
-			if (vDebugLevel > 0)
+			if (vDebugLevel > 3)
 			{
 				fprintf(tunLogPtr,"\n%s %s: ***returning from QINFO OR START process request***\n", ms_ctime_buf, phase2str(current_phase));
 				fflush(tunLogPtr);
@@ -6118,7 +6118,7 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 
 			Close(listenfd); /* close listening socket */
 			process_request(connfd);/* process the request */
-			if (vDebugLevel > 0)
+			if (vDebugLevel > 4)
 			{
 				fprintf(tunLogPtr,"%s %s: ***Explicit close:\n", ms_ctime_buf, phase2str(current_phase));
 				fflush(tunLogPtr);
@@ -6387,7 +6387,8 @@ void * fDoRunKafkaConsume(void * vargp)
 	conf = NULL;
 
 	// Convert the list of topics to a format suitable for librdkafka.
-	const char *topic = "poems_1";
+	//const char *topic = "poems_1";
+	const char *topic = gKafkaTopic;
 	rd_kafka_topic_partition_list_t *subscription = rd_kafka_topic_partition_list_new(1);
 	rd_kafka_topic_partition_list_add(subscription, topic, RD_KAFKA_PARTITION_UA);
 
@@ -6432,6 +6433,14 @@ void * fDoRunKafkaConsume(void * vargp)
 			else 
 				{
 					g_message("Consumer error: %s", rd_kafka_message_errstr(consumer_message));
+#if 1
+					// I think we should close consumer before returning.
+					g_message( "Closing consumer");
+					rd_kafka_consumer_close(consumer);
+
+					// Destroy the consumer.
+					rd_kafka_destroy(consumer);
+#endif
 					return ((char *)1);
 				}
 		} 
@@ -6469,7 +6478,7 @@ void * fDoRunKafkaConsume(void * vargp)
 	rd_kafka_destroy(consumer);
 
 	while (1) 
-		sleep (5); //wait for exit
+		sleep (2); //wait for exit
 
 return ((char *) 0);
 }
