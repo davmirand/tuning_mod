@@ -87,7 +87,7 @@ In order to compile and work with the Tuning Module, do the following:
 	* ```libbpf``` is a library that allows the bpf programs to run.
 	* To use the module it must be initialized by running the following commands in the Tuning Module
 	root directory:
-		* ```bash	git submodule update --init```
+		```git submodule update --init```
 
 -	Run ```sudo apt update```
 -	Run ```sudo apt install pkg-config```
