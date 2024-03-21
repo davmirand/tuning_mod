@@ -74,6 +74,7 @@ There are a few relevant directories here:
 **To Compile and Build, the following packages and libraries should be installed:**
 
 - clang
+- llvm
 - bpftool v5.12.0+
 - bpftrace
 - GNU make
@@ -85,13 +86,11 @@ In order to compile and work with the Tuning Module, do the following:
 -	Initialize the git submodule ```libbpf```
 	* The libbpf source is provided thru the git submodule. 
 	* ```libbpf``` is a library that allows the bpf programs to run.
-	* To use the module it must be initialized by running the following commands in the Tuning Module's root directory:
+	* To use the module it must be initialized by running the following command in the Tuning Module's root directory:
 ```bash
 git submodule update --init
 ```
 
--	Run ```sudo apt update```
--	Run ```sudo apt install pkg-config```
 -	Run ```make``` in ```userspace/``` to create Tuning Module's binaries
 -	Run ```make``` in ```cli/``` to create a directory call ```tmp``` which contains the binary ```tuncli```
 -	Run ```sudo make -f Makefile.iter``` in Tuning Module's root directory to create ```iter``` object file
@@ -99,7 +98,7 @@ git submodule update --init
 **Make a zip package to install Tuning Module:**
 -	go to ```packaging``` directory
 -	type ```sh ./createpkg.sh``` to create two zip files, one of which is called ```SATuning_Module.zip```. 
--	```SATuning_Module.zip``` consist of files from the ```userspace``` and ```cli``` directory
+-	```SATuning_Module.zip``` consist of files from the ```userspace```, ```cli``` and ```iter``` directory
 -	create a temp directory, copy the ```SATuning_Module.zip``` file into it,  cd to it and type ```unzip *.zip```
 -	after unziping, to install, type ```sudo sh ./install.sh```
 -	follow the instructions to install the package 
