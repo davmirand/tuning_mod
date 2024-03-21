@@ -71,6 +71,10 @@ There are a few relevant directories here:
 -	Contains source for a HTTP client that is used as a CLI for sending instructions to
 	or receiving information from the Tuning Module
 
+```iter```
+-	Contains source for a bpf object file that is used for observing number of retransmissions
+	associated with a file transfer
+
 **To Compile and Build, the following packages and libraries should be installed:**
 
 - clang
@@ -111,13 +115,15 @@ git submodule update --init
 	* Retransmission rate
 	* Queue Occupancy Threshold
 	* Has a Learning mode and a Tuning mode
--	When set to Tuning mode, will dynmically set the the suggested tuning changes without manual intervention
+-	When set to Tuning mode, will dynamically set the suggested tuning changes without manual intervention
 	* Learning mode will only make suggestions which can be found in the log
-	* Any changes to the system are automaticallly logged.
--	Uses "ethtool" to manipulate buffer rings of a network device in order to get petter performance
--	If Queue Occupancy on one node gets above some threshold and the retransmission rate on the other node gets too high
-	the Tuning Module will lower the pacing (if in Tuning mode) or suggest some value to lower it too. It will then put 
-	back the pacing to its original state after the transfer is over.
--	Monitors RTT use bpf trace tools and also with the use of "ping".
+	* Any changes to the system are automatically logged.
+-	Uses "ethtool" to manipulate buffer rings of a network device in order to get better performance
+-	If Queue Occupancy on one node gets above some threshold and the retransmission rate on the other node gets too high,
+	the Tuning Module will lower the pacing (if in Tuning mode) or suggest some value to lower it to. In addition, it may
+	also use the Hop Latency as a factor in deciding how to adjust the pacing if so desired. It will constantly adjust
+	the pacing during the life of the transfer. The pacing will be set back to its original state after the transfer 
+	is over.
+-	Monitors RTT using bpf trace tools and also with the use of "ping".
 -	Added the ability for clients (hpnssh, etc.) to connect to the Tuning Module in order to receive data
 	for monitoring purposes.
