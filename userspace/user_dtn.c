@@ -2502,7 +2502,7 @@ double fCheckAppBandwidth(char app[], char aDest[], __u32 dest_ip_addr, int inde
 	unsigned long vBandWidthInBits = 0;
 	double vBandWidthInGBits = 0;
 
-	sprintf(try,"bpftrace -e \'BEGIN { zero(@size); zero(@sum); @sck; @sck_common; @daddr; } kprobe:tcp_sendmsg /comm == \"%s\"/ { @size = arg2; @sck = (struct sock *) arg0; @sck_common = (struct sock_common) @sck->__sk_common; @daddr = (@sck_common.skc_daddr); } kretprobe:tcp_sendmsg /comm == \"%s\" && @daddr == %u/ { @sum = @sum + @size; } interval:ms:1002 { exit(); } END { printf(\"%s\", @sum); clear(@size); clear(@sum); clear(@daddr); clear(@sck); clear(@sck_common); }\'",app,app,dest_ip_addr,"%lu");
+	sprintf(try,"bpftrace --include net/sock.h -e \'BEGIN { zero(@size); zero(@sum); @sck; @sck_common; @daddr; } kprobe:tcp_sendmsg /comm == \"%s\"/ { @size = arg2; @sck = (struct sock *) arg0; @sck_common = (struct sock_common) @sck->__sk_common; @daddr = (@sck_common.skc_daddr); } kretprobe:tcp_sendmsg /comm == \"%s\" && @daddr == %u/ { @sum = @sum + @size; } interval:ms:1002 { exit(); } END { printf(\"%s\", @sum); clear(@size); clear(@sum); clear(@daddr); clear(@sck); clear(@sck_common); }\'",app,app,dest_ip_addr,"%lu");
 
 	pipe = popen(try,"r");
 	if (!pipe)
@@ -3323,7 +3323,7 @@ void fGetTxBitRate()
 	char try[1024];
 	int stage = 0;
 
-	sprintf(try,"bpftrace -e \'BEGIN { @name;} kprobe:dev_get_stats { $nd = (struct net_device *) arg0; @name = $nd->name; } kretprobe:dev_get_stats /@name == \"%s\"/ { $rtnl = (struct rtnl_link_stats64 *) retval; $rx_bytes = $rtnl->rx_bytes; $tx_bytes = $rtnl->tx_bytes; printf(\"%s %s\\n\", $tx_bytes, $rx_bytes); } interval:s:1 { exit(); } END { clear(@name); }\'",netDevice,"%lu","%lu");
+	sprintf(try,"bpftrace --include linux/netdevice.h -e \'BEGIN { @name;} kprobe:dev_get_stats { $nd = (struct net_device *) arg0; @name = $nd->name; } kretprobe:dev_get_stats /@name == \"%s\"/ { $rtnl = (struct rtnl_link_stats64 *) retval; $rx_bytes = $rtnl->rx_bytes; $tx_bytes = $rtnl->tx_bytes; printf(\"%s %s\\n\", $tx_bytes, $rx_bytes); } interval:s:1 { exit(); } END { clear(@name); }\'",netDevice,"%lu","%lu");
 
 start:
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
@@ -3516,7 +3516,7 @@ void * fDoRunGetThresholds(void * vargp)
 
 	sprintf(aNicSetting,"tc qdisc del dev %s root fq 2>/dev/null", netDevice);
 
-	sprintf(try,"bpftrace -e \'BEGIN { @name;} kprobe:dev_get_stats { $nd = (struct net_device *) arg0; @name = $nd->name; } kretprobe:dev_get_stats /@name == \"%s\"/ { $rtnl = (struct rtnl_link_stats64 *) retval; $rx_bytes = $rtnl->rx_bytes; $tx_bytes = $rtnl->tx_bytes; printf(\"%s %s\\n\", $tx_bytes, $rx_bytes); } interval:s:1 { exit(); } END { clear(@name); }\'",netDevice,"%lu","%lu");
+	sprintf(try,"bpftrace --include linux/netdevice.h -e \'BEGIN { @name;} kprobe:dev_get_stats { $nd = (struct net_device *) arg0; @name = $nd->name; } kretprobe:dev_get_stats /@name == \"%s\"/ { $rtnl = (struct rtnl_link_stats64 *) retval; $rx_bytes = $rtnl->rx_bytes; $tx_bytes = $rtnl->tx_bytes; printf(\"%s %s\\n\", $tx_bytes, $rx_bytes); } interval:s:1 { exit(); } END { clear(@name); }\'",netDevice,"%lu","%lu");
 	/* fix for kfunc below too */
 	/*sprintf(try,"bpftrace -e \'BEGIN { @name;} kfunc:dev_get_stats { $nd = (struct net_device *) args->dev; @name = $nd->name; } kretfunc:dev_get_stats /@name == \"%s\"/ { $nd = (struct net_device *) args->dev; $rtnl = (struct rtnl_link_stats64 *) args->storage; $rx_bytes = $rtnl->rx_bytes; $tx_bytes = $rtnl->tx_bytes; printf(\"%s %s\\n\", $tx_bytes, $rx_bytes); time(\"%s\"); exit(); } END { clear(@name); }\'",netDevice,"%lu","%lu","%S");*/
 

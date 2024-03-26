@@ -77,13 +77,13 @@ There are a few relevant directories here:
 
 **To Compile and Build, the following packages and libraries should be installed:**
 
-- clang
-- llvm
-- bpftool v5.12.0+
-- bpftrace
-- GNU make
 - git
-- librdkafka and libglib2.0 and libglib2.0-dev (used with Apache Kafka framework)
+- GNU make
+- clang
+- gcc-multilib
+- bpftool v6.7.0
+- bpftrace
+- librdkafka and libglib2.0-dev (used with Apache Kafka framework)
 - pkg-config
 
 In order to compile and work with the Tuning Module, do the following:
