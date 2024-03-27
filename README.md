@@ -85,6 +85,7 @@ There are a few relevant directories here:
 - bpftrace
 - librdkafka and libglib2.0-dev (used with Apache Kafka framework)
 - pkg-config
+- numactl, sysstat
 
 In order to compile and work with the Tuning Module, do the following:
 -	Initialize the git submodule ```libbpf```
