@@ -246,6 +246,7 @@ unsigned int sMsgSeqNo = 0;
 unsigned int sMsgSeqNoConn= 0;
 char aDest_Ip2[32];
 char aDest_Ip2_Binary[32];
+char aKafka_Dest_Ip2_Binary[32];
 char aLocal_Ip[32];
 char aLocal_IpPrev[32];
 
@@ -2026,6 +2027,42 @@ void check_req(http_s *h, char aResp[])
 		goto after_check;
 	}
 
+	if (strstr(pReqData,"GET /-kaf#ip4#"))
+	{
+		/* Ue the cli option to create a destination IP for use with Kafka */
+		struct in_addr inp;
+		int y = 0;
+		char *p = (pReqData + sizeof("GET /-kaf#ip4#")) - 1;
+		while ((isdigit(*p) || *p == '.') && (count  < 16))
+		{
+			aNumber[count++] = *p;
+			p++;
+		}
+
+		if (!gUseApacheKafka)
+		{
+			sprintf(aResp,"ERROR***:the flag *use_apache_kafka* must be set in your user_config.txt file in order to use this feature.  Please Check, restart the Tuning Module and resubmit this request...!\n");
+			fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to use IP address with Kafka client, but flag not set in config file***\n", ms_ctime_buf, phase2str(current_phase));
+			goto after_check;
+		}
+
+		y = inet_aton(aNumber, &inp);
+
+		if (!y)
+		{
+			sprintf(aResp,"ERROR***:IP address %s is invalid. Please Check and resubmit...!\n", aNumber);
+			fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to use IP address with Kafka client, but the address *%s*was invalid***\n", ms_ctime_buf, phase2str(current_phase), aNumber);
+			goto after_check;
+		}
+
+		sprintf(aKafka_Dest_Ip2_Binary,"%08X",inp.s_addr);
+
+		sprintf(aResp,"Using IP address %s with Kafka!\n", aNumber);
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to use dest IP address *%s* with Kafka client***\n", ms_ctime_buf, phase2str(current_phase), aNumber);
+		goto after_check;
+	}
+
 	if (strstr(pReqData,"GET /-b#rx#"))
 	{
 		/* Change rx ring buffer size */
@@ -3162,17 +3199,24 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 	char aQdiscVal[512];
 	char aNicSetting[1024];
 	int found = 0;
-	int vIsVlan = 0;
+	unsigned long residual_bandwidth = 0;
+	double Kbps = 0.0, Gbps = 0.0;
 
 	double vRetransmissionRate = 0.0;
-	double vThis_app_tx_Gbits_per_sec;
 	double vThis_average_tx_Gbits_per_sec = 0.0, vCheckFirst_tx_Gbits_per_sec = 0.0, vNewPacingValue = 0.0;
 	//double vFDevSpeed = (netDeviceSpeed/1000.00);
 	//double vCurrentPacing = 0.0;
 
 	strcpy(aQdiscVal,"fq");
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
-	fprintf(tunLogPtr,"%s %s: ***WARNING***: Kafka message consumed...***\n", ms_ctime_buf, phase2str(current_phase));
+	residual_bandwidth = strtoul((char *)consumer_message->payload, (char **)0, 10);
+	if (residual_bandwidth)
+	{
+		Kbps = residual_bandwidth/(double)1000;
+		Gbps = Kbps/(double)(1000000);
+	}
+	
+	fprintf(tunLogPtr,"%s %s: ***INFO***: Kafka message consumed, payload is %lu, which is %.2f Gb/s...***\n", ms_ctime_buf, phase2str(current_phase), residual_bandwidth, Gbps);
 
 	found = 1;
 
@@ -3189,7 +3233,20 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 	vThis_average_tx_Gbits_per_sec = vGlobal_average_tx_Gbits_per_sec;
 	
 	if (vDebugLevel > 0)
-		fprintf(tunLogPtr,"%s %s: ***WARNING***: vCheckFirst is %.2f Gb/s, vCheckSecond is %.2f Gb/s on the link \n", ms_ctime_buf, phase2str(current_phase), vCheckFirst_tx_Gbits_per_sec, vThis_average_tx_Gbits_per_sec);
+		fprintf(tunLogPtr,"%s %s: ***INFO***: vCheckFirst is %.2f Gb/s, vCheckSecond is %.2f Gb/s on the link \n", ms_ctime_buf, phase2str(current_phase), vCheckFirst_tx_Gbits_per_sec, vThis_average_tx_Gbits_per_sec);
+
+	if (!vCheckFirst_tx_Gbits_per_sec && !vThis_average_tx_Gbits_per_sec)
+	{
+		if (vDebugLevel > 1)
+		{
+			fprintf(tunLogPtr,"%s %s: ***WARNING***: Looks like 0.0 Gb/s on the link. Nothing to do... \n", ms_ctime_buf, phase2str(current_phase));
+		}
+
+		return;
+	}
+
+
+
 
 	if (vCheckFirst_tx_Gbits_per_sec > vThis_average_tx_Gbits_per_sec)
 		vThis_average_tx_Gbits_per_sec = vCheckFirst_tx_Gbits_per_sec;
@@ -3237,11 +3294,13 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 		fprintf(tunLogPtr,"%s %s: ***WARNING***: The retransmission rate of %.5f is higher that the retansmission threshold of %.5f.\n", 
 											ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+#if 0
 		fprintf(tunLogPtr,"%s %s: **Consumed event from topic %s: key = %.*s value = %s****\n", ms_ctime_buf, phase2str(current_phase),
 		rd_kafka_topic_name(consumer_message->rkt),
 		(int)consumer_message->key_len,
 		(char *)consumer_message->key,
 		(char *)consumer_message->payload);
+#endif
 		fflush(tunLogPtr);
 
 		if (gTuningMode)
@@ -3264,7 +3323,7 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 	}
 	else
 		{
-			fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link with a current bitrate of %.2f Gb/s.:***\n", ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
+			fprintf(tunLogPtr,"%s %s: ***WARNING***: Checking for congestion on the link with a current bitrate of %.2f Gb/s.:***\n", ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
 			fprintf(tunLogPtr,"%s %s: ***WARNING***: However, the retransmission rate of %.5f is lower that the retansmission threshold of %.5f**\n",
 										ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
 		}
@@ -6515,7 +6574,6 @@ return ((char *)0);
 }
 
 #include <glib.h>
-//#include <librdkafka/rdkafka.h>
 #include "kafka/common.c"
 rd_kafka_t *kTun_Mod_Consumer = 0;;
 void * fDoRunKafkaConsume(void * vargp)
@@ -6633,14 +6691,11 @@ void * fDoRunKafkaConsume(void * vargp)
 										(char *)consumer_message->key,
 										(char *)consumer_message->payload);
 					fflush(tunLogPtr);
-#if 0
-					g_message("Consumed event from topic %s: key = %.*s value = %s",
-						rd_kafka_topic_name(consumer_message->rkt),
-						(int)consumer_message->key_len,
-						(char *)consumer_message->key,
-						(char *)consumer_message->payload);
-#endif
 				}
+
+				if (gUseApacheKafka)
+					fDoQinfoAssessmentKafka(consumer, consumer_message);
+
 			}
 
 		// Free the message when we're done.
@@ -6849,6 +6904,7 @@ int main(int argc, char **argv)
 	memset(sFlowCounters,0,sizeof(sFlowCounters));
 	memset(aDest_Ip2,0,sizeof(aDest_Ip2));
 	memset(aDest_Ip2_Binary,0,sizeof(aDest_Ip2_Binary));
+	memset(aKafka_Dest_Ip2_Binary,0,sizeof(aKafka_Dest_Ip2_Binary));
 	memset(aLocal_Ip,0,sizeof(aLocal_Ip));
 	memset(aLocal_IpPrev,0,sizeof(aLocal_IpPrev));
 	memset(aSrc_Dtn_IPs, 0, sizeof (aSrc_Dtn_IPs));
