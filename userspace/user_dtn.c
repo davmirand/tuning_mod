@@ -2060,6 +2060,11 @@ void check_req(http_s *h, char aResp[])
 		sprintf(aResp,"Using IP address %s with Kafka!\n", aNumber);
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 		fprintf(tunLogPtr,"%s %s: ***Received request from Http Client to use dest IP address *%s* with Kafka client***\n", ms_ctime_buf, phase2str(current_phase), aNumber);
+
+		//strcpy in this order
+		strcpy(aDest_Ip2_Binary,aKafka_Dest_Ip2_Binary);
+		strcpy(aDest_Ip2,aNumber);
+
 		goto after_check;
 	}
 
@@ -4534,7 +4539,7 @@ void *doRunFindRetransmissionRate(void * vargp)
 		sleep(3);
 	}
 	
-	while (!vIamASrcDtn)
+	while (!vIamASrcDtn && !gUseApacheKafka)
 	{
 		if (vDebugLevel > 9)
 		{
@@ -4550,7 +4555,7 @@ void *doRunFindRetransmissionRate(void * vargp)
 	sprintf(try,"%s","cat /sys/fs/bpf/tcp4");
 
 retrans:
-	while (!vIamASrcDtn)
+	while (!vIamASrcDtn && !gUseApacheKafka)
 	{
 		//went back to not being a src dtn at the moment
 		msleep(2000);
@@ -6167,13 +6172,13 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 	struct sockaddr_in cliaddr, servaddr;
 	
 #if 1
-			struct sockaddr_in peeraddr;
-			socklen_t peeraddrlen;
-			struct sockaddr_in localaddr;
-			socklen_t localaddrlen;
+	struct sockaddr_in peeraddr;
+	socklen_t peeraddrlen;
+	struct sockaddr_in localaddr;
+	socklen_t localaddrlen;
 
-			peeraddrlen = sizeof(peeraddr);
-			localaddrlen = sizeof(localaddr);
+	peeraddrlen = sizeof(peeraddr);
+	localaddrlen = sizeof(localaddr);
 #endif
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***Starting Listener for receiving messages from destination DTN...***\n", ms_ctime_buf, phase2str(current_phase));
@@ -6207,6 +6212,17 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 		}
 #if 1
 		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+ 		if (gUseApacheKafka) //don't use SINK
+		{
+			//Just return for now...
+			if (vDebugLevel > 0)
+			{
+				fprintf(tunLogPtr,"%s %s: ***Not using SINK, will throw away this message***\n", 
+										ms_ctime_buf, phase2str(current_phase));
+				fflush(tunLogPtr);
+			}
+			goto using_sink;
+		}
 
 		int retval = getpeername(connfd, (struct sockaddr *) &peeraddr, &peeraddrlen);
 		if (retval == -1) 
@@ -6348,7 +6364,7 @@ void * fDoRunGetMessageFromPeer(void * vargp)
 			exit(0);
 		}
 #endif	
-		
+using_sink:	
 		Close(connfd); /* parent closes connected socket */
 	}
 
@@ -6937,7 +6953,8 @@ int main(int argc, char **argv)
 	//shm = shm_new(sizeof vResetPacingBack);
 
 	//Start Collector Thread - collect from int-sink
-	vRetFromRunBpfThread = pthread_create(&doRunBpfCollectionThread_id, NULL, fDoRunBpfCollectionPerfEventArray2, &sArgv);
+	if (!gUseApacheKafka) //use SINK
+		vRetFromRunBpfThread = pthread_create(&doRunBpfCollectionThread_id, NULL, fDoRunBpfCollectionPerfEventArray2, &sArgv);
 	//Start Http server Thread	
 	vRetFromRunHttpServerThread = pthread_create(&doRunHttpServerThread_id, NULL, fDoRunHttpServer, &sArgv);
 	//Start Threshhold monitoring	
@@ -6980,8 +6997,9 @@ int main(int argc, char **argv)
 	if (gUseApacheKafka)	//Start kafka consumer thread
 		vRetFromRunKafkaConsumeThread = pthread_create(&doRunKafkaConsumeThread_id, NULL, fDoRunKafkaConsume, &sArgv); 
 
-	if (vRetFromRunBpfThread == 0)
-    		vRetFromRunBpfJoin = pthread_join(doRunBpfCollectionThread_id, NULL);
+	if (!gUseApacheKafka) //use SINK
+		if (vRetFromRunBpfThread == 0)
+    			vRetFromRunBpfJoin = pthread_join(doRunBpfCollectionThread_id, NULL);
 	
 	if (vRetFromRunHttpServerThread == 0)
     		vRetFromRunHttpServerJoin = pthread_join(doRunHttpServerThread_id, NULL);
