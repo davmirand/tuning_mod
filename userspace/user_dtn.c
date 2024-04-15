@@ -3206,6 +3206,7 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 	int found = 0;
 	unsigned long residual_bandwidth = 0;
 	double Kbps = 0.0, Gbps = 0.0;
+	double vNewPacingValueWithResidual = 0.0;
 
 	double vRetransmissionRate = 0.0;
 	double vThis_average_tx_Gbits_per_sec = 0.0, vCheckFirst_tx_Gbits_per_sec = 0.0, vNewPacingValue = 0.0;
@@ -3256,7 +3257,15 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 	if (vCheckFirst_tx_Gbits_per_sec > vThis_average_tx_Gbits_per_sec)
 		vThis_average_tx_Gbits_per_sec = vCheckFirst_tx_Gbits_per_sec;
 
-	vNewPacingValue = vThis_average_tx_Gbits_per_sec * vMaxPacingRate;
+	if (Gbps <= 0.0) //hve to bring down
+	{
+		vNewPacingValue = vThis_average_tx_Gbits_per_sec * vMaxPacingRate;
+	}
+	else
+	{ //some residual bandwidth is there 
+		vNewPacingValueWithResidual  = vThis_average_tx_Gbits_per_sec + Gbps;
+		vNewPacingValue = vNewPacingValueWithResidual;
+	}
 	//vCurrentPacing = vNewPacingValue; 
 #else
 	
@@ -6955,6 +6964,11 @@ int main(int argc, char **argv)
 	//Start Collector Thread - collect from int-sink
 	if (!gUseApacheKafka) //use SINK
 		vRetFromRunBpfThread = pthread_create(&doRunBpfCollectionThread_id, NULL, fDoRunBpfCollectionPerfEventArray2, &sArgv);
+	else
+	{
+
+	}
+
 	//Start Http server Thread	
 	vRetFromRunHttpServerThread = pthread_create(&doRunHttpServerThread_id, NULL, fDoRunHttpServer, &sArgv);
 	//Start Threshhold monitoring	
