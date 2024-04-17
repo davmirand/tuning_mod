@@ -1153,7 +1153,10 @@ void fStartEvaluationTimer(__u32 hop_key_hop_index)
 	if (!vRetTimer)
 	{
 		vCanStartEvaluationTimer = 0;
-		vSentPacingOver = 1;
+
+		if (!gUseApacheKafka)
+			vSentPacingOver = 1;
+
 		if (vDebugLevel > 6)
 		{
 			gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
@@ -3248,14 +3251,11 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 		return;
 	}
 
-
-
-
 	if (vCheckFirst_tx_Gbits_per_sec > vThis_average_tx_Gbits_per_sec)
 		vThis_average_tx_Gbits_per_sec = vCheckFirst_tx_Gbits_per_sec;
 
 	vNewPacingValue = vThis_average_tx_Gbits_per_sec * vMaxPacingRate;
-	vNewPacingValueWithResidual  = vThis_average_tx_Gbits_per_sec + (Gbps * vMaxPacingRate);
+	vNewPacingValueWithResidual  = vThis_average_tx_Gbits_per_sec + (Gbps/2.0 );
 #endif
 	
 	sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, aQdiscVal, netDevice, vNewPacingValue); //90%
@@ -3285,14 +3285,25 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 
 		if (gTuningMode)
 		{
-			fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current bitrate on the link is %.2f Gb/s. Will adjust the pacing down based on this value.\n",
+			if (vCanStartEvaluationTimer)
+			{
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current bitrate on the link is %.2f Gb/s. Will adjust the pacing down based on this value.\n",
 																	ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
-			fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
-			system(aNicSetting);
-			sResetPacingBack.set = 1;
-			sResetPacingBack.current_pacing = vNewPacingValue;
-			shm_write(shm, &sResetPacingBack);
-			fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!! %d\n", ms_ctime_buf, phase2str(current_phase), sResetPacingBack.set);
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+				system(aNicSetting);
+				sResetPacingBack.set = 1;
+				sResetPacingBack.current_pacing = vNewPacingValue;
+				shm_write(shm, &sResetPacingBack);
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!! %d\n", ms_ctime_buf, phase2str(current_phase), sResetPacingBack.set);
+				fStartEvaluationTimer(0);
+			}
+			else
+				{
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current bitrate on the link is %.2f Gb/s. \n",
+																	ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: However, Pacing was recently adjusted and we will have to wait a little longer to adjust again...\n", 
+																		ms_ctime_buf, phase2str(current_phase));
+				}
 		}
 		else 
 			{
@@ -3316,18 +3327,31 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 				vNewPacingValueWithResidual = 2.0;
 			}
 	
-			sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, aQdiscVal, netDevice, vNewPacingValueWithResidual); //90%
+			sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, aQdiscVal, netDevice, vNewPacingValueWithResidual); //TX + Gbps*0.5%
 
 			if (gTuningMode)
 			{
-				fprintf(tunLogPtr,"%s %s: ***WARNING***: There is some residual bandwidth of %.2f Gb/s in the network. Will adjust the pacing up based on this value.\n",
-																ms_ctime_buf, phase2str(current_phase), Gbps);
-				fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
-				system(aNicSetting);
-				sResetPacingBack.set = 1;
-				sResetPacingBack.current_pacing = vNewPacingValue;
-				shm_write(shm, &sResetPacingBack);
-				fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!! %d\n", ms_ctime_buf, phase2str(current_phase), sResetPacingBack.set);
+				if (vCanStartEvaluationTimer)
+				{
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: There is some residual bandwidth of %.2f Gb/s in the network. Will adjust the pacing up based on this value.\n",
+																	ms_ctime_buf, phase2str(current_phase), Gbps);
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+					system(aNicSetting);
+					sResetPacingBack.set = 1;
+					sResetPacingBack.current_pacing = vNewPacingValue;
+					shm_write(shm, &sResetPacingBack);
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!! %d\n", ms_ctime_buf, phase2str(current_phase), sResetPacingBack.set);
+					fStartEvaluationTimer(0);
+				}
+				else
+					{
+						fprintf(tunLogPtr,"%s %s: ***WARNING***: There is some residual bandwidth of %.2f Gb/s in the network.\n",
+																	ms_ctime_buf, phase2str(current_phase), Gbps);
+						fprintf(tunLogPtr,"%s %s: ***WARNING***: However, Pacing was recently adjusted and we will have to wait a little longer to adjust again...\n", 
+																		ms_ctime_buf, phase2str(current_phase));
+
+
+					}
 			}
 			else	 
 				{
