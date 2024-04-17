@@ -314,6 +314,17 @@ static int makeTimer( char *name, timer_t *timerID, int expires_usecs, struct it
 	long 			sec   = ((long)expires_usecs * 1000L) / 1000000000L;
        	long 			nsec  = ((long)expires_usecs * 1000L) % 1000000000L; //going fron micro to nano
 
+#if 0
+	if ((strcmp(name,"qEvaluation_TimerID") == 0) && !gUseApacheKafka)
+	{
+		//Approx extra 2 secs lag on client side that causes a loss in real time. Try to compensate
+		//Note that when using Apache Kafka, it doesn't use the SINK and client is where the show is
+		sec = sec + 2L;
+		expires_usecs = expires_usecs + 2000000; //2 million usecs = 2 secs
+	
+	}
+#endif
+
 	/* Set up signal handler. */
 	sa.sa_flags = SA_SIGINFO;
 	sa.sa_sigaction = timerHandler;
@@ -3235,13 +3246,16 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 
 #if 1	
 	vCheckFirst_tx_Gbits_per_sec = vGlobal_average_tx_Gbits_per_sec; //check first and use the higher of the 2
-	fGetTxBitRate();
-	vThis_average_tx_Gbits_per_sec = vGlobal_average_tx_Gbits_per_sec;
+	//fGetTxBitRate(); //may not need this when using Kafka - no peer messaging - time may be more sane
+	//vThis_average_tx_Gbits_per_sec = vGlobal_average_tx_Gbits_per_sec;
 	
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	if (vDebugLevel > 0)
-		fprintf(tunLogPtr,"%s %s: ***INFO***: vCheckFirst is %.2f Gb/s, vCheckSecond is %.2f Gb/s on the link \n", ms_ctime_buf, phase2str(current_phase), vCheckFirst_tx_Gbits_per_sec, vThis_average_tx_Gbits_per_sec);
+		fprintf(tunLogPtr,"%s %s: ***INFO***: vCheckFirst is %.2f Gb/s on the link \n", ms_ctime_buf, phase2str(current_phase), vCheckFirst_tx_Gbits_per_sec);
+//		fprintf(tunLogPtr,"%s %s: ***INFO***: vCheckFirst is %.2f Gb/s, vCheckSecond is %.2f Gb/s on the link \n", ms_ctime_buf, phase2str(current_phase), vCheckFirst_tx_Gbits_per_sec, vThis_average_tx_Gbits_per_sec);
 
-	if (!vCheckFirst_tx_Gbits_per_sec && !vThis_average_tx_Gbits_per_sec)
+	//if (!vCheckFirst_tx_Gbits_per_sec && !vThis_average_tx_Gbits_per_sec)
+	if (!vCheckFirst_tx_Gbits_per_sec)
 	{
 		if (vDebugLevel > 1)
 		{
@@ -3251,8 +3265,9 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 		return;
 	}
 
-	if (vCheckFirst_tx_Gbits_per_sec > vThis_average_tx_Gbits_per_sec)
-		vThis_average_tx_Gbits_per_sec = vCheckFirst_tx_Gbits_per_sec;
+	//if (vCheckFirst_tx_Gbits_per_sec > vThis_average_tx_Gbits_per_sec)
+		//vThis_average_tx_Gbits_per_sec = vCheckFirst_tx_Gbits_per_sec;
+	vThis_average_tx_Gbits_per_sec = vCheckFirst_tx_Gbits_per_sec;
 
 	vNewPacingValue = vThis_average_tx_Gbits_per_sec * vMaxPacingRate;
 	vNewPacingValueWithResidual  = vThis_average_tx_Gbits_per_sec + (Gbps/2.0 );
@@ -3439,9 +3454,21 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 
 #if 1	
 	vCheckFirst_tx_Gbits_per_sec = vGlobal_average_tx_Gbits_per_sec; //check first and use the higher of the 2
-	fGetTxBitRate();
+//	fGetTxBitRate();
 	vThis_average_tx_Gbits_per_sec = vGlobal_average_tx_Gbits_per_sec;
 	
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+
+	if (!vCheckFirst_tx_Gbits_per_sec)
+	{
+		if (vDebugLevel > 1)
+		{
+			fprintf(tunLogPtr,"%s %s: ***WARNING***: Looks like 0.0 Gb/s on the link. Nothing to do... \n", ms_ctime_buf, phase2str(current_phase));
+		}
+
+		return;
+	}
+
 	if (vDebugLevel > 0)
 		fprintf(tunLogPtr,"%s %s: ***WARNING***: vCheckFirst is %.2f Gb/s, vCheckSecond is %.2f Gb/s on the link \n", ms_ctime_buf, phase2str(current_phase), vCheckFirst_tx_Gbits_per_sec, vThis_average_tx_Gbits_per_sec);
 
@@ -3970,7 +3997,7 @@ start:
 				average_rx_Gbits_per_sec = 0.0;
 				goto tx_Gbs_off;
 			}
-#if 1 
+#if 0 
 			if (vIamASrcDtn && vIamADestDtn)	
 			{ // sometimes slightly off, will keep observing
 				average_tx_Gbits_per_sec = average_tx_Gbits_per_sec + tx_jitter;
@@ -3981,6 +4008,10 @@ start:
 					average_tx_Gbits_per_sec = average_tx_Gbits_per_sec + tx_jitter;
 				else
 					average_rx_Gbits_per_sec = average_rx_Gbits_per_sec + rx_jitter;
+#else
+			average_tx_Gbits_per_sec = average_tx_Gbits_per_sec + tx_jitter;
+			average_rx_Gbits_per_sec = average_rx_Gbits_per_sec + rx_jitter;
+
 #endif
 		}
 	}
@@ -5497,7 +5528,7 @@ rttstart:
 	{
 		sleep(1);
 
-		if (vIamASrcDtn)
+		if (vIamASrcDtn && !gUseApacheKafka)
 		{
 #if 0
 			highest_rtt_from_ping = fFindRttUsingPing();
@@ -5524,11 +5555,16 @@ rttstart:
 				{
 					highest_rtt_from_ping = 0;	
 					if (vDebugLevel > 2) 
-						fprintf(tunLogPtr,"%s %s: ***highes rtt from ping is zero ..., count = %d, vLastPinged = %d***\n", 
+						fprintf(tunLogPtr,"%s %s: ***highest rtt from ping is zero ..., count = %d, vLastPinged = %d***\n", 
 					ms_ctime_buf, phase2str(current_phase), count, vLastIpPinged);
 				}
 #endif
 		}
+		else
+			if (gUseApacheKafka && aDest_Ip2[0])
+			{
+				highest_rtt_from_ping = fFindRttUsingPing(aDest_Ip2);
+			}
 
 		if (vDebugLevel > 2) 
 		{
@@ -5543,7 +5579,7 @@ rttstart:
 		}
 	}
 
-	if (!vIamASrcDtn)
+	if (!vIamASrcDtn && !gUseApacheKafka)
 		goto skiprtt;
 
 	rtt = 0;
@@ -6748,7 +6784,9 @@ void * fDoRunKafkaConsume(void * vargp)
 				}
 
 				if (gUseApacheKafka)
+				{
 					fDoQinfoAssessmentKafka(consumer, consumer_message);
+				}
 
 			}
 
@@ -6842,6 +6880,7 @@ int main(int argc, char **argv)
 	char ctime_buf[27];
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	int vExitValue = 0;
+	int timerRc = 0;
 
 	/*
 	 * Make a daemon process
@@ -6992,10 +7031,18 @@ int main(int argc, char **argv)
 
 	//Start Collector Thread - collect from int-sink
 	if (!gUseApacheKafka) //use SINK
-		vRetFromRunBpfThread = pthread_create(&doRunBpfCollectionThread_id, NULL, fDoRunBpfCollectionPerfEventArray2, &sArgv);
+		vRetFromRunBpfThread = pthread_create(&doRunBpfCollectionThread_id, NULL, fDoRunBpfCollectionPerfEventArray2, &sArgv); //TimerIDs created in this function
 	else
 	{
-
+		//make to use with Kafka
+		timerRc = makeTimer("qEvaluation_TimerID", &qEvaluation_TimerID, gInterval*10, &sStartEvaluationTimer, 0);
+		if (timerRc)
+		{
+			fprintf(tunLogPtr, "%s %s: Problem creating timer *qEvaluation_TimerID*.\n", ms_ctime_buf, phase2str(current_phase));
+			return ((char *)1);
+		}
+		else
+			fprintf(tunLogPtr, "%s %s: *qEvaluation_TimerID* timer created.\n", ms_ctime_buf, phase2str(current_phase));
 	}
 
 	//Start Http server Thread	
