@@ -34,7 +34,6 @@ int sMsgsOut = 0;
 unsigned int vHouseKeepingTime = 10000000; //10 million usecs = 10 secs
 int vHouseTime = 18;
 static double previous_average_tx_Gbits_per_sec = 0.0;
-
 #ifdef HPNSSH_QFACTOR_BINN
 #include "binncli.h"
 void fMake_Binn_Server_Object(struct PeerMsg *pMsg, binn * obj)
@@ -3193,9 +3192,276 @@ return;
 }
 
 #include <librdkafka/rdkafka.h>
-
 #if 1
 //This is Kafka One
+//
+//
+void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_message);
+void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_message)
+{
+	time_t clk;
+	char ctime_buf[27];
+	char ms_ctime_buf[MS_CTIME_BUF_LEN];
+	char aNicSetting1[1024];
+	char aNicSetting2[1024];
+	char aNicSetting3[1024];
+	int vNicSet1 = 0, vNicSet2 = 0, vNicSet3 = 0;
+	unsigned long residual_bandwidth = 0;
+	double Kbps = 0.0, Gbps = 0.0;
+	double vNewPacingValueWithResidual = 0.0;
+	double vFDevSpeed = (netDeviceSpeed/1000.00);
+
+	double vRetransmissionRate = 0.0;
+	double vThis_average_tx_Gbits_per_sec = 0.0, vNewPacingValue = 0.0;
+	int vDontChangePacing = 0;
+
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+	residual_bandwidth = strtoul((char *)consumer_message->payload, (char **)0, 10);
+	if (residual_bandwidth)
+	{
+		Kbps = residual_bandwidth/(double)1000;
+		Gbps = Kbps/(double)(1000000);
+	}
+	
+	fprintf(tunLogPtr,"%s %s: ***INFO***: Kafka message consumed, payload is %lu, which is %.2f Gb/s...***\n", ms_ctime_buf, phase2str(current_phase), residual_bandwidth, Gbps);
+
+#ifdef USEGLOBALRETRAN
+	vRetransmissionRate = vGlobalRetransmissionRate;
+	if (vDebugLevel > 2)
+		fprintf(tunLogPtr,"%s %s: ***INFO***: Using Global Retransmissionrate \n", ms_ctime_buf, phase2str(current_phase));
+#endif
+
+
+#if 1	
+	//vCheckFirst_tx_Gbits_per_sec = vGlobal_average_tx_Gbits_per_sec; //check first and use the higher of the 2
+	vThis_average_tx_Gbits_per_sec = vGlobal_average_tx_Gbits_per_sec; 
+	
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+	if (vDebugLevel > 0)
+		fprintf(tunLogPtr,"%s %s: ***INFO***: Bitrate is %.2f Gb/s on the link \n", ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
+
+	if (!vThis_average_tx_Gbits_per_sec)
+	{
+		if (vDebugLevel > 1)
+		{
+			fprintf(tunLogPtr,"%s %s: ***WARNING***: Looks like 0.0 Gb/s on the link. Nothing to do... \n", ms_ctime_buf, phase2str(current_phase));
+		}
+
+		return;
+	}
+
+	vNewPacingValue = vThis_average_tx_Gbits_per_sec * vMaxPacingRate;
+	vNewPacingValueWithResidual  = vThis_average_tx_Gbits_per_sec + (Gbps/2.0 );
+#endif
+
+	//sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, aQdiscVal, netDevice, vNewPacingValue); //90%
+	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+ 	
+	if (vRetransmissionRate > vRetransmissionRateThreshold) //!hop_delay means we are also using ueue occuoancy and retransmission rate
+	{
+		if (vNewPacingValue > 34.0) //somehow the maxrate can't be over 34.3 - saw during testing
+		{
+			fprintf(tunLogPtr,"%s %s: ***WARNING***: Pacing Value would be over 34.0. Pacing cannot be set over 34.3. Setting to 34.0...\n", ms_ctime_buf, phase2str(current_phase));
+			vNewPacingValue = 34.0;
+		}
+
+		if (vNewPacingValue < 2.0)
+		{
+			fprintf(tunLogPtr,"%s %s: ***WARNING***: Pacing Value would be  below 2.0 Gb/s. Will adjust to 2.0 Gb/s...\n", ms_ctime_buf, phase2str(current_phase));
+			vNewPacingValue = 2.0;
+		}
+
+#if 1
+		if (shm_read(&sResetPacingBack, shm) && sResetPacingBack.set)
+		{
+			sprintf(aNicSetting3,"tc class change dev %s parent 1:1 classid 1:12 htb rate %.2fgbit", netDevice, vNewPacingValue); //90%
+			vNicSet3 = 1;
+		}
+		else
+			{ //not setup yet.  Let's do initial setup...
+				sprintf(aNicSetting1,"tc qdisc del dev %s root 2>/dev/null; tc qdisc add dev %s root handle 1: htb default 12", netDevice, netDevice);
+				sprintf(aNicSetting2,"tc class add dev %s parent 1: classid 1:1 htb rate %.2fgbit", netDevice, vFDevSpeed);
+				sprintf(aNicSetting3,"tc class add dev %s parent 1:1 classid 1:12 htb rate %.2fgbit", netDevice, vNewPacingValue); //90%
+				vNicSet1 = 1;
+				vNicSet2 = 1;
+				vNicSet3 = 1;
+			}
+#endif	
+		
+		fprintf(tunLogPtr,"%s %s: ***WARNING***: The retransmission rate of %.5f is higher that the retansmission threshold of %.5f.\n", 
+											ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
+		fflush(tunLogPtr);
+
+		gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
+
+		if (gTuningMode)
+		{
+			if (vCanStartEvaluationTimer)
+			{
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current bitrate on the link is %.2f Gb/s. Will adjust the pacing down based on this value.\n",
+																	ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
+				if (vNicSet1)
+				{
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting1);
+					system(aNicSetting1);
+				}
+				if (vNicSet2)
+				{
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting2);
+					system(aNicSetting2);
+				}
+				if (vNicSet3)
+				{
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting3);
+					system(aNicSetting3);
+				}
+
+				sResetPacingBack.set = 1;
+				sResetPacingBack.current_pacing = vNewPacingValue;
+				shm_write(shm, &sResetPacingBack);
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!! %d\n", ms_ctime_buf, phase2str(current_phase), sResetPacingBack.set);
+				fStartEvaluationTimer(0);
+			}
+			else
+				{
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current bitrate on the link is %.2f Gb/s. \n",
+																	ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: However, Pacing was recently adjusted and we will have to wait a little longer to adjust again...\n", 
+																		ms_ctime_buf, phase2str(current_phase));
+				}
+		}
+		else 
+			{
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: It appears that congestion is on the link. Current bitrate on the link is %.2f Gb/s. Try running the following:\n", 
+																	ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
+				if (vNicSet1)
+				{
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: \"%s\"\n", ms_ctime_buf, phase2str(current_phase), aNicSetting1);
+				}
+				if (vNicSet2)
+				{
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: \"%s\"\n", ms_ctime_buf, phase2str(current_phase), aNicSetting2);
+				}
+				if (vNicSet3)
+				{
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: \"%s\"\n", ms_ctime_buf, phase2str(current_phase), aNicSetting3);
+				}
+			}
+	}
+	else
+		if (Gbps > 0.0)
+		{	
+			if (vNewPacingValueWithResidual > 34.0) //somehow the maxrate can't be over 34.3 - saw during testing
+			{
+				if (vThis_average_tx_Gbits_per_sec > 34.0)
+				{
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: Bitrate of %.2f Gb/s is already over the max pacing rate allowed of 34.0. Will not change Pacing rate...\n", 
+																	ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
+					vDontChangePacing = 1;
+				}
+				else
+					{
+						fprintf(tunLogPtr,"%s %s: ***WARNING***: Pacing Value would be over 34.0. Pacing cannot be set over 34.3. Setting to 34.0...\n", 
+																				ms_ctime_buf, phase2str(current_phase));
+						vNewPacingValueWithResidual = 34.0;
+					}
+			}
+
+			if (vNewPacingValueWithResidual < 2.0)
+			{
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: Pacing Value would be  below 2.0 Gb/s. Will adjust to 2.0 Gb/s...\n", ms_ctime_buf, phase2str(current_phase));
+				vNewPacingValueWithResidual = 2.0;
+			}
+#if 1
+			if (shm_read(&sResetPacingBack, shm) && sResetPacingBack.set)
+			{
+				sprintf(aNicSetting3,"tc class change dev %s parent 1:1 classid 1:12 htb rate %.2fgbit", netDevice, vNewPacingValueWithResidual); //TX + Gbps*0.5%
+				vNicSet3 = 1;
+			}
+			else
+				{ //not setup yet.  Let's do initial setup...
+					sprintf(aNicSetting1,"tc qdisc del dev %s root 2>/dev/null; tc qdisc add dev %s root handle 1: htb default 12", netDevice, netDevice);
+					sprintf(aNicSetting2,"tc class add dev %s parent 1: classid 1:1 htb rate %.2fgbit", netDevice, vFDevSpeed);
+					sprintf(aNicSetting3,"tc class add dev %s parent 1:1 classid 1:12 htb rate %.2fgbit", netDevice, vNewPacingValueWithResidual); //TX + Gbps*0.5%
+					vNicSet1 = 1;
+					vNicSet2 = 1;
+					vNicSet3 = 1;
+				}
+#endif	
+	
+			if (!vDontChangePacing)
+			{
+				if (gTuningMode)
+				{
+					if (vCanStartEvaluationTimer)
+					{
+						fprintf(tunLogPtr,"%s %s: ***WARNING***: There is some residual bandwidth of %.2f Gb/s in the network. Will adjust the pacing up based on this value.\n",
+																		ms_ctime_buf, phase2str(current_phase), Gbps);
+						if (vNicSet1)
+						{
+							fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting1);
+							system(aNicSetting1);
+						}
+						if (vNicSet2)
+						{
+							fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting2);
+							system(aNicSetting2);
+						}
+						if (vNicSet3)
+						{
+							fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting3);
+							system(aNicSetting3);
+						}
+
+						sResetPacingBack.set = 1;
+						sResetPacingBack.current_pacing = vNewPacingValue;
+						shm_write(shm, &sResetPacingBack);
+						fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!! %d\n", ms_ctime_buf, phase2str(current_phase), sResetPacingBack.set);
+						fStartEvaluationTimer(0);
+					}
+					else
+						{
+							fprintf(tunLogPtr,"%s %s: ***WARNING***: There is some residual bandwidth of %.2f Gb/s in the network.\n",
+																		ms_ctime_buf, phase2str(current_phase), Gbps);
+							fprintf(tunLogPtr,"%s %s: ***WARNING***: However, Pacing was recently adjusted and we will have to wait a little longer to adjust again...\n", 
+																			ms_ctime_buf, phase2str(current_phase));
+						}
+				}
+				else	 
+					{
+						fprintf(tunLogPtr,"%s %s: ***WARNING***: There is some residual bandwidth of %.2f Gb/s in the network.  Try running the following:\n",
+																	ms_ctime_buf, phase2str(current_phase), Gbps);
+						if (vNicSet1)
+						{
+							fprintf(tunLogPtr,"%s %s: ***WARNING***: \"%s\"\n", ms_ctime_buf, phase2str(current_phase), aNicSetting1);
+						}
+						if (vNicSet2)
+						{
+							fprintf(tunLogPtr,"%s %s: ***WARNING***: \"%s\"\n", ms_ctime_buf, phase2str(current_phase), aNicSetting2);
+						}
+						if (vNicSet3)
+						{
+							fprintf(tunLogPtr,"%s %s: ***WARNING***: \"%s\"\n", ms_ctime_buf, phase2str(current_phase), aNicSetting3);
+						}
+					}
+			}
+		}
+		else
+			{
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: Checking for congestion on the link with a current bitrate of %.2f Gb/s.:***\n", 
+													ms_ctime_buf, phase2str(current_phase), vThis_average_tx_Gbits_per_sec);
+				fprintf(tunLogPtr,"%s %s: ***WARNING***: However, the retransmission rate of %.5f is lower that the retansmission threshold of %.5f**\n",
+													ms_ctime_buf, phase2str(current_phase), vRetransmissionRate, vRetransmissionRateThreshold);
+			}
+
+	fflush(tunLogPtr);
+return;
+//                - Need to Reset Pacing after traffic stops???
+}
+#endif
+
+#if 0
+//This is Kafka Two
 //
 //
 void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_message);
@@ -3396,7 +3662,7 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 	double vRetransmissionRate = 0.0;
 	double vThis_app_tx_Gbits_per_sec;
 	double vThis_average_tx_Gbits_per_sec = 0.0, vNewPacingValue = 0.0;
-	//double vFDevSpeed = (netDeviceSpeed/1000.00);
+	double vFDevSpeed = (netDeviceSpeed/1000.00);
 
 	strcpy(aQdiscVal,"fq");
 	
@@ -3416,6 +3682,9 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 		found = 1;
 		break;
 	}
+	
+	if (vDebugLevel > 0)
+		fprintf(tunLogPtr,"%s %s: ***WARNING***: vFDevSpeed is %.2f Gb/s on the link \n", ms_ctime_buf, phase2str(current_phase), vFDevSpeed);
 
 #ifdef USEGLOBALRETRAN
 	vRetransmissionRate = vGlobalRetransmissionRate;
@@ -3756,7 +4025,8 @@ void * fDoRunGetThresholds(void * vargp)
 	static int vFirstTimeThru = 1;
 	int vLastIpFound = 0, vIpCount = 0;
 
-	sprintf(aNicSetting,"tc qdisc del dev %s root fq 2>/dev/null", netDevice);
+	//sprintf(aNicSetting,"tc qdisc del dev %s root fq 2>/dev/null", netDevice);
+	sprintf(aNicSetting,"tc qdisc del dev %s root 2>/dev/null", netDevice);
 
 	sprintf(try,"bpftrace --include linux/netdevice.h -e \'BEGIN { @name;} kprobe:dev_get_stats { $nd = (struct net_device *) arg0; @name = $nd->name; } kretprobe:dev_get_stats /@name == \"%s\"/ { $rtnl = (struct rtnl_link_stats64 *) retval; $rx_bytes = $rtnl->rx_bytes; $tx_bytes = $rtnl->tx_bytes; printf(\"%s %s\\n\", $tx_bytes, $rx_bytes); } interval:s:1 { exit(); } END { clear(@name); }\'",netDevice,"%lu","%lu");
 	/* fix for kfunc below too */
