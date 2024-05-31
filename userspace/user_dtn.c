@@ -3080,7 +3080,8 @@ void fDoCleanupResetPacing(void)
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	char aNicSetting[1024];
 
-	sprintf(aNicSetting,"tc qdisc del dev %s root fq 2>/dev/null", netDevice);
+	//sprintf(aNicSetting,"tc qdisc del dev %s root fq 2>/dev/null", netDevice);
+	sprintf(aNicSetting,"tc qdisc del dev %s root 2>/dev/null", netDevice);
 	
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***WARNING***: Received *CleanupResetPacing* message from a destination DTN...***\n", ms_ctime_buf, phase2str(current_phase));
@@ -3131,7 +3132,8 @@ void fDoResetPacing(char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr)
 	char aNicSetting[1024];
 	int found = 0;
 
-	sprintf(aNicSetting,"tc qdisc del dev %s root fq 2>/dev/null", netDevice);
+	//sprintf(aNicSetting,"tc qdisc del dev %s root fq 2>/dev/null", netDevice);
+	sprintf(aNicSetting,"tc qdisc del dev %s root 2>/dev/null", netDevice);
 	
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***WARNING***: ResetPacing message from destination DTN %s***\n", ms_ctime_buf, phase2str(current_phase), aDest_Ip);
@@ -3648,7 +3650,7 @@ return;
 }
 #endif
 
-#if 1
+#if 0
 //Original QinfoAssessment
 //
 //
@@ -3822,8 +3824,8 @@ return;
 
 #if 1
 //QinofAssessment 2 New
-void fDoQinfoAssessment2(unsigned int val, unsigned int hop_delay, char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr);
-void fDoQinfoAssessment2(unsigned int val, unsigned int hop_delay, char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr)
+void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr);
+void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr)
 {
 	time_t clk;
 	char ctime_buf[27];
