@@ -3261,10 +3261,10 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
  	
 	if (vRetransmissionRate > vRetransmissionRateThreshold) //!hop_delay means we are also using ueue occuoancy and retransmission rate
 	{
-		if (vNewPacingValue > 34.0) //somehow the maxrate can't be over 34.3 - saw during testing
+		if (vNewPacingValue >= vFDevSpeed) //New apcing over speed of NIC
 		{
-			fprintf(tunLogPtr,"%s %s: ***WARNING***: Pacing Value would be over 34.0. Pacing cannot be set over 34.3. Setting to 34.0...\n", ms_ctime_buf, phase2str(current_phase));
-			vNewPacingValue = 34.0;
+			fprintf(tunLogPtr,"%s %s: ***WARNING***: Pacing Value would be over speed if NIC which is %.2f Setting to 98%% of NIC speed...\n", ms_ctime_buf, phase2str(current_phase), vFDevSpeed);
+			vNewPacingValue = vFDevSpeed * (98.0/100.0);
 		}
 
 		if (vNewPacingValue < 2.0)
@@ -3888,10 +3888,12 @@ void fDoQinfoAssessment(unsigned int val, unsigned int hop_delay, char aSrc_Ip[]
 
 	vNewPacingValue = vThis_average_tx_Gbits_per_sec * vMaxPacingRate;
 	
-	if (vNewPacingValue > 34.0) //somehow the maxrate can't be over 34.3 - saw during testing
+	if (vNewPacingValue >= vFDevSpeed) //pacing would be greater than NIC speed
 	{
-		fprintf(tunLogPtr,"%s %s: ***WARNING***: Pacing Value would be over 34.0. Pacing cannot be set over 34.3. Setting to 34.0...\n", ms_ctime_buf, phase2str(current_phase));
-		vNewPacingValue = 34.0;
+		//this should never happen - new pacing value should always be less, but...
+		fprintf(tunLogPtr,"%s %s: ***WARNING***: New Pacing Value would be over %.2f which is the speed of the NIC. Shouldn't be. Will leave current pacing as is...\n", ms_ctime_buf, phase2str(current_phase), vFDevSpeed);
+		vNewPacingValue = vFDevSpeed;
+		return;
 	}
 
 	if (vNewPacingValue < 2.0)
