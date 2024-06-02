@@ -3253,7 +3253,7 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 	}
 
 	vNewPacingValue = vThis_average_tx_Gbits_per_sec * vMaxPacingRate;
-	vNewPacingValueWithResidual  = vThis_average_tx_Gbits_per_sec + (Gbps/2.0 );
+	vNewPacingValueWithResidual  = vThis_average_tx_Gbits_per_sec + (Gbps * 0.75); //add 75% of residual bandwidth
 #endif
 
 	//sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, aQdiscVal, netDevice, vNewPacingValue); //90%
