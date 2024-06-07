@@ -3865,31 +3865,6 @@ start:
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***using TxBitRate()***\n", ms_ctime_buf, phase2str(current_phase));
 	fflush(tunLogPtr);
-#if 0
-	vIamASrcDtn = 1;
-	if (previous_average_tx_Gbits_per_sec && vIamASrcDtn)
-	{
-		vIpCount = MAX_NUM_IP_ATTACHED;
-                        
-		while (!aDest_Dtn_IPs[vLastIpFound].dest_ip_addr && vIpCount)
-		{
-			if (vDebugLevel > 8)
-				fprintf(tunLogPtr,"%s %s: ***looking for app ip addrs vLastIpFound= %d, ...vIpCount = %d***\n", ms_ctime_buf, phase2str(current_phase), vLastIpFound, vIpCount);
-			vIpCount--;
-                        vLastIpFound++;
-                        if (vLastIpFound == MAX_NUM_IP_ATTACHED)
-				vLastIpFound = 0;
-                }
-		if (vIpCount)
-		{
-			fGetAppBandWidth(aDest_Dtn_IPs[vLastIpFound].aDest_Ip2, vLastIpFound);
-                        vLastIpFound++;
-                        if (vLastIpFound == MAX_NUM_IP_ATTACHED)
-				vLastIpFound = 0;
-		}
-	//	sleep(1);
-	}
-#endif
 #if 1
 	rx_before =  rx_now = rx_bytes_tot = rx_kbits_per_sec = 0;
 	tx_before =  tx_now = tx_bytes_tot = tx_kbits_per_sec = 0;
@@ -6310,6 +6285,7 @@ process_request(int sockfd)
 		{
 			if (vDebugLevel > 3)
 			{
+				gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 				fprintf(tunLogPtr,"\n%s %s: ***returning from QINFO OR START process request***\n", ms_ctime_buf, phase2str(current_phase));
 				fflush(tunLogPtr);
 			}
