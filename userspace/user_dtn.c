@@ -3266,11 +3266,22 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 
 		return;
 	}
+
+
+	//sprintf(aNicSetting,"tc qdisc del dev %s root %s 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, aQdiscVal, netDevice, vNewPacingValue);
 		
 	if (shm_read(&sResetPacingBack, shm) && sResetPacingBack.set)
 		vCurrentPacingSet = 1;
 		
 	vNewPacingValue = (vThis_average_tx_Gbits_per_sec + Gbps) * 0.95;
+
+	if (vNewPacingValue > 34.0)
+	{
+		fprintf(tunLogPtr,"%s %s: ***WARNING***: New pacing value is %.2f would be close to speed of NIC %.2f, Resetting pacing to default... \n", 
+													ms_ctime_buf, phase2str(current_phase), vNewPacingValue, 40.0);
+		vNewPacingValue = 40.0; //Force it to max
+
+	}
 
 	if ((vThis_average_tx_Gbits_per_sec + Gbps) < (vFDevSpeed*0.95))
 	{
@@ -3280,7 +3291,8 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 		{
 			if (gTuningMode && vCurrentPacingSet)
 			{
-				if (vCanStartEvaluationTimer)
+				//if (vCanStartEvaluationTimer)
+				if (1)
 				{
 					if (vDebugLevel > 1)
 					{
@@ -3293,7 +3305,7 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
                                 	sResetPacingBack.current_pacing = 0.0;
                                 	shm_write(shm, &sResetPacingBack);
 					system(aNicRemovePacing);
-					fStartEvaluationTimer(0);
+				//	fStartEvaluationTimer(0);
 				}
 				else
 					{
@@ -3303,13 +3315,13 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 																		ms_ctime_buf, phase2str(current_phase));
 					}
 			}
-			
+#if 0	
 			if (vDebugLevel > 1)
 			{
 				fprintf(tunLogPtr,"%s %s: ***WARNING***: New pacing value of %.2f is not used... \n", 
 												ms_ctime_buf, phase2str(current_phase), vNewPacingValue);
 			}
-			
+#endif			
 			return;
 		}
 		
@@ -3328,17 +3340,23 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 		{
 			if (vCurrentPacingSet)
 			{
+				sprintf(aNicSetting3,"tc qdisc change dev %s root fq maxrate %.2fgbit", netDevice, vNewPacingValue);
+#if 0
 				sprintf(aNicSetting3,"tc class change dev %s parent 1:1 classid 1:12 htb rate %.2fgbit", netDevice, vNewPacingValue); 
+#endif
 				vNicSet3 = 1;
 			}
 			else
 				{ //not setup yet.  Let's do initial setup...
+					sprintf(aNicSetting1,"tc qdisc del dev %s root 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, netDevice, vNewPacingValue);
+#if 0
 					sprintf(aNicSetting1,"tc qdisc del dev %s root 2>/dev/null; tc qdisc add dev %s root handle 1: htb default 12", netDevice, netDevice);
 					sprintf(aNicSetting2,"tc class add dev %s parent 1: classid 1:1 htb rate %.2fgbit", netDevice, vFDevSpeed);
 					sprintf(aNicSetting3,"tc class add dev %s parent 1:1 classid 1:12 htb rate %.2fgbit", netDevice, vNewPacingValue); 
+#endif
 					vNicSet1 = 1;
-					vNicSet2 = 1;
-					vNicSet3 = 1;
+//					vNicSet2 = 1;
+//					vNicSet3 = 1;
 				}
 
 			vModifyPacing = 1;
@@ -3348,7 +3366,8 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 		{
 			if (vModifyPacing)
 			{	
-				if (vCanStartEvaluationTimer) 
+				//if (vCanStartEvaluationTimer) 
+				if (1) 
 				{
 					fprintf(tunLogPtr,"%s %s: ***WARNING***: There is some residual bandwidth of %.2f Gb/s in the network. Will adjust the pacing up based on this value.\n",
 																		ms_ctime_buf, phase2str(current_phase), Gbps);
@@ -3372,7 +3391,7 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 					sResetPacingBack.current_pacing = vNewPacingValue;
 					shm_write(shm, &sResetPacingBack);
 					fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!! %d\n", ms_ctime_buf, phase2str(current_phase), sResetPacingBack.set);
-					fStartEvaluationTimer(0);
+				//	fStartEvaluationTimer(0);
 				}
 				else
 					{
@@ -3405,7 +3424,8 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 	else
 		if (gTuningMode && vCurrentPacingSet)
 		{
-			if (vCanStartEvaluationTimer)
+			//if (vCanStartEvaluationTimer)
+			if (1)
 			{
 				if (vDebugLevel > 1)
 				{
@@ -3418,7 +3438,7 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
                                	sResetPacingBack.current_pacing = 0.0;
                                	shm_write(shm, &sResetPacingBack);
 				system(aNicRemovePacing);
-				fStartEvaluationTimer(0);
+			//	fStartEvaluationTimer(0);
 			}
 			else
 				{
