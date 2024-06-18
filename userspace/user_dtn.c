@@ -3296,12 +3296,13 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 				{
 					if (vDebugLevel > 1)
 					{
-						fprintf(tunLogPtr,"%s %s: ***WARNING***: New pacing value of %.2f would be close to speed of NIC %.2f, Resetting pacing to default... \n", 
+						fprintf(tunLogPtr,"%s %s: ***WARNING***: New pacing value of %.2f would be close to speed of NIC %.2f, Resetting pacing to nopacing... \n", 
 															ms_ctime_buf, phase2str(current_phase), vNewPacingValue, vFDevSpeed);
 					}
 
-					sprintf(aNicRemovePacing,"tc qdisc del dev %s root 2>/dev/null",netDevice);
-					sResetPacingBack.set = 0;
+					//sprintf(aNicRemovePacing,"tc qdisc del dev %s root 2>/dev/null",netDevice);
+					sprintf(aNicRemovePacing,"tc qdisc change dev %s root fq nopacing", netDevice);
+					sResetPacingBack.set = 1;
                                 	sResetPacingBack.current_pacing = 0.0;
                                 	shm_write(shm, &sResetPacingBack);
 					system(aNicRemovePacing);
@@ -3340,7 +3341,7 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 		{
 			if (vCurrentPacingSet)
 			{
-				sprintf(aNicSetting3,"tc qdisc change dev %s root fq maxrate %.2fgbit", netDevice, vNewPacingValue);
+				sprintf(aNicSetting3,"tc qdisc change dev %s root fq maxrate %.2fgbit pacing", netDevice, vNewPacingValue);
 #if 0
 				sprintf(aNicSetting3,"tc class change dev %s parent 1:1 classid 1:12 htb rate %.2fgbit", netDevice, vNewPacingValue); 
 #endif
@@ -3429,12 +3430,13 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 			{
 				if (vDebugLevel > 1)
 				{
-					fprintf(tunLogPtr,"%s %s: ***WARNING***: New pacing value of %.2f would be close to speed of NIC %.2f, Resetting pacing to default... \n", 
+					fprintf(tunLogPtr,"%s %s: ***WARNING***: New pacing value of %.2f would be close to speed of NIC %.2f, Resetting pacing to nopacing... \n", 
 													ms_ctime_buf, phase2str(current_phase), vNewPacingValue, vFDevSpeed);
 				}
 
-				sprintf(aNicRemovePacing,"tc qdisc del dev %s root 2>/dev/null",netDevice);
-				sResetPacingBack.set = 0;
+				sprintf(aNicRemovePacing,"tc qdisc change dev %s root fq nopacing", netDevice);
+				//sprintf(aNicRemovePacing,"tc qdisc del dev %s root 2>/dev/null",netDevice);
+				sResetPacingBack.set = 1;
                                	sResetPacingBack.current_pacing = 0.0;
                                	shm_write(shm, &sResetPacingBack);
 				system(aNicRemovePacing);
