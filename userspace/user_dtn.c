@@ -3295,7 +3295,7 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 			if (gTuningMode && vCurrentPacingSet)
 			{
 				//if (vCanStartEvaluationTimer)
-				if (1 && sResetPacingBack.set == REGULAR_PACING_FLAG_SET)
+				if (sResetPacingBack.set == REGULAR_PACING_FLAG_SET)
 				{
 					//sprintf(aNicRemovePacing,"tc qdisc del dev %s root 2>/dev/null",netDevice);
 					sprintf(aNicRemovePacing,"tc qdisc change dev %s root fq nopacing", netDevice);
@@ -3313,7 +3313,7 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 				//	fStartEvaluationTimer(0);
 				}
 				else
-					if (1 && sResetPacingBack.set == NOPACING_FLAG_SET)
+					if (sResetPacingBack.set == NOPACING_FLAG_SET)
 					{
 						if (vDebugLevel > 2)
 						{
@@ -3446,7 +3446,7 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 		if (gTuningMode && vCurrentPacingSet)
 		{
 			//if (vCanStartEvaluationTimer)
-			if (1 && sResetPacingBack.set == REGULAR_PACING_FLAG_SET)
+			if (sResetPacingBack.set == REGULAR_PACING_FLAG_SET)
 			{
 				sprintf(aNicRemovePacing,"tc qdisc change dev %s root fq nopacing", netDevice);
 				//sprintf(aNicRemovePacing,"tc qdisc del dev %s root 2>/dev/null",netDevice);
@@ -3463,7 +3463,7 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 			//	fStartEvaluationTimer(0);
 			}
 			else
-				if (1 && sResetPacingBack.set == NOPACING_FLAG_SET)
+				if (sResetPacingBack.set == NOPACING_FLAG_SET)
 				{
 					if (vDebugLevel > 2)
 					{
