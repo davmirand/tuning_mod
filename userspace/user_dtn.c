@@ -3294,23 +3294,36 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 		{
 			if (gTuningMode && vCurrentPacingSet)
 			{
-				//if (vCanStartEvaluationTimer)
 				if (sResetPacingBack.set == REGULAR_PACING_FLAG_SET)
 				{
 					//sprintf(aNicRemovePacing,"tc qdisc del dev %s root 2>/dev/null",netDevice);
-					sprintf(aNicRemovePacing,"tc qdisc change dev %s root fq nopacing", netDevice);
-					if (vDebugLevel > 2)
+					//if (1 || vCanStartEvaluationTimer)
+					if (vCanStartEvaluationTimer)
 					{
-						fprintf(tunLogPtr,"%s %s: ***WARNING***: New pacing value of %.2f would be close or above speed of NIC %.2f, Resetting pacing to NOPACING... \n", 
-															ms_ctime_buf, phase2str(current_phase), vNewPacingValue, vFDevSpeed);
-						fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicRemovePacing);
+						sprintf(aNicRemovePacing,"tc qdisc change dev %s root fq nopacing", netDevice);
+						if (vDebugLevel > 2)
+						{
+							fprintf(tunLogPtr,"%s %s: ***WARNING***: New pacing value of %.2f would be close or above speed of NIC %.2f, Resetting pacing to NOPACING... \n", 
+																ms_ctime_buf, phase2str(current_phase), vNewPacingValue, vFDevSpeed);
+							fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicRemovePacing);
+						}
+						//sResetPacingBack.set = 1;
+						sResetPacingBack.set = NOPACING_FLAG_SET;
+                                		sResetPacingBack.current_pacing = 0.0;
+                                		shm_write(shm, &sResetPacingBack);
+						system(aNicRemovePacing);
+						fStartEvaluationTimer(0);
 					}
-					//sResetPacingBack.set = 1;
-					sResetPacingBack.set = NOPACING_FLAG_SET;
-                                	sResetPacingBack.current_pacing = 0.0;
-                                	shm_write(shm, &sResetPacingBack);
-					system(aNicRemovePacing);
-				//	fStartEvaluationTimer(0);
+					else 
+						{
+							if (vDebugLevel > 2)
+							{
+								fprintf(tunLogPtr,"%s %s: ***WARNING***: There is some residual bandwidth of %.2f Gb/s in the network.\n",
+																			ms_ctime_buf, phase2str(current_phase), Gbps);
+								fprintf(tunLogPtr,"%s %s: ***WARNING***: However, Pacing was recently adjusted and we will have to wait a little longer to adjust again...\n", 
+																				ms_ctime_buf, phase2str(current_phase));
+							}
+						}
 				}
 				else
 					if (sResetPacingBack.set == NOPACING_FLAG_SET)
@@ -3326,10 +3339,7 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 						{
 							if (vDebugLevel > 2)
 							{
-								fprintf(tunLogPtr,"%s %s: ***WARNING***: There is some residual bandwidth of %.2f Gb/s in the network.\n",
-																			ms_ctime_buf, phase2str(current_phase), Gbps);
-								fprintf(tunLogPtr,"%s %s: ***WARNING***: However, Pacing was recently adjusted and we will have to wait a little longer to adjust again...\n", 
-																				ms_ctime_buf, phase2str(current_phase));
+								fprintf(tunLogPtr,"%s %s: ***ERROR1***: Something off.  This shoudn't happen.\n", ms_ctime_buf, phase2str(current_phase));
 							}
 						}
 			}
@@ -3384,8 +3394,8 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 		{
 			if (vModifyPacing)
 			{	
-				//if (vCanStartEvaluationTimer) 
-				if (1) 
+				//if (1 || vCanStartEvaluationTimer)
+				if (vCanStartEvaluationTimer) 
 				{
 					fprintf(tunLogPtr,"%s %s: ***WARNING***: There is some residual bandwidth of %.2f Gb/s in the network. Will adjust the pacing up based on this value.\n",
 																		ms_ctime_buf, phase2str(current_phase), Gbps);
@@ -3409,7 +3419,7 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 					sResetPacingBack.current_pacing = vNewPacingValue;
 					shm_write(shm, &sResetPacingBack);
 					fprintf(tunLogPtr,"%s %s: ***WARNING***: !!!!Pacing has been adjusted!!!! %d\n", ms_ctime_buf, phase2str(current_phase), sResetPacingBack.set);
-				//	fStartEvaluationTimer(0);
+					fStartEvaluationTimer(0);
 				}
 				else
 					{
@@ -3448,19 +3458,33 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 			//if (vCanStartEvaluationTimer)
 			if (sResetPacingBack.set == REGULAR_PACING_FLAG_SET)
 			{
-				sprintf(aNicRemovePacing,"tc qdisc change dev %s root fq nopacing", netDevice);
-				//sprintf(aNicRemovePacing,"tc qdisc del dev %s root 2>/dev/null",netDevice);
-				if (vDebugLevel > 2)
+				//if (1 || vCanStartEvaluationTimer)
+				if (vCanStartEvaluationTimer)
 				{
-					fprintf(tunLogPtr,"%s %s: ***WARNING***: New pacing value of %.2f would be close or above speed of NIC %.2f, Resetting pacing to NOPACING... \n", 
-													ms_ctime_buf, phase2str(current_phase), vNewPacingValue, vFDevSpeed);
-					fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicRemovePacing);
+					sprintf(aNicRemovePacing,"tc qdisc change dev %s root fq nopacing", netDevice);
+					//sprintf(aNicRemovePacing,"tc qdisc del dev %s root 2>/dev/null",netDevice);
+					if (vDebugLevel > 2)
+					{
+						fprintf(tunLogPtr,"%s %s: ***WARNING***: New pacing value of %.2f would be close or above speed of NIC %.2f, Resetting pacing to NOPACING... \n", 
+														ms_ctime_buf, phase2str(current_phase), vNewPacingValue, vFDevSpeed);
+						fprintf(tunLogPtr,"%s %s: ***WARNING***: Adjusting using *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicRemovePacing);
+					}
+					sResetPacingBack.set = NOPACING_FLAG_SET;
+                               		sResetPacingBack.current_pacing = 0.0;
+                               		shm_write(shm, &sResetPacingBack);
+					system(aNicRemovePacing);
+					fStartEvaluationTimer(0);
 				}
-				sResetPacingBack.set = NOPACING_FLAG_SET;
-                               	sResetPacingBack.current_pacing = 0.0;
-                               	shm_write(shm, &sResetPacingBack);
-				system(aNicRemovePacing);
-			//	fStartEvaluationTimer(0);
+				else
+					{
+						if (vDebugLevel > 2)
+						{
+							fprintf(tunLogPtr,"%s %s: ***WARNING***: There is some residual bandwidth of %.2f Gb/s in the network.\n",
+																ms_ctime_buf, phase2str(current_phase), Gbps);
+							fprintf(tunLogPtr,"%s %s: ***WARNING***: However, Pacing was recently adjusted and we will have to wait a little longer to adjust again...\n", 
+																	ms_ctime_buf, phase2str(current_phase));
+						}
+					}
 			}
 			else
 				if (sResetPacingBack.set == NOPACING_FLAG_SET)
@@ -3475,10 +3499,7 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 					{
 						if (vDebugLevel > 2)
 						{
-							fprintf(tunLogPtr,"%s %s: ***WARNING***: There is some residual bandwidth of %.2f Gb/s in the network.\n",
-																ms_ctime_buf, phase2str(current_phase), Gbps);
-							fprintf(tunLogPtr,"%s %s: ***WARNING***: However, Pacing was recently adjusted and we will have to wait a little longer to adjust again...\n", 
-																	ms_ctime_buf, phase2str(current_phase));
+							fprintf(tunLogPtr,"%s %s: ***ERROR2***: Something off.  This shoudn't happen.\n", ms_ctime_buf, phase2str(current_phase));
 						}
 					}
 		}
@@ -5777,7 +5798,7 @@ void fDoCheckSoftirqd(void)
 			fprintf(tunLogPtr,"%s %s: ***WARNING ksoftirqd is using >= 60%c of CPU resources::: %s", ms_ctime_buf, phase2str(current_phase), '%', buffer);
 			
 			//sudo ethtool -L netro-switch rx 0 tx 28  combined 4
-			fDoSetChannels();
+			//fDoSetChannels();
 		}
 		else
 			continue;
