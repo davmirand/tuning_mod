@@ -3262,7 +3262,7 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 
 	if (!vThis_average_tx_Gbits_per_sec)
 	{
-		if (vDebugLevel > 0)
+		if (vDebugLevel > 2)
 		{
 			fprintf(tunLogPtr,"%s %s: ***WARNING***: Looks like 0.0 Gb/s on the link. Nothing to do... \n", ms_ctime_buf, phase2str(current_phase));
 		}
@@ -3280,8 +3280,12 @@ void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_
 
 	if (vNewPacingValue > 34.0)
 	{
-		fprintf(tunLogPtr,"%s %s: ***WARNING***: New pacing value is %.2f and would be close to speed of NIC %.2f, Will reset pacing to NOPACING if needed... \n", 
+		if (vDebugLevel > 1)
+		{
+			fprintf(tunLogPtr,"%s %s: ***WARNING***: New pacing value is %.2f and would be close to speed of NIC %.2f, Will reset pacing to NOPACING if needed... \n", 
 													ms_ctime_buf, phase2str(current_phase), vNewPacingValue, 40.0);
+		}
+	
 		vNewPacingValue = 40.0; //Force it to max
 
 	}
