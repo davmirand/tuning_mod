@@ -3201,6 +3201,20 @@ return;
 //This is Kafka Three - Italo fix
 //
 //
+void fSetInitialPacing(void);
+void fSetInitialPacing(void)
+{
+	char aNicRemovePacing[1024];
+
+	sprintf(aNicRemovePacing,"tc qdisc del dev %s root 2>/dev/null; tc qdisc add dev %s root fq nopacing", netDevice, netDevice);
+	sResetPacingBack.set = NOPACING_FLAG_SET;
+	sResetPacingBack.current_pacing = 0.0;
+	shm_write(shm, &sResetPacingBack);
+	system(aNicRemovePacing);
+
+return;
+}
+
 void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_message);
 void fDoQinfoAssessmentKafka(rd_kafka_t *consumer, rd_kafka_message_t *consumer_message)
 {
@@ -7364,6 +7378,8 @@ int main(int argc, char **argv)
 		}
 		else
 			fprintf(tunLogPtr, "%s %s: *qEvaluation_TimerID* timer created.\n", ms_ctime_buf, phase2str(current_phase));
+
+		//fSetInitialPacing(); //for Kafka for now
 	}
 
 	//Start Http server Thread	
