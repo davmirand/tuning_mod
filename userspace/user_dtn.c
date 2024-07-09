@@ -3083,7 +3083,8 @@ void fDoCleanupResetPacing2(void)
 	char ms_ctime_buf[MS_CTIME_BUF_LEN];
 	char aNicSetting[1024];
 
-	sprintf(aNicSetting,"tc qdisc change dev %s root fq nopacing", netDevice);
+	//sprintf(aNicSetting,"tc qdisc change dev %s root fq nopacing", netDevice);
+	sprintf(aNicSetting,"tc qdisc del dev %s root 2>/dev/null", netDevice);
 	
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***WARNING***: Received *CleanupResetPacing* message from a destination DTN...***\n", ms_ctime_buf, phase2str(current_phase));
@@ -3092,6 +3093,15 @@ void fDoCleanupResetPacing2(void)
 	{
 		if (gTuningMode)
 		{
+			sResetPacingBack.set = 0;
+			sResetPacingBack.current_pacing = 0.0;
+			shm_write(shm, &sResetPacingBack);
+ 					
+			fprintf(tunLogPtr,"%s %s: ***INFO***: *** resetting back the Pacing with the following:\n",ms_ctime_buf, phase2str(current_phase));
+			fprintf(tunLogPtr,"%s %s: ***INFO***: *%s*\n", ms_ctime_buf, phase2str(current_phase), aNicSetting);
+			system(aNicSetting);
+			fprintf(tunLogPtr,"%s %s: ***INFO***: !!!!Pacing has been reset!!!!\n", ms_ctime_buf, phase2str(current_phase));
+#if 0
 			if (sResetPacingBack.set == NOPACING_FLAG_SET)
 			{
 				if (vDebugLevel > 2)
@@ -3120,6 +3130,7 @@ void fDoCleanupResetPacing2(void)
 							fprintf(tunLogPtr,"%s %s: ***ERROR2***: Something off.  This shouldn't happen.\n", ms_ctime_buf, phase2str(current_phase));
 						goto leavethis2;
 					}
+#endif
 		}
 		else
 			{
@@ -3214,7 +3225,8 @@ void fDoResetPacing2(char aSrc_Ip[], char aDest_Ip[], __u32 dest_ip_addr)
 	int found = 0;
 
 	//sprintf(aNicSetting,"tc qdisc del dev %s root fq 2>/dev/null", netDevice);
-	sprintf(aNicSetting,"tc qdisc del dev %s root 2>/dev/null", netDevice);
+	//sprintf(aNicSetting,"tc qdisc del dev %s root 2>/dev/null", netDevice);
+	sprintf(aNicSetting,"tc qdisc change dev %s root fq nopacing", netDevice);
 	
 	gettimeWithMilli(&clk, ctime_buf, ms_ctime_buf);
 	fprintf(tunLogPtr,"%s %s: ***WARNING***: ResetPacing message from destination DTN %s***\n", ms_ctime_buf, phase2str(current_phase), aDest_Ip);
@@ -4003,6 +4015,9 @@ void fDoQinfoAssessment2(unsigned int val, unsigned int hop_delay, char aSrc_Ip[
 		}
 		else
 			{ //not setup yet.  Let's do initial setup...
+				if (vNewPacingValue > 34)
+					vNewPacingValue = 34;
+
 				sprintf(aNicSetting1,"tc qdisc del dev %s root 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, netDevice, vNewPacingValue);
 				vPacingFlag = REGULAR_PACING_FLAG_SET;
 				vModifyPacing = 1;
@@ -4109,6 +4124,9 @@ void fDoQinfoAssessment2(unsigned int val, unsigned int hop_delay, char aSrc_Ip[
 			}
 			else
 				{ //not setup yet.  Let's do initial setup...
+					if (vNewPacingValue > 34)
+						vNewPacingValue = 34;
+
 					sprintf(aNicSetting1,"tc qdisc del dev %s root 2>/dev/null; tc qdisc add dev %s root fq maxrate %.2fgbit", netDevice, netDevice, vNewPacingValue);
 					vNicSet1 = 1;
 					vModifyPacing = 1;
@@ -6890,7 +6908,7 @@ process_request(int sockfd)
 									ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), ntohl(from_cli.value), aSrc_Ip, aDest_Ip, from_cli.msg);
 			}
 
-			fDoQinfoAssessment(ntohl(from_cli.value), ntohl(from_cli.vHopDelay), aSrc_Ip, aDest_Ip, uDst_Ip.y);
+			fDoQinfoAssessment2(ntohl(from_cli.value), ntohl(from_cli.vHopDelay), aSrc_Ip, aDest_Ip, uDst_Ip.y);
 		}
 		else
 			if (ntohl(from_cli.msg_no) == RESET_PACING_MSG)
@@ -6902,7 +6920,7 @@ process_request(int sockfd)
 										ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), ntohl(from_cli.value), aSrc_Ip, aDest_Ip, from_cli.msg);
 				}
 
-				fDoResetPacing(aSrc_Ip, aDest_Ip, uDst_Ip.y);
+				fDoResetPacing2(aSrc_Ip, aDest_Ip, uDst_Ip.y);
 			}
 			else
 				if (ntohl(from_cli.msg_no) == TEST_MSG)
@@ -6926,7 +6944,7 @@ process_request(int sockfd)
 											ms_ctime_buf, phase2str(current_phase), ntohl(from_cli.msg_no), aSrc_Ip, from_cli.msg);
 						}
 				
-						fDoCleanupResetPacing();
+						fDoCleanupResetPacing2();
 					}
 					else
 						if (vDebugLevel > 2)
